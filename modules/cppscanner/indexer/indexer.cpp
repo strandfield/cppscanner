@@ -1,0 +1,746 @@
+// Copyright (C) 2024 Vincent Chambrin
+// This file is part of the 'cppscanner' project.
+// For conditions of distribution and use, see copyright notice in LICENSE.
+
+#include "indexer.h"
+
+#include "fileidentificator.h"
+
+#include "cppscanner/indexer/fileindexingarbiter.h"
+#include "cppscanner/indexer/indexingresultqueue.h"
+#include "cppscanner/index/symbolid.h"
+
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/Attr.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/AST/DeclTemplate.h>
+#include <clang/AST/Type.h>
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/SourceManager.h>
+#include <clang/Index/USRGeneration.h>
+#include <clang/Lex/PreprocessingRecord.h>
+
+#include <llvm/ADT/StringExtras.h>
+#include <llvm/Support/SHA1.h>
+
+#include <cassert>
+
+namespace cppscanner
+{
+
+SymbolID usr2symid(const std::string& usr)
+{
+  std::array<uint8_t, 20> sha1 = llvm::SHA1::hash(llvm::arrayRefFromStringRef(usr));
+  static_assert(sizeof(sha1) >= sizeof(SymbolID::value_type));
+  SymbolID::value_type rawid;
+  memcpy(&rawid, sha1.data(), sizeof(SymbolID::value_type));
+  return SymbolID::fromRawID(rawid);
+}
+
+std::string getUSR(const clang::Decl* decl)
+{
+  llvm::SmallVector<char> chars;
+  
+  // Weird api... I got it wrong the first time.
+  // Returns true on failure :O
+  bool ignore = clang::index::generateUSRForDecl(decl, chars);
+
+  if (ignore) {
+    throw std::runtime_error("could not generate usr");
+  }
+
+  return std::string(chars.data(), chars.size());
+}
+
+SymbolKind tr(const clang::index::SymbolKind k)
+{
+  switch (k)
+  {
+  case clang::index::SymbolKind::Unknown: return SymbolKind::Unknown;
+  case clang::index::SymbolKind::Module: return SymbolKind::Module;
+  case clang::index::SymbolKind::Namespace: return SymbolKind::Namespace;
+  case clang::index::SymbolKind::NamespaceAlias: return SymbolKind::NamespaceAlias;
+  case clang::index::SymbolKind::Macro: return SymbolKind::Macro;
+  case clang::index::SymbolKind::Enum: return SymbolKind::Enum;
+  case clang::index::SymbolKind::Struct: return SymbolKind::Struct;
+  case clang::index::SymbolKind::Class: return SymbolKind::Class;
+  case clang::index::SymbolKind::Union: return SymbolKind::Class;
+  case clang::index::SymbolKind::TypeAlias: return SymbolKind::TypeAlias;
+  case clang::index::SymbolKind::Function: return SymbolKind::Function;
+  case clang::index::SymbolKind::Variable: return SymbolKind::Variable;
+  case clang::index::SymbolKind::Field: return SymbolKind::Field;
+  case clang::index::SymbolKind::EnumConstant: return SymbolKind::EnumConstant;
+  case clang::index::SymbolKind::InstanceMethod: return SymbolKind::InstanceMethod;
+  case clang::index::SymbolKind::ClassMethod: return SymbolKind::ClassMethod;
+  case clang::index::SymbolKind::StaticMethod: return SymbolKind::StaticMethod;
+  case clang::index::SymbolKind::StaticProperty: return SymbolKind::StaticProperty;
+  case clang::index::SymbolKind::Constructor: return SymbolKind::Constructor;
+  case clang::index::SymbolKind::Destructor: return SymbolKind::Destructor;
+  case clang::index::SymbolKind::ConversionFunction: return SymbolKind::ConversionFunction;
+  case clang::index::SymbolKind::Parameter: return SymbolKind::Parameter;
+  case clang::index::SymbolKind::Using: return SymbolKind::Using;
+  case clang::index::SymbolKind::TemplateTypeParm: return SymbolKind::TemplateTypeParameter;
+  case clang::index::SymbolKind::TemplateTemplateParm: return SymbolKind::TemplateTemplateParameter;
+  case clang::index::SymbolKind::NonTypeTemplateParm: return SymbolKind::NonTypeTemplateParameter;
+  case clang::index::SymbolKind::Concept: return SymbolKind::Concept;
+  case clang::index::SymbolKind::Protocol: [[fallthrough]];
+  case clang::index::SymbolKind::Extension: [[fallthrough]];
+  case clang::index::SymbolKind::InstanceProperty: [[fallthrough]];
+  case clang::index::SymbolKind::ClassProperty: [[fallthrough]];
+  default: return SymbolKind::Unknown;
+  }
+}
+
+SymbolID computeSymbolID(const clang::Decl* decl)
+{
+  std::string usr = getUSR(decl);
+  return usr2symid(usr);
+}
+
+clang::PrintingPolicy getPrettyPrintPrintingPolicy(const Indexer& idxr)
+{
+  clang::PrintingPolicy printpol = idxr.getAstContext()->getPrintingPolicy();
+  printpol.TerseOutput = true;
+  printpol.PolishForDeclaration = true;
+  printpol.IncludeNewlines = false;
+  return printpol;
+}
+
+std::string prettyPrint(const clang::QualType& type, const Indexer& idxr)
+{
+  llvm::SmallString<64> str;
+  llvm::raw_svector_ostream os{ str };
+  type.print(os, getPrettyPrintPrintingPolicy(idxr));
+  return os.str().str();
+}
+
+std::string prettyPrint(const clang::Expr* expr, const Indexer& idxr)
+{
+  llvm::SmallString<64> str;
+  llvm::raw_svector_ostream os{ str };
+
+  expr->printPretty(os, nullptr, getPrettyPrintPrintingPolicy(idxr), 0, " ", idxr.getAstContext());
+
+  return os.str().str();
+}
+
+std::string prettyPrint(const clang::Decl* decl, const Indexer& idxr)
+{
+  llvm::SmallString<64> str;
+  llvm::raw_svector_ostream os{ str };
+
+  decl->print(os, getPrettyPrintPrintingPolicy(idxr));
+  
+  return os.str().str();
+}
+
+void fillLambdaName(Symbol& lambda, const clang::RecordDecl& decl)
+{
+  (void)decl; // we are not going to use 'decl' for now
+  lambda.name = "__lambda_" + lambda.id.toHex();
+}
+
+SymbolCollector::SymbolCollector(Indexer& idxr) : 
+  m_indexer(idxr)
+{
+
+}
+
+void SymbolCollector::reset()
+{
+  m_symbolIdCache.clear();
+}
+
+Symbol* SymbolCollector::process(const clang::Decl* decl)
+{
+  auto [it, inserted] = m_symbolIdCache.try_emplace(decl, SymbolID());
+
+  if (inserted) {
+    try {
+      it->second = computeSymbolID(decl);
+    } catch (const std::exception&) {
+      return nullptr;
+    }
+  };
+
+  SymbolID symid = it->second;
+  Symbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
+
+  if (inserted) {
+    symbol.id = symid;
+
+    /*
+    if (m_indexer.ShouldTraverseDecl(decl)) {
+      fillSymbol(symbol, decl);
+    } else {
+      // do minimal stuff
+      symbol.name = getDeclSpelling(decl);
+    }
+    */
+    fillSymbol(symbol, decl);
+  }
+
+  return &symbol;
+}
+
+SymbolID SymbolCollector::getSymbolId(const clang::Decl* decl) const
+{
+  auto it = m_symbolIdCache.find(decl);
+  return it != m_symbolIdCache.end() ? it->second : SymbolID();
+}
+
+std::string SymbolCollector::getDeclSpelling(const clang::Decl* decl)
+{
+  auto* nd = llvm::dyn_cast<clang::NamedDecl>(decl);
+
+  if (!nd) {
+    return {};
+  }
+
+  return nd->getNameAsString();
+}
+
+void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
+{
+  if (symbol.name.empty()) {
+    symbol.name = getDeclSpelling(decl);
+  }
+
+  clang::index::SymbolInfo info = clang::index::getSymbolInfo(decl);
+  
+  symbol.kind = tr(info.Kind);
+
+  fillDisplayName(symbol, decl);
+
+  if (info.Properties & (clang::index::SymbolPropertySet)clang::index::SymbolProperty::Local) {
+    symbol.setLocal();
+  }
+
+  Symbol* parent_symbol = getParentSymbol(symbol, decl); 
+  if (parent_symbol) {
+    symbol.parent_id = parent_symbol->id;
+  }
+
+  for (const clang::Attr* attr : decl->attrs())
+  {
+    switch (attr->getKind())
+    {
+    case clang::attr::Const:
+      symbol.setFlag(Symbol::Const);
+      break;
+    case clang::attr::Final:
+      symbol.setFlag(Symbol::Final);
+      break;
+    case clang::attr::Override:
+      symbol.setFlag(Symbol::Override);
+      break;
+    }
+  }
+
+  auto read_fdecl_flags = [&symbol](const clang::FunctionDecl& fdecl) {
+    symbol.setFlag(Symbol::Delete, fdecl.isDeleted());
+    symbol.setFlag(Symbol::Static, fdecl.isStatic());
+    symbol.setFlag(Symbol::Constexpr, fdecl.isConstexpr());
+    symbol.setFlag(Symbol::Inline, fdecl.isInlined());
+    };
+
+  switch (decl->getKind())
+  {
+  case clang::Decl::Kind::CXXRecord:
+  {
+    auto* rdecl = llvm::dyn_cast<clang::RecordDecl>(decl);
+    
+    if (rdecl->isLambda()) {
+      symbol.kind = SymbolKind::Lambda;
+
+      // lambdas have an empty name by default.
+      // i.e. getDeclSpelling() returns an empty string for such declarations.
+      // but having no name is not very practical whenever printing is required, 
+      // so we compute a fake name for the lambda.
+      if (symbol.name.empty()) {
+        fillLambdaName(symbol, *rdecl);
+      }
+    }
+  }
+  break;
+  case clang::Decl::Kind::Enum:
+  {
+    bool scoped = llvm::dyn_cast<clang::EnumDecl>(decl)->isScoped();
+    symbol.setFlag(Symbol::IsScoped, scoped);
+  }
+  break;
+  case clang::Decl::Kind::EnumConstant:
+  {
+    const auto* cst = llvm::dyn_cast<clang::EnumConstantDecl>(decl);
+    if (cst->getInitExpr()) {
+      symbol.value = prettyPrint(cst->getInitExpr(), m_indexer);
+    }
+  }
+  break;
+  case clang::Decl::Kind::Function:
+  {
+    auto* fdecl = llvm::dyn_cast<clang::FunctionDecl>(decl);
+    read_fdecl_flags(*fdecl);
+  }
+  break;
+  case clang::Decl::Kind::Field:
+  {
+    auto* fdecl = llvm::dyn_cast<clang::FieldDecl>(decl);
+    symbol.setFlag(Symbol::Const, fdecl->getTypeSourceInfo()->getType().isConstQualified());
+
+    symbol.type = prettyPrint(fdecl->getTypeSourceInfo()->getType(), m_indexer);
+
+    if (fdecl->getInClassInitializer()) {
+      symbol.value = prettyPrint(fdecl->getInClassInitializer(), m_indexer);
+    }
+  }
+  break;
+  case clang::Decl::Kind::Var:
+  {
+    auto* vardecl = llvm::dyn_cast<clang::VarDecl>(decl);
+    
+    if (vardecl->isStaticDataMember()) {
+      symbol.setFlag(Symbol::Static);
+
+      if (vardecl->getInit()) {
+        symbol.value = prettyPrint(vardecl->getInit(), m_indexer);
+      }
+    }
+
+    symbol.setFlag(Symbol::Const, vardecl->getTypeSourceInfo()->getType().isConstQualified());
+
+    symbol.type = prettyPrint(vardecl->getTypeSourceInfo()->getType(), m_indexer);
+  }
+  break;
+  case clang::Decl::Kind::CXXMethod:
+  case clang::Decl::Kind::CXXConstructor:
+  case clang::Decl::Kind::CXXDestructor:
+  {
+    auto* mdecl = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
+    read_fdecl_flags(*mdecl);
+    symbol.setFlag(Symbol::Default, mdecl->isDefaulted());
+    symbol.setFlag(Symbol::Const, mdecl->isConst());
+    symbol.setFlag(Symbol::Virtual, mdecl->isVirtual());
+    symbol.setFlag(Symbol::Pure, mdecl->isPureVirtual());
+  }
+  break;
+  case clang::Decl::Kind::ParmVar:
+  {
+    auto* parmdecl = llvm::dyn_cast<clang::ParmVarDecl>(decl);
+    symbol.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
+    symbol.setFlag(Symbol::Const, parmdecl->getTypeSourceInfo()->getType().isConstQualified());
+    symbol.parameterIndex = parmdecl->getFunctionScopeIndex(); 
+    
+    if (parmdecl->hasDefaultArg()) {
+      symbol.value = prettyPrint(parmdecl->getDefaultArg(), m_indexer);
+    }
+  }
+  break;
+  case clang::Decl::Kind::TemplateTypeParm:
+  {
+    auto* parmdecl = llvm::dyn_cast<clang::TemplateTypeParmDecl>(decl);
+    symbol.parameterIndex = parmdecl->getIndex();
+
+    if (parmdecl->hasDefaultArgument()) {
+      symbol.value = prettyPrint(parmdecl->getDefaultArgument(), m_indexer);
+    }
+  }
+  break;
+  case clang::Decl::Kind::NonTypeTemplateParm:
+  {
+    auto* parmdecl = llvm::dyn_cast<clang::NonTypeTemplateParmDecl>(decl);
+    symbol.parameterIndex = parmdecl->getIndex();
+
+    if (parmdecl->getTypeSourceInfo()) {
+      symbol.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
+    }
+
+    if (parmdecl->hasDefaultArgument()) {
+      symbol.value = prettyPrint(parmdecl->getDefaultArgument(), m_indexer);
+    }
+  }
+  break;
+  default:
+    break;
+  }
+}
+
+void SymbolCollector::fillDisplayName(Symbol& symbol, const clang::Decl* decl)
+{
+  if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 
+  {
+    symbol.display_name = prettyPrint(fun, m_indexer);
+  }
+}
+
+Symbol* SymbolCollector::getParentSymbol(const Symbol& symbol, const clang::Decl* decl)
+{
+  if (!decl->getDeclContext()) {
+    return nullptr;
+  }
+
+  const clang::DeclContext* ctx = decl->getDeclContext();
+
+  while (ctx && ctx->getDeclKind() == clang::Decl::LinkageSpec) {
+    ctx = ctx->getParent();
+  }
+
+  if (!ctx || ctx->isTranslationUnit()) {
+    return nullptr;
+  }
+
+  auto* parent_decl = llvm::cast<clang::Decl>(ctx);
+
+  if (!parent_decl) {
+    return nullptr;
+  }
+  
+  Symbol* parent_symbol = process(parent_decl); 
+  return parent_symbol;
+}
+
+void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo)
+{
+  clang::DiagnosticConsumer::HandleDiagnostic(dlvl, dinfo);
+
+  Diagnostic d;
+
+  d.level = static_cast<DiagnosticLevel>(dlvl);
+
+  llvm::SmallString<1000> diag;
+  dinfo.FormatDiagnostic(diag);
+  d.message = diag.str().str();
+
+  clang::SourceRange srcrange = dinfo.getLocation();
+  clang::PresumedLoc ploc = m_indexer.getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+  if (!m_indexer.shouldIndexFile(ploc.getFileID())) {
+    return;
+  }
+
+  d.fileID = m_indexer.getFileID(ploc.getFileID());
+
+  if (!d.fileID) {
+    return;
+  }
+
+  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
+
+  m_indexer.getCurrentIndex()->add(std::move(d));
+}
+
+
+Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
+  m_fileIndexingArbiter(fileIndexingArbiter),
+  m_resultsQueue(resultsQueue),
+  m_fileIdentificator(fileIndexingArbiter.fileIdentificator()),
+  m_symbolCollector(*this),
+  m_diagnosticConsumer(*this)
+{
+
+}
+
+Indexer::~Indexer() = default;
+
+FileIdentificator& Indexer::fileIdentificator()
+{
+  return m_fileIdentificator;
+}
+
+clang::DiagnosticConsumer* Indexer::getDiagnosticConsumer()
+{
+  return &m_diagnosticConsumer;
+}
+
+TranslationUnitIndex* Indexer::getCurrentIndex() const
+{
+  return m_index.get();
+}
+
+clang::SourceManager& Indexer::getSourceManager() const
+{
+  return mAstContext->getSourceManager();
+}
+
+bool Indexer::shouldIndexFile(clang::FileID fileId)
+{
+  auto it = m_ShouldIndexFileCache.find(fileId);
+
+  if (it != m_ShouldIndexFileCache.end()) {
+    return it->second;
+  }
+
+  cppscanner::FileID fid = getFileID(fileId);
+  bool ok = m_fileIndexingArbiter.shouldIndex(fid, m_index.get());
+  m_ShouldIndexFileCache[fileId] = ok;
+
+  if (ok) {
+    getCurrentIndex()->indexedFiles.insert(fid);
+  }
+
+  return ok;
+}
+
+bool Indexer::ShouldTraverseDecl(const clang::Decl* decl)
+{
+  clang::SourceManager& source_manager = getSourceManager();
+  clang::SourceLocation loc = decl->getLocation();
+  clang::FileID file_id = source_manager.getFileID(loc);
+  return shouldIndexFile(file_id);
+}
+
+cppscanner::FileID Indexer::getFileID(clang::FileID clangFileId)
+{
+  auto it = m_FileIdCache.find(clangFileId);
+
+  if (it != m_FileIdCache.end()) {
+    return it->second;
+  }
+
+  const clang::FileEntry* fileentry = clangFileId.isValid() ?
+    getSourceManager().getFileEntryForID(clangFileId) : nullptr;
+
+  if (!fileentry) {
+    m_FileIdCache[clangFileId] = invalidFileID();
+    return {};
+  }
+
+  llvm::StringRef pathref = fileentry->tryGetRealPathName();
+
+  cppscanner::FileID fid = m_fileIdentificator.getIdentification(pathref.str());
+  m_FileIdCache[clangFileId] = fid;
+  return fid;
+}
+
+clang::ASTContext* Indexer::getAstContext() const
+{
+  return mAstContext;
+}
+
+void Indexer::initialize(clang::ASTContext& Ctx)
+{
+  mAstContext = &Ctx;
+  m_FileIdCache.clear();
+  m_ShouldIndexFileCache.clear();
+  m_symbolCollector.reset();
+
+  m_index = std::make_unique<TranslationUnitIndex>();
+  m_index->fileIdentificator = &m_fileIdentificator;
+}
+
+void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
+{
+  m_pp = pp;
+
+  /*if (pp && pp->getPreprocessingRecord()) {
+    indexPreprocessingRecord(*pp);
+  }*/
+}
+
+bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::SymbolRoleSet roles,
+  llvm::ArrayRef<clang::index::SymbolRelation> relations,
+  clang::SourceLocation loc, ASTNodeInfo astNode)
+{
+  if (!shouldIndexFile(getSourceManager().getFileID(loc))) {
+    return true;
+  }
+
+  Symbol* symbol = m_symbolCollector.process(decl);
+
+  if (!symbol)
+    return true;
+
+  int line = getSourceManager().getSpellingLineNumber(loc);
+  int col = getSourceManager().getSpellingColumnNumber(loc);
+
+  SymbolReference symref;
+  symref.fileID = getFileID(getSourceManager().getFileID(loc));
+  symref.symbolID = symbol->id;
+  symref.position = FilePosition(line, col);
+
+  if (astNode.Parent) {
+    if (auto* fndecl = llvm::dyn_cast<clang::FunctionDecl>(astNode.Parent)) {
+      Symbol* function_symbol = m_symbolCollector.process(fndecl);
+      if (function_symbol) {
+        symref.referencedBySymbolID = function_symbol->id;
+      }
+    }
+  }
+
+  symref.flags = 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Definition) ? SymbolReference::Definition : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Declaration) ? SymbolReference::Declaration : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0; // useful ?
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Implicit) ? SymbolReference::Implicit : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Read) ? SymbolReference::Read : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Write) ? SymbolReference::Write : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Call) ? SymbolReference::Call : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Dynamic) ? SymbolReference::Dynamic : 0; // what is it?
+  symref.flags |= (roles & (int)clang::index::SymbolRole::AddressOf) ? SymbolReference::AddressOf : 0;
+
+  getCurrentIndex()->add(symref);
+
+  processRelations(std::pair(decl, symbol), loc, relations);
+
+  return true;
+}
+
+bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo *Name,
+  const clang::MacroInfo *MI, clang::index::SymbolRoleSet Roles,
+  clang::SourceLocation Loc) 
+{
+  // TODO: handle macro occurrence
+  return true;
+}
+
+bool Indexer::handleModuleOccurrence(const clang::ImportDecl *ImportD,
+  const clang::Module *Mod, clang::index::SymbolRoleSet Roles,
+  clang::SourceLocation Loc) 
+{
+  // TODO: handle module occurrence
+  return true;
+}
+
+void Indexer::finish()
+{
+  if (m_pp && m_pp->getPreprocessingRecord()) {
+    indexPreprocessingRecord(*m_pp);
+  }
+
+  // if we want to post-process diagnostics, we may use:
+  clang::DiagnosticsEngine& de = mAstContext->getDiagnostics();
+  clang::DiagnosticConsumer* dc = de.getClient();
+  (void)dc;
+
+  m_resultsQueue.write(std::move(*m_index));
+  m_index.reset();
+}
+
+namespace
+{
+
+std::optional<RelationKind> getIndexableRelation(clang::index::SymbolRoleSet srs)
+{
+  if (srs & (int)clang::index::SymbolRole::RelationBaseOf) {
+    return RelationKind::BaseOf;
+  } else if (srs & (int)clang::index::SymbolRole::RelationOverrideOf) {
+    return RelationKind::OverriddenBy;
+  } 
+
+  return std::nullopt;
+}
+
+AccessSpecifier tr(const clang::AccessSpecifier access)
+{
+  switch (access)
+  {
+  case clang::AS_public: return AccessSpecifier::Public;
+  case clang::AS_protected: return AccessSpecifier::Protected;
+  case clang::AS_private: return AccessSpecifier::Private;
+  case clang::AS_none: [[fallthrough]]; default: return AccessSpecifier::Invalid;
+  }
+}
+
+} // namespace
+
+void Indexer::processRelations(std::pair<const clang::Decl*, Symbol*> declAndSymbol, clang::SourceLocation refLocation, llvm::ArrayRef<clang::index::SymbolRelation> relations)
+{
+  for (const clang::index::SymbolRelation& rel : relations)
+  {
+    std::optional<RelationKind> optRK = getIndexableRelation(rel.Roles);
+
+    if (!optRK) {
+      continue;
+    }
+
+    RelationKind rk = *optRK;
+
+    switch (rk)
+    {
+    case RelationKind::BaseOf:
+    {
+      Symbol* derived = m_symbolCollector.process(rel.RelatedSymbol);
+
+      if (!derived)
+        break;
+
+      BaseOf bof;
+      bof.baseClassID = declAndSymbol.second->id;
+      bof.derivedClassID = derived->id;
+      bof.accessSpecifier = AccessSpecifier::Invalid;
+
+      auto* class_decl = llvm::dyn_cast<clang::CXXRecordDecl>(rel.RelatedSymbol);
+
+      if (class_decl) {
+        for (const clang::CXXBaseSpecifier& base : class_decl->bases()) {
+          if (base.getSourceRange().fullyContains(refLocation)) {
+            bof.accessSpecifier = tr(base.getAccessSpecifier());
+            break;
+          }
+        }
+      }
+
+      getCurrentIndex()->add(bof);
+    }
+    break;
+    case RelationKind::OverriddenBy:
+    {
+      Symbol* base_function = m_symbolCollector.process(rel.RelatedSymbol);
+
+      if (!base_function)
+        break;
+
+      Override ov;
+      ov.baseMethodID = base_function->id;
+      ov.overrideMethodID = declAndSymbol.second->id;
+
+      getCurrentIndex()->add(ov);
+    }
+    break;
+    default:
+      break;
+    }
+  }
+}
+
+void Indexer::indexPreprocessingRecord(clang::Preprocessor& pp)
+{
+  if (!pp.getPreprocessingRecord()) {
+    return;
+  }
+
+  clang::SourceManager& sourceman = mAstContext->getSourceManager();
+
+  for (clang::PreprocessedEntity* ppe : *(pp.getPreprocessingRecord())) {
+    if (auto* inclusion_directive = llvm::dyn_cast<clang::InclusionDirective>(ppe)) {
+
+      clang::SourceLocation range_begin = inclusion_directive->getSourceRange().getBegin();
+      clang::FileID fileid = sourceman.getFileID(range_begin);
+
+      if (!shouldIndexFile(fileid)) {
+        continue;
+      }
+
+      if (!inclusion_directive->getFile().has_value()) {
+        continue;
+      }
+
+      const clang::FileEntry& fileentry = inclusion_directive->getFile()->getFileEntry();
+      llvm::StringRef realpath = fileentry.tryGetRealPathName();
+
+      if (realpath.empty()) {
+        continue;
+      }
+
+      Include inc;
+      inc.fileID = getFileID(fileid);
+      inc.line = sourceman.getSpellingLineNumber(range_begin);
+      inc.includedFileID = m_fileIdentificator.getIdentification(realpath.str());
+
+      m_index->add(inc);
+    }
+  }
+}
+
+} // namespace cppscanner
