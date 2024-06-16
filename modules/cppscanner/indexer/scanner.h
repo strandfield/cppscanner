@@ -33,6 +33,7 @@ public:
   void setIndexLocalSymbols(bool on = true);
 
   void setFilters(const std::vector<std::string>& filters);
+  void setTranslationUnitFilters(const std::vector<std::string>& filters);
 
   void initSnapshot(const std::filesystem::path& p);
   Snapshot* snapshot() const;

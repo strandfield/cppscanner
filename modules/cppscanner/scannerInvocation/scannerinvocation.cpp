@@ -64,6 +64,13 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.filters.push_back(args.at(i++));
     }
+    else if (arg == "--filter_tu" || arg == "-f:tu")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --filter_tu");
+
+      result.translation_unit_filters.push_back(args.at(i++));
+    }
     else if (arg == "--project-name")
     {
       if (i >= args.size())
@@ -142,6 +149,10 @@ void ScannerInvocation::run()
 
   if (!options().filters.empty()) {
     scanner.setFilters(options().filters);
+  }
+
+  if (!options().translation_unit_filters.empty()) {
+    scanner.setTranslationUnitFilters(options().translation_unit_filters);
   }
 
   scanner.initSnapshot(options().output);

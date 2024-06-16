@@ -23,6 +23,7 @@ struct ScannerOptions
   bool index_external_files = false;
   bool index_local_symbols = false;
   std::vector<std::string> filters;
+  std::vector<std::string> translation_unit_filters;
   std::optional<std::string> project_name;
 };
 

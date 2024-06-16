@@ -15,7 +15,7 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   ScannerInvocation inv{
     { "--compile-commands", STL_BUILD_DIR + std::string("/compile_commands.json"),
       "--home", STL_ROOT_DIR,
-      "-f", "string.cpp",
+      "-f:tu", "string.cpp",
       "--overwrite",
       "-o", snapshot_name }
   };
@@ -44,7 +44,7 @@ TEST_CASE("vector.cpp", "[scanner][stl]")
   ScannerInvocation inv{
     { "--compile-commands", STL_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", STL_ROOT_DIR,
-    "-f", "vector.cpp",
+    "-f:tu", "vector.cpp",
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -73,7 +73,7 @@ TEST_CASE("tuple.cpp", "[scanner][stl]")
   ScannerInvocation inv{
     { "--compile-commands", STL_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", STL_ROOT_DIR,
-    "-f", "tuple.cpp",
+    "-f:tu", "tuple.cpp",
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -98,7 +98,7 @@ TEST_CASE("optional.cpp", "[scanner][stl]")
   ScannerInvocation inv{
     { "--compile-commands", STL_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", STL_ROOT_DIR,
-    "-f", "optional.cpp",
+    "-f:tu", "optional.cpp",
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -123,7 +123,7 @@ TEST_CASE("variant.cpp", "[scanner][stl]")
   ScannerInvocation inv{
     { "--compile-commands", STL_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", STL_ROOT_DIR,
-    "-f", "variant.cpp",
+    "-f:tu", "variant.cpp",
     "--overwrite",
     "-o", snapshot_name }
   };

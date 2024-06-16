@@ -15,6 +15,8 @@
 
 #include "basicfileidentificator.h"
 
+#include "glob.h"
+
 #include "cppscanner/database/transaction.h"
 
 #include <clang/Tooling/JSONCompilationDatabase.h>
@@ -34,6 +36,7 @@ struct ScannerData
   bool indexExternalFiles = false;
   bool indexLocalSymbols = false;
   std::vector<std::string> filters;
+  std::vector<std::string> translationUnitFilters;
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
@@ -109,6 +112,11 @@ void Scanner::setFilters(const std::vector<std::string>& filters)
   d->filters = filters;
 }
 
+void Scanner::setTranslationUnitFilters(const std::vector<std::string>& filters)
+{
+  d->translationUnitFilters = filters;
+}
+
 /**
  * \brief creates an empty snapshot
  * \param p  the path of the database
@@ -159,6 +167,18 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
 
   for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
   {
+    if (!d->translationUnitFilters.empty()) {
+      bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&cc](const std::string& e) {
+        return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
+        });
+
+      std::cout << cc.Filename << " [SKIP]" << std::endl;
+
+      if (exclude) {
+        continue;
+      }
+    }
+
      std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
     /* std::vector<std::string> command = clang::tooling::getClangSyntaxOnlyAdjuster()(cc.CommandLine, cc.Filename);
     command = clang::tooling::getClangStripOutputAdjuster()(command, cc.Filename);*/
