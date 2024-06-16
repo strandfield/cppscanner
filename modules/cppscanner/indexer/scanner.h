@@ -26,9 +26,10 @@ public:
   Scanner(const Scanner&) = delete;
   ~Scanner();
 
+  void setHomeDir(const std::filesystem::path& p);
   void setRootDir(const std::filesystem::path& p);
-  void setNoRootDir();
 
+  void setIndexExternalFiles(bool on = true);
   void setIndexLocalSymbols(bool on = true);
 
   void setFilters(const std::vector<std::string>& filters);

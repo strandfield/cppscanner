@@ -29,7 +29,9 @@ namespace cppscanner
 
 struct ScannerData
 {
-  std::optional<std::string> homeDirectory;
+  std::string homeDirectory;
+  std::optional<std::string> rootDirectory;
+  bool indexExternalFiles = false;
   bool indexLocalSymbols = false;
   std::vector<std::string> filters;
   std::unique_ptr<FileIdentificator> fileIdentificator;
@@ -58,8 +60,12 @@ std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
 
   arbiters.push_back(std::make_unique<IndexOnceFileIndexingArbiter>(*d.fileIdentificator));
 
-  if (d.homeDirectory.has_value()) {
-    arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, *d.homeDirectory));
+  if (d.indexExternalFiles) {
+    if (d.rootDirectory.has_value()) {
+      arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, *d.rootDirectory));
+    }
+  } else {
+    arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, d.homeDirectory));
   }
 
   if (!d.filters.empty()) {
@@ -78,14 +84,19 @@ Scanner::Scanner()
 
 Scanner::~Scanner() = default;
 
-void Scanner::setRootDir(const std::filesystem::path& p)
+void Scanner::setHomeDir(const std::filesystem::path& p)
 {
   d->homeDirectory = p.generic_u8string();
 }
 
-void Scanner::setNoRootDir()
+void Scanner::setRootDir(const std::filesystem::path& p)
 {
-  d->homeDirectory.reset();
+  d->rootDirectory = p.generic_u8string();
+}
+
+void Scanner::setIndexExternalFiles(bool on)
+{
+  d->indexExternalFiles = on;
 }
 
 void Scanner::setIndexLocalSymbols(bool on)
@@ -108,11 +119,11 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
 
-  if (d->homeDirectory.has_value()) {
-    m_snapshot->setProperty("project.root", *d->homeDirectory);
-  }
+  m_snapshot->setProperty("project.home", d->homeDirectory);
 
+  m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
+  m_snapshot->setProperty("scanner.root", d->rootDirectory.value_or(std::string()));
 }
 
 Snapshot* Scanner::snapshot() const

@@ -46,7 +46,6 @@ protected:
   Symbol* getParentSymbol(const Symbol& symbol, const clang::Decl* decl);
 };
 
-
 class IdxrDiagnosticConsumer : public clang::DiagnosticConsumer
 {
   Indexer& m_indexer;

@@ -20,7 +20,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
 
   ScannerInvocation inv{
     { "--compile-commands", SELFTEST_BUILD_DIR + std::string("/compile_commands.json"),
-    "-h", PROJECT_SOURCE_DIR,
+    "--home", PROJECT_SOURCE_DIR,
     "--project-name", "cppscanner",
     "--overwrite",
     "-o", snapshot_name }

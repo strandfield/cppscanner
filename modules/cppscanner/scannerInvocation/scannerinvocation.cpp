@@ -31,16 +31,23 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.output = args.at(i++);
     }
-    else if (arg == "--root-dir" || arg == "--home-dir" || arg == "-h")
+    else if (arg == "--home")
     {
       if (i >= args.size())
-        throw std::runtime_error("missing argument after --output");
+        throw std::runtime_error("missing argument after --home");
 
       result.home = std::filesystem::path(args.at(i++));
     }
-    else if (arg == "--no-root" || arg == "--no-home")
+    else if (arg == "--root")
     {
-      result.no_home = true;
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --root");
+
+      result.root = std::filesystem::path(args.at(i++));
+    }
+    else if (arg == "--index-external-files")
+    {
+      result.index_external_files = true;
     }
     else if (arg == "--index-local-symbols")
     {
@@ -78,7 +85,7 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
     throw std::runtime_error("missing output file");
   }
 
-  if (result.home.has_value() && !std::filesystem::is_directory(*result.home)) {
+  if (result.root.has_value() && !std::filesystem::is_directory(*result.root)) {
     throw std::runtime_error("Root path must be a directory");
   }
 
@@ -120,10 +127,14 @@ void ScannerInvocation::run()
   Scanner scanner;
 
   if (options().home.has_value()) {
-    scanner.setRootDir(*options().home);
-  } else if (options().no_home) {
-    scanner.setNoRootDir();
+    scanner.setHomeDir(*options().home);
   }
+
+  scanner.setIndexExternalFiles(options().index_external_files);
+
+  if (options().root.has_value()) {
+    scanner.setRootDir(*options().root);
+  } 
 
   if (options().index_local_symbols) {
     scanner.setIndexLocalSymbols();

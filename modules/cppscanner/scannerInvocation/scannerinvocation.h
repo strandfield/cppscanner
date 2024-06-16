@@ -18,8 +18,9 @@ struct ScannerOptions
   std::filesystem::path compile_commands;
   std::filesystem::path output;
   std::optional<std::filesystem::path> home;
+  std::optional<std::filesystem::path> root;
   bool overwrite = false;
-  bool no_home = false;
+  bool index_external_files = false;
   bool index_local_symbols = false;
   std::vector<std::string> filters;
   std::optional<std::string> project_name;

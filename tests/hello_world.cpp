@@ -14,7 +14,7 @@ TEST_CASE("The Scanner runs properly on hello_world", "[scanner][hello_world]")
 
   ScannerInvocation inv{
     { "--compile-commands", HELLO_WORLD_BUILD_DIR + std::string("/compile_commands.json"),
-      "-h", HELLO_WORLD_ROOT_DIR,
+      "--home", HELLO_WORLD_ROOT_DIR,
       "--overwrite",
       "-o", snapshot_name }
   };
