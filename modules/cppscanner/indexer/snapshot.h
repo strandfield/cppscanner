@@ -45,9 +45,21 @@ public:
   static Snapshot open(const std::filesystem::path& p);
   static Snapshot create(const std::filesystem::path& p);
 
+  class Path
+  {
+  private:
+    std::string m_path;
+  public:
+    explicit Path(std::string p) : m_path(Snapshot::normalizedPath(std::move(p))) { }
+    const std::string& str() const { return m_path; }
+  };
+
+  static std::string normalizedPath(std::string p);
+
   void setProperty(const std::string& key, const std::string& value);
   void setProperty(const std::string& key, bool value);
   void setProperty(const std::string& key, const char* value);
+  void setProperty(const std::string& key, const Path& path);
 
   void insertFilePaths(const std::vector<File>& files);
   void insertIncludes(const std::vector<Include>& includes);

@@ -119,11 +119,17 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
 
-  m_snapshot->setProperty("project.home", d->homeDirectory);
+#ifdef _WIN32
+  m_snapshot->setProperty("cppscanner.os", "windows");
+#else
+  m_snapshot->setProperty("cppscanner.os", "linux");
+#endif // _WIN32
+
+  m_snapshot->setProperty("project.home", Snapshot::Path(d->homeDirectory));
 
   m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
-  m_snapshot->setProperty("scanner.root", d->rootDirectory.value_or(std::string()));
+  m_snapshot->setProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())));
 }
 
 Snapshot* Scanner::snapshot() const
