@@ -13,6 +13,9 @@
 namespace cppscanner
 {
 
+/**
+ * \brief the command-line options of the scanner
+ */
 struct ScannerOptions
 {
   std::filesystem::path compile_commands;
@@ -25,8 +28,12 @@ struct ScannerOptions
   std::vector<std::string> filters;
   std::vector<std::string> translation_unit_filters;
   std::optional<std::string> project_name;
+  std::optional<std::string> project_version;
 };
 
+/**
+ * \brief represents a command-line invocation of the scanner
+ */
 class ScannerInvocation
 {
 private:

@@ -26,7 +26,7 @@ class Symbol;
 enum class SymbolKind;
 
 /**
- * \brief provides a snapshot of a C++ program
+ * \brief a snapshot of a C++ program stored as a SQLite database
  *
  * Use open() or create() to get a valid Snapshot object.
  */

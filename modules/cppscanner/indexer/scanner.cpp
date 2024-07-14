@@ -10,10 +10,9 @@
 #include "indexingresultqueue.h"
 
 #include "frontendactionfactory.h"
+#include "fileidentificator.h"
 #include "fileindexingarbiter.h"
 #include "translationunitindex.h"
-
-#include "basicfileidentificator.h"
 
 #include "glob.h"
 
@@ -82,7 +81,7 @@ Scanner::Scanner()
 {
   d = std::make_unique<ScannerData>();
   d->homeDirectory = std::filesystem::current_path().generic_u8string();
-  d->fileIdentificator = std::make_unique<BasicFileIdentificator>();
+  d->fileIdentificator = FileIdentificator::createFileIdentificator();
 }
 
 Scanner::~Scanner() = default;
@@ -147,12 +146,13 @@ Snapshot* Scanner::snapshot() const
 
 void Scanner::scan(const std::filesystem::path& compileCommandsPath)
 {
+  assert(snapshot());
+
   std::string error_message;
   std::unique_ptr<clang::tooling::JSONCompilationDatabase> compile_commands = clang::tooling::JSONCompilationDatabase::loadFromFile(
       compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
   );
 
-  Snapshot& snapshot = *m_snapshot;
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
   IndexingResultQueue results_queue;
@@ -172,7 +172,7 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
         return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
         });
 
-      std::cout << cc.Filename << " [SKIP]" << std::endl;
+      std::cout << "[SKIPPED] " << cc.Filename << std::endl;
 
       if (exclude) {
         continue;
@@ -186,13 +186,12 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
 
-    std::cout << cc.Filename;
+    std::cout << cc.Filename << std::endl;
 
     if (invocation.run()) {
       assimilate(results_queue.read());
-      std::cout << " [OK]" << std::endl;
     } else {
-      std::cout << " [ERROR]" << std::endl;
+      std::cout << "error: tool invocation failed" << std::endl;
     }
   }
 }

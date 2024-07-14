@@ -17,6 +17,9 @@ namespace cppscanner
 
 class FileIdentificator;
 
+/**
+ * \brief base class for filtering which files should be indexed
+ */
 class FileIndexingArbiter
 {
 private:
@@ -39,6 +42,9 @@ inline FileIdentificator& FileIndexingArbiter::fileIdentificator() const
   return m_fileIdentificator;
 }
 
+/**
+ * \brief arbiter for indexing a file only in the first translation unit it is encountered
+ */
 class IndexOnceFileIndexingArbiter : public FileIndexingArbiter
 {
 private:
@@ -50,6 +56,12 @@ public:
   bool shouldIndex(FileID file, void* idxr) final;
 };
 
+/**
+ * \brief arbiter for indexing files inside a directory
+ * 
+ * Files that are outside the directory will not be indexed.
+ * This is used to restrict the indexing process to files under the home and/or root directory.
+ */
 class IndexDirectoryFileIndexingArbiter : public FileIndexingArbiter
 {
 private:
@@ -63,6 +75,15 @@ public:
 
 bool filename_match(const std::string& filePath, const std::string& fileName);
 
+/**
+ * \brief arbiter for indexing files matching a pattern
+ * 
+ * Supported patterns are currently restricted to:
+ * - a filename
+ * - a glob expression.
+ * 
+ * A file is indexed if it matches at least one pattern.
+ */
 class IndexFilesMatchingPatternIndexingArbiter : public FileIndexingArbiter
 {
 private:

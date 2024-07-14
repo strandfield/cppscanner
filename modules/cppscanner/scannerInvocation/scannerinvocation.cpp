@@ -78,6 +78,13 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.project_name = args.at(i++);
     }
+    else if (arg == "--project-version")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --project-version");
+
+      result.project_version = args.at(i++);
+    }
     else
     {
       throw std::runtime_error("unrecognized command line argument");
@@ -159,6 +166,10 @@ void ScannerInvocation::run()
 
   if (options().project_name.has_value()) {
     scanner.snapshot()->setProperty("project.name", *options().project_name);
+  }
+
+  if (options().project_version.has_value()) {
+    scanner.snapshot()->setProperty("project.version", *options().project_version);
   }
 
   scanner.scan(options().compile_commands);

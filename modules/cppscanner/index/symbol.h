@@ -47,7 +47,7 @@ enum class SymbolKind
   EnumConstant,
 
   InstanceMethod,
-  ClassMethod,
+  ClassMethod, // TODO: remove me, afaik this is for Objective-C
   StaticMethod,
   StaticProperty,
 
@@ -55,6 +55,17 @@ enum class SymbolKind
   Destructor,
   ConversionFunction,
   Parameter,
+  /**
+   * represents a symbol introduced/created by a using-declaration 
+   * 
+   * 'using' may be used to produce a class constructor as in:
+   * class Derived : public Base {
+   * public: using Base::Base;
+   * };
+   * 
+   * TODO: should this case be further processed and be referenced as a constructor ?
+   * TODO: test what happens when using refers to a method and not the constructor
+   */
   Using,
   TemplateTypeParameter,
   TemplateTemplateParameter,
@@ -106,6 +117,9 @@ void enumerateSymbolKind(F&& fn)
   fn(SymbolKind::Concept);
 }
 
+/**
+ * \brief represents a symbol in a C++ program
+ */
 class Symbol
 {
 public:
@@ -115,20 +129,28 @@ public:
   std::string display_name; // could be left empty to save space ?
   SymbolID parent_id;
   int flags = 0;
+  // TODO: should the following fields be moved to another "extra info" class ?
   int parameterIndex = -1;
   std::string type;
   std::string value;
 
+  // TODO: merge some flags that are mutually exclusive
+  // e.g. IsScoped only applies to enum and therefore cannot appear at the same time as many other flags
+  // maybe we could distinguish the flags by the kind of symbol for which they apply:
+  // there would be flags for functions, classes, enums, etc...
+  // 
   enum Flag
   {
     Local     = 0x0001,
-    Public    = 0x0002,
+    Public    = 0x0002, // TODO: remove me? just have a flag for protected and private
     Protected = 0x0004,
     Private   = 0x0006,
     Inline    = 0x0008,
     Static    = 0x0010,
     Constexpr = 0x0020,
     IsScoped  = 0x0040,
+    // TODO: we could use fewer bits for virtual, override, final and pure.
+    // unless we want to distinguish between what is written and what is
     Virtual   = 0x0080,
     Override  = 0x0100,
     Final     = 0x0200,
@@ -138,6 +160,12 @@ public:
     Explicit  = 0x2000,
     Default   = 0x4000,
     Delete    = 0x8000,
+    // TODO:
+    Mutable = 0,
+    ThreadLocal = 0,
+    Consteval = 0,
+    Constinit = 0,
+    Exported = 0, // ? export of a C++ module
   };
 
 public:

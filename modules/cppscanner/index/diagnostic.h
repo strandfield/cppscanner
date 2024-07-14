@@ -48,6 +48,9 @@ void enumerateDiagnosticLevel(F&& fn)
   fn(DiagnosticLevel::Fatal);
 }
 
+/**
+ * \brief a diagnostic emitted by the compiler
+ */
 class Diagnostic
 {
 public:

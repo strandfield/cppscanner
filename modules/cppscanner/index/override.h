@@ -11,11 +11,14 @@
 namespace cppscanner
 {
 
+/**
+ * \brief represents an "overrides" relation between two member functions
+ */
 class Override
 {
 public:
-  SymbolID baseMethodID;
-  SymbolID overrideMethodID;
+  SymbolID baseMethodID; //< the id of the virtual method in the base class
+  SymbolID overrideMethodID; //< the id of the method in the derived class
 
 public:
   Relation toRelation() const;

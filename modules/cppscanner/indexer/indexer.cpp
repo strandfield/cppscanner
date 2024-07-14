@@ -66,6 +66,7 @@ SymbolKind tr(const clang::index::SymbolKind k)
   case clang::index::SymbolKind::Enum: return SymbolKind::Enum;
   case clang::index::SymbolKind::Struct: return SymbolKind::Struct;
   case clang::index::SymbolKind::Class: return SymbolKind::Class;
+  case clang::index::SymbolKind::Protocol: return SymbolKind::Class; // MS __interface
   case clang::index::SymbolKind::Union: return SymbolKind::Class;
   case clang::index::SymbolKind::TypeAlias: return SymbolKind::TypeAlias;
   case clang::index::SymbolKind::Function: return SymbolKind::Function;
@@ -85,10 +86,9 @@ SymbolKind tr(const clang::index::SymbolKind k)
   case clang::index::SymbolKind::TemplateTemplateParm: return SymbolKind::TemplateTemplateParameter;
   case clang::index::SymbolKind::NonTypeTemplateParm: return SymbolKind::NonTypeTemplateParameter;
   case clang::index::SymbolKind::Concept: return SymbolKind::Concept;
-  case clang::index::SymbolKind::Protocol: [[fallthrough]];
-  case clang::index::SymbolKind::Extension: [[fallthrough]];
-  case clang::index::SymbolKind::InstanceProperty: [[fallthrough]];
-  case clang::index::SymbolKind::ClassProperty: [[fallthrough]];
+  case clang::index::SymbolKind::Extension: [[fallthrough]]; // Obj-C
+  case clang::index::SymbolKind::InstanceProperty: [[fallthrough]]; // MS C++ property (https://learn.microsoft.com/en-us/cpp/cpp/property-cpp?view=msvc-170)
+  case clang::index::SymbolKind::ClassProperty: [[fallthrough]]; // AFAIK, unused
   default: return SymbolKind::Unknown;
   }
 }
@@ -539,7 +539,7 @@ clang::ASTContext* Indexer::getAstContext() const
 
 bool Indexer::initialized() const
 {
-  return mAstContext != nullptr;
+  return mAstContext != nullptr && m_index != nullptr;
 }
 
 void Indexer::initialize(clang::ASTContext& Ctx)

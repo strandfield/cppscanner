@@ -24,6 +24,9 @@ class IndexingResultQueue;
 
 class Indexer;
 
+/**
+ * \brief a class for collecting C++ symbols while indexing a translation unit
+ */
 class SymbolCollector
 {
 private:
@@ -46,6 +49,9 @@ protected:
   Symbol* getParentSymbol(const Symbol& symbol, const clang::Decl* decl);
 };
 
+/**
+ * \brief class for receiving diagnostics from clang
+ */
 class IdxrDiagnosticConsumer : public clang::DiagnosticConsumer
 {
   Indexer& m_indexer;
@@ -62,6 +68,9 @@ public:
   void finish() final;
 };
 
+/**
+ * \brief class for receiving indexing data from clang
+ */
 class Indexer : public clang::index::IndexDataConsumer
 {
 private:
@@ -105,7 +114,6 @@ public:
     const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
     clang::SourceLocation Loc)  final;
   void finish() final;
-
 
 protected:
   friend IdxrDiagnosticConsumer;

@@ -17,7 +17,9 @@ class TranslationUnitIndex;
 struct ScannerData;
 
 /**
- * \brief top level class for creating a snapshot 
+ * \brief top level class for indexing a C++ project and creating a snapshot 
+ * 
+ * The initSnapshot() must be called before scan().
  */
 class Scanner
 {

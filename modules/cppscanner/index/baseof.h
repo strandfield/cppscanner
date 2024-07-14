@@ -12,12 +12,15 @@
 namespace cppscanner
 {
 
+/**
+ * \brief represents a "base of" relation between two classes
+ */
 class BaseOf
 {
 public:
-  SymbolID baseClassID;
-  SymbolID derivedClassID;
-  AccessSpecifier accessSpecifier;
+  SymbolID baseClassID; //< the id of the base class
+  SymbolID derivedClassID; //< the id of the derived class
+  AccessSpecifier accessSpecifier; //< whether public, protected or private inheritance is used
 
 public:
   Relation toRelation() const;
