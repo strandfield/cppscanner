@@ -59,6 +59,7 @@ public:
   bool IncludeInDiagnosticCounts() const final { return false; }
 
   void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo) final;
+  void finish() final;
 };
 
 class Indexer : public clang::index::IndexDataConsumer
@@ -90,6 +91,7 @@ public:
   bool ShouldTraverseDecl(const clang::Decl* decl);
   cppscanner::FileID getFileID(clang::FileID clangFileId);
   clang::ASTContext* getAstContext() const;
+  bool initialized() const;
 
   void initialize(clang::ASTContext& Ctx) final;
   void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP) final;

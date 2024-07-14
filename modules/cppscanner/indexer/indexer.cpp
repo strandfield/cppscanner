@@ -25,6 +25,7 @@
 #include <llvm/Support/SHA1.h>
 
 #include <cassert>
+#include <iostream>
 
 namespace cppscanner
 {
@@ -412,6 +413,16 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   dinfo.FormatDiagnostic(diag);
   d.message = diag.str().str();
 
+  if (!m_indexer.initialized())
+  {
+    if (!dinfo.hasSourceManager())
+    {
+      std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+    }
+
+    return;
+  }
+
   clang::SourceRange srcrange = dinfo.getLocation();
   clang::PresumedLoc ploc = m_indexer.getSourceManager().getPresumedLoc(srcrange.getBegin());
 
@@ -430,6 +441,10 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   m_indexer.getCurrentIndex()->add(std::move(d));
 }
 
+void IdxrDiagnosticConsumer::finish()
+{
+  clang::DiagnosticConsumer::finish();
+}
 
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
   m_fileIndexingArbiter(fileIndexingArbiter),
@@ -460,6 +475,10 @@ TranslationUnitIndex* Indexer::getCurrentIndex() const
 
 clang::SourceManager& Indexer::getSourceManager() const
 {
+  if (!mAstContext) {
+    throw std::runtime_error("getSourceManager() called but no ast context");
+  }
+
   return mAstContext->getSourceManager();
 }
 
@@ -516,6 +535,11 @@ cppscanner::FileID Indexer::getFileID(clang::FileID clangFileId)
 clang::ASTContext* Indexer::getAstContext() const
 {
   return mAstContext;
+}
+
+bool Indexer::initialized() const
+{
+  return mAstContext != nullptr;
 }
 
 void Indexer::initialize(clang::ASTContext& Ctx)
@@ -615,6 +639,8 @@ void Indexer::finish()
 
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();
+
+  mAstContext = nullptr;
 }
 
 namespace
