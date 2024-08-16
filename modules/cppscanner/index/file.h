@@ -12,6 +12,9 @@
 namespace cppscanner
 {
 
+/**
+ * \brief raw struct for storing information about a file
+ */
 struct File
 {
   FileID id;

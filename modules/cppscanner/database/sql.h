@@ -30,6 +30,9 @@ struct Blob
   }
 };
 
+/**
+ * \brief wrapper for a SQLite statement
+ */
 class Statement
 {
 private:

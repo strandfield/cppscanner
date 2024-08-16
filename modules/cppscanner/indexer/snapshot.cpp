@@ -130,6 +130,27 @@ CREATE VIEW symbolDefinition (symbol_id, file_id, line, col, flags) AS
 COMMIT;
 )";
 
+#ifdef _WIN32
+std::string NormalizedPath(std::string path)
+{
+  if (path.length() >= 2 && path.at(1) == ':') {
+    path[1] = std::tolower(path[0]);
+    path[0] = '/';
+  }
+  for (char& c : path) {
+    if (c == '\\') {
+      c = '/';
+    }
+  }
+  return path;
+}
+#else
+const std::string& NormalizedPath(const std::string& p)
+{
+  return p;
+}
+#endif // _WIN32
+
 
 Snapshot::Snapshot(Snapshot&&) = default;
 Snapshot::~Snapshot() = default;
@@ -258,6 +279,11 @@ Snapshot Snapshot::create(const std::filesystem::path& p)
   return Snapshot(std::move(db));
 }
 
+std::string Snapshot::normalizedPath(std::string p)
+{
+  return cppscanner::NormalizedPath(std::move(p));
+}
+
 void Snapshot::setProperty(const std::string& key, const std::string& value)
 {
   sql::Statement stmt{ database() };
@@ -282,13 +308,19 @@ void Snapshot::setProperty(const std::string& key, const char* value)
   setProperty(key, std::string(value));
 }
 
+void Snapshot::setProperty(const std::string& key, const Path& path)
+{
+  return setProperty(key, path.str());
+}
+
 void Snapshot::insertFilePaths(const std::vector<File>& files)
 {
   sql::Statement stmt{ database(), "INSERT OR IGNORE INTO file(id, path) VALUES(?,?)"};
 
   for (const File& f : files) {
+    const std::string& fpath = NormalizedPath(f.path);
     stmt.bind(1, (int)f.id);
-    stmt.bind(2, f.path.c_str());
+    stmt.bind(2, fpath.c_str());
     stmt.step();
     stmt.reset();
   }
@@ -771,9 +803,11 @@ void insertFiles(Snapshot& snapshot, const std::vector<File>& files)
 {
   sql::Statement stmt{ snapshot.database(), "INSERT OR REPLACE INTO file(id, path, content) VALUES(?,?,?)"};
 
-  for (const File& f : files) {
+  for (const File& f : files) 
+  {
+    const std::string& fpath = NormalizedPath(f.path);
     stmt.bind(1, (int)f.id);
-    stmt.bind(2, f.path.c_str());
+    stmt.bind(2, fpath.c_str());
     stmt.bind(3, f.content.c_str());
     stmt.step();
     stmt.reset();

@@ -25,6 +25,7 @@
 #include <llvm/Support/SHA1.h>
 
 #include <cassert>
+#include <iostream>
 
 namespace cppscanner
 {
@@ -65,6 +66,7 @@ SymbolKind tr(const clang::index::SymbolKind k)
   case clang::index::SymbolKind::Enum: return SymbolKind::Enum;
   case clang::index::SymbolKind::Struct: return SymbolKind::Struct;
   case clang::index::SymbolKind::Class: return SymbolKind::Class;
+  case clang::index::SymbolKind::Protocol: return SymbolKind::Class; // MS __interface
   case clang::index::SymbolKind::Union: return SymbolKind::Class;
   case clang::index::SymbolKind::TypeAlias: return SymbolKind::TypeAlias;
   case clang::index::SymbolKind::Function: return SymbolKind::Function;
@@ -84,10 +86,9 @@ SymbolKind tr(const clang::index::SymbolKind k)
   case clang::index::SymbolKind::TemplateTemplateParm: return SymbolKind::TemplateTemplateParameter;
   case clang::index::SymbolKind::NonTypeTemplateParm: return SymbolKind::NonTypeTemplateParameter;
   case clang::index::SymbolKind::Concept: return SymbolKind::Concept;
-  case clang::index::SymbolKind::Protocol: [[fallthrough]];
-  case clang::index::SymbolKind::Extension: [[fallthrough]];
-  case clang::index::SymbolKind::InstanceProperty: [[fallthrough]];
-  case clang::index::SymbolKind::ClassProperty: [[fallthrough]];
+  case clang::index::SymbolKind::Extension: [[fallthrough]]; // Obj-C
+  case clang::index::SymbolKind::InstanceProperty: [[fallthrough]]; // MS C++ property (https://learn.microsoft.com/en-us/cpp/cpp/property-cpp?view=msvc-170)
+  case clang::index::SymbolKind::ClassProperty: [[fallthrough]]; // AFAIK, unused
   default: return SymbolKind::Unknown;
   }
 }
@@ -412,6 +413,16 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   dinfo.FormatDiagnostic(diag);
   d.message = diag.str().str();
 
+  if (!m_indexer.initialized())
+  {
+    if (!dinfo.hasSourceManager())
+    {
+      std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+    }
+
+    return;
+  }
+
   clang::SourceRange srcrange = dinfo.getLocation();
   clang::PresumedLoc ploc = m_indexer.getSourceManager().getPresumedLoc(srcrange.getBegin());
 
@@ -430,6 +441,10 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   m_indexer.getCurrentIndex()->add(std::move(d));
 }
 
+void IdxrDiagnosticConsumer::finish()
+{
+  clang::DiagnosticConsumer::finish();
+}
 
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
   m_fileIndexingArbiter(fileIndexingArbiter),
@@ -460,6 +475,10 @@ TranslationUnitIndex* Indexer::getCurrentIndex() const
 
 clang::SourceManager& Indexer::getSourceManager() const
 {
+  if (!mAstContext) {
+    throw std::runtime_error("getSourceManager() called but no ast context");
+  }
+
   return mAstContext->getSourceManager();
 }
 
@@ -516,6 +535,11 @@ cppscanner::FileID Indexer::getFileID(clang::FileID clangFileId)
 clang::ASTContext* Indexer::getAstContext() const
 {
   return mAstContext;
+}
+
+bool Indexer::initialized() const
+{
+  return mAstContext != nullptr && m_index != nullptr;
 }
 
 void Indexer::initialize(clang::ASTContext& Ctx)
@@ -615,6 +639,8 @@ void Indexer::finish()
 
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();
+
+  mAstContext = nullptr;
 }
 
 namespace

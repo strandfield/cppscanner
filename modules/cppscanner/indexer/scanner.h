@@ -17,7 +17,9 @@ class TranslationUnitIndex;
 struct ScannerData;
 
 /**
- * \brief top level class for creating a snapshot 
+ * \brief top level class for indexing a C++ project and creating a snapshot 
+ * 
+ * The initSnapshot() must be called before scan().
  */
 class Scanner
 {
@@ -26,12 +28,14 @@ public:
   Scanner(const Scanner&) = delete;
   ~Scanner();
 
+  void setHomeDir(const std::filesystem::path& p);
   void setRootDir(const std::filesystem::path& p);
-  void setNoRootDir();
 
+  void setIndexExternalFiles(bool on = true);
   void setIndexLocalSymbols(bool on = true);
 
   void setFilters(const std::vector<std::string>& filters);
+  void setTranslationUnitFilters(const std::vector<std::string>& filters);
 
   void initSnapshot(const std::filesystem::path& p);
   Snapshot* snapshot() const;

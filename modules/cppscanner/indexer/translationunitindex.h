@@ -21,6 +21,9 @@ namespace cppscanner
 
 class FileIdentificator;
 
+/**
+ * \brief the result of indexing a translation unit
+ */
 class TranslationUnitIndex
 {
 public:

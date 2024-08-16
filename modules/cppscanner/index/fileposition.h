@@ -10,6 +10,9 @@
 namespace cppscanner
 {
 
+/**
+ * \brief represents a position (line,column) within a file
+ */
 class FilePosition 
 {
 private:

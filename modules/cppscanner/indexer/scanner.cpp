@@ -10,10 +10,11 @@
 #include "indexingresultqueue.h"
 
 #include "frontendactionfactory.h"
+#include "fileidentificator.h"
 #include "fileindexingarbiter.h"
 #include "translationunitindex.h"
 
-#include "basicfileidentificator.h"
+#include "glob.h"
 
 #include "cppscanner/database/transaction.h"
 
@@ -29,9 +30,12 @@ namespace cppscanner
 
 struct ScannerData
 {
-  std::optional<std::string> homeDirectory;
+  std::string homeDirectory;
+  std::optional<std::string> rootDirectory;
+  bool indexExternalFiles = false;
   bool indexLocalSymbols = false;
   std::vector<std::string> filters;
+  std::vector<std::string> translationUnitFilters;
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
@@ -58,8 +62,12 @@ std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
 
   arbiters.push_back(std::make_unique<IndexOnceFileIndexingArbiter>(*d.fileIdentificator));
 
-  if (d.homeDirectory.has_value()) {
-    arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, *d.homeDirectory));
+  if (d.indexExternalFiles) {
+    if (d.rootDirectory.has_value()) {
+      arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, *d.rootDirectory));
+    }
+  } else {
+    arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, d.homeDirectory));
   }
 
   if (!d.filters.empty()) {
@@ -73,19 +81,24 @@ Scanner::Scanner()
 {
   d = std::make_unique<ScannerData>();
   d->homeDirectory = std::filesystem::current_path().generic_u8string();
-  d->fileIdentificator = std::make_unique<BasicFileIdentificator>();
+  d->fileIdentificator = FileIdentificator::createFileIdentificator();
 }
 
 Scanner::~Scanner() = default;
 
-void Scanner::setRootDir(const std::filesystem::path& p)
+void Scanner::setHomeDir(const std::filesystem::path& p)
 {
   d->homeDirectory = p.generic_u8string();
 }
 
-void Scanner::setNoRootDir()
+void Scanner::setRootDir(const std::filesystem::path& p)
 {
-  d->homeDirectory.reset();
+  d->rootDirectory = p.generic_u8string();
+}
+
+void Scanner::setIndexExternalFiles(bool on)
+{
+  d->indexExternalFiles = on;
 }
 
 void Scanner::setIndexLocalSymbols(bool on)
@@ -98,6 +111,11 @@ void Scanner::setFilters(const std::vector<std::string>& filters)
   d->filters = filters;
 }
 
+void Scanner::setTranslationUnitFilters(const std::vector<std::string>& filters)
+{
+  d->translationUnitFilters = filters;
+}
+
 /**
  * \brief creates an empty snapshot
  * \param p  the path of the database
@@ -108,11 +126,17 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
 
-  if (d->homeDirectory.has_value()) {
-    m_snapshot->setProperty("project.root", *d->homeDirectory);
-  }
+#ifdef _WIN32
+  m_snapshot->setProperty("cppscanner.os", "windows");
+#else
+  m_snapshot->setProperty("cppscanner.os", "linux");
+#endif // _WIN32
 
+  m_snapshot->setProperty("project.home", Snapshot::Path(d->homeDirectory));
+
+  m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
+  m_snapshot->setProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())));
 }
 
 Snapshot* Scanner::snapshot() const
@@ -122,12 +146,13 @@ Snapshot* Scanner::snapshot() const
 
 void Scanner::scan(const std::filesystem::path& compileCommandsPath)
 {
+  assert(snapshot());
+
   std::string error_message;
   std::unique_ptr<clang::tooling::JSONCompilationDatabase> compile_commands = clang::tooling::JSONCompilationDatabase::loadFromFile(
       compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
   );
 
-  Snapshot& snapshot = *m_snapshot;
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
   IndexingResultQueue results_queue;
@@ -142,6 +167,18 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
 
   for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
   {
+    if (!d->translationUnitFilters.empty()) {
+      bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&cc](const std::string& e) {
+        return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
+        });
+
+      std::cout << "[SKIPPED] " << cc.Filename << std::endl;
+
+      if (exclude) {
+        continue;
+      }
+    }
+
      std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
     /* std::vector<std::string> command = clang::tooling::getClangSyntaxOnlyAdjuster()(cc.CommandLine, cc.Filename);
     command = clang::tooling::getClangStripOutputAdjuster()(command, cc.Filename);*/
@@ -149,13 +186,12 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
 
-    std::cout << cc.Filename;
+    std::cout << cc.Filename << std::endl;
 
     if (invocation.run()) {
       assimilate(results_queue.read());
-      std::cout << " [OK]" << std::endl;
     } else {
-      std::cout << " [ERROR]" << std::endl;
+      std::cout << "error: tool invocation failed" << std::endl;
     }
   }
 }

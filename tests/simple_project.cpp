@@ -13,7 +13,7 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
   const std::string snapshot_name = "simple_project.db";
 
   ScannerInvocation inv{
-    {"--compile-commands", SIMPLE_PROJECT_BUILD_DIR + std::string("/compile_commands.json"), "--no-root", "--overwrite", "-o", snapshot_name}
+    {"--compile-commands", SIMPLE_PROJECT_BUILD_DIR + std::string("/compile_commands.json"), "--index-external-files", "--overwrite", "-o", snapshot_name}
   };
 
   // the scanner invocation succeeds

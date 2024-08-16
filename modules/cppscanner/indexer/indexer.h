@@ -24,6 +24,9 @@ class IndexingResultQueue;
 
 class Indexer;
 
+/**
+ * \brief a class for collecting C++ symbols while indexing a translation unit
+ */
 class SymbolCollector
 {
 private:
@@ -46,7 +49,9 @@ protected:
   Symbol* getParentSymbol(const Symbol& symbol, const clang::Decl* decl);
 };
 
-
+/**
+ * \brief class for receiving diagnostics from clang
+ */
 class IdxrDiagnosticConsumer : public clang::DiagnosticConsumer
 {
   Indexer& m_indexer;
@@ -60,8 +65,12 @@ public:
   bool IncludeInDiagnosticCounts() const final { return false; }
 
   void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo) final;
+  void finish() final;
 };
 
+/**
+ * \brief class for receiving indexing data from clang
+ */
 class Indexer : public clang::index::IndexDataConsumer
 {
 private:
@@ -91,6 +100,7 @@ public:
   bool ShouldTraverseDecl(const clang::Decl* decl);
   cppscanner::FileID getFileID(clang::FileID clangFileId);
   clang::ASTContext* getAstContext() const;
+  bool initialized() const;
 
   void initialize(clang::ASTContext& Ctx) final;
   void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP) final;
@@ -104,7 +114,6 @@ public:
     const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
     clang::SourceLocation Loc)  final;
   void finish() final;
-
 
 protected:
   friend IdxrDiagnosticConsumer;

@@ -13,18 +13,27 @@
 namespace cppscanner
 {
 
+/**
+ * \brief the command-line options of the scanner
+ */
 struct ScannerOptions
 {
   std::filesystem::path compile_commands;
   std::filesystem::path output;
   std::optional<std::filesystem::path> home;
+  std::optional<std::filesystem::path> root;
   bool overwrite = false;
-  bool no_home = false;
+  bool index_external_files = false;
   bool index_local_symbols = false;
   std::vector<std::string> filters;
+  std::vector<std::string> translation_unit_filters;
   std::optional<std::string> project_name;
+  std::optional<std::string> project_version;
 };
 
+/**
+ * \brief represents a command-line invocation of the scanner
+ */
 class ScannerInvocation
 {
 private:

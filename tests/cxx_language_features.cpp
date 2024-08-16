@@ -13,7 +13,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   const std::string snapshot_name = "cxx_language_features.db";
 
   ScannerInvocation inv{
-    {"--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"), "--no-root", "--index-local-symbols", "--overwrite", "-o", snapshot_name}
+    {"--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"), "--index-external-files", "--index-local-symbols", "--overwrite", "-o", snapshot_name}
   };
 
   // the scanner invocation succeeds
