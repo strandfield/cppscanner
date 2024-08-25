@@ -28,6 +28,8 @@ public:
   
   static SymbolID fromRawID(uint64_t id);
 
+  operator bool() const;
+
 protected:
   explicit SymbolID(uint64_t id);
 };
@@ -51,6 +53,11 @@ inline bool SymbolID::isValid() const
 inline SymbolID SymbolID::fromRawID(uint64_t id)
 {
   return SymbolID{ id };
+}
+
+inline SymbolID::operator bool() const
+{
+  return isValid();
 }
 
 inline bool operator==(const SymbolID& lhs, const SymbolID& rhs)

@@ -52,6 +52,8 @@ public:
   void add(const BaseOf& baseOf);
   void add(const Override& fnOverride);
   void add(Diagnostic d);
+
+  Symbol* getSymbolById(const SymbolID& id);
 };
 
 
@@ -78,6 +80,12 @@ inline void TranslationUnitIndex::add(const Override& fnOverride)
 inline void TranslationUnitIndex::add(Diagnostic d)
 {
   diagnostics.push_back(std::move(d));
+}
+
+inline Symbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
+{
+  auto it = this->symbols.find(id);
+  return it != this->symbols.end() ? &(it->second) : nullptr;
 }
 
 } // namespace cppscanner

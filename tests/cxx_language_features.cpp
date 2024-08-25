@@ -25,7 +25,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   auto s = Snapshot::open(snapshot_name);
 
   std::vector<File> files = s.getFiles();
-  REQUIRE(files.size() == 4);
+  REQUIRE(files.size() == 6);
   File maincpp = getFile(files, std::regex("main\\.cpp"));
   File lambdacpp = getFile(files, std::regex("lambda\\.cpp"));
 
@@ -110,4 +110,52 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
       REQUIRE(value.value == "true");
     }
   }
+}
+
+TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-macro.db";
+
+  ScannerInvocation inv{
+    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "-f:tu", "macro.cpp",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  TemporarySnapshot s{ snapshot_name };
+  s.delete_on_close = false;
+
+  std::vector<File> files = s.getFiles();
+  REQUIRE(files.size() > 0);
+  File macro_cpp = getFile(files, std::regex("macro\\.cpp"));
+
+  Symbol my_constant = s.getSymbolByName("MY_CONSTANT");
+  Symbol greater_than_my_constant = s.getSymbolByName("GREATER_THAN_MY_CONSTANT");
+  REQUIRE(my_constant.kind == SymbolKind::Macro);
+  REQUIRE(greater_than_my_constant.kind == SymbolKind::Macro);
+
+  std::vector<Symbol> my_mins = s.findSymbolsByName("MY_MIN");
+  REQUIRE(my_mins.size() == 2);
+  Symbol my_min0 = my_mins[0];
+  Symbol my_min1 = my_mins[1];
+  REQUIRE(my_min0.kind == SymbolKind::Macro);
+  REQUIRE(my_min1.kind == SymbolKind::Macro);
+
+  if (my_min0.value == "min_int(a, b)") {
+    std::swap(my_min0, my_min1);
+  }
+
+  REQUIRE(my_min0.value == "( (a) < (b) ? (a) : (b) )");
+  REQUIRE(my_min1.value == "min_int(a, b)");
+  REQUIRE(greater_than_my_constant.value == "(MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)");
+
+ // REQUIRE_THROWS(s.getSymbolByName("MY_GUARD"));
 }

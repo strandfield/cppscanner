@@ -54,6 +54,19 @@ std::string getUSR(const clang::Decl* decl)
   return std::string(chars.data(), chars.size());
 }
 
+std::string getUSR(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, const clang::SourceLocation& loc, const clang::SourceManager& sourceManager)
+{
+  llvm::SmallVector<char> chars;
+
+  bool ignore = clang::index::generateUSRForMacro(name->getName(), loc, sourceManager, chars);
+
+  if (ignore) {
+    throw std::runtime_error("could not generate usr");
+  }
+
+  return std::string(chars.data(), chars.size());
+}
+
 SymbolKind tr(const clang::index::SymbolKind k)
 {
   switch (k)
@@ -93,10 +106,15 @@ SymbolKind tr(const clang::index::SymbolKind k)
   }
 }
 
+SymbolID computeSymbolIdFromUsr(const std::string& usr)
+{
+  return usr2symid(usr);
+}
+
 SymbolID computeSymbolID(const clang::Decl* decl)
 {
   std::string usr = getUSR(decl);
-  return usr2symid(usr);
+  return computeSymbolIdFromUsr(usr);
 }
 
 clang::PrintingPolicy getPrettyPrintPrintingPolicy(const Indexer& idxr)
@@ -185,9 +203,48 @@ Symbol* SymbolCollector::process(const clang::Decl* decl)
   return &symbol;
 }
 
+Symbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc)
+{
+  auto [it, inserted] = m_symbolIdCache.try_emplace(macroInfo, SymbolID());
+
+  if (inserted) {
+    try {
+      it->second = computeSymbolIdFromUsr(getUSR(name, macroInfo, loc, m_indexer.getAstContext()->getSourceManager()));
+    } catch (const std::exception&) {
+      return nullptr;
+    }
+  };
+
+  SymbolID symid = it->second;
+  Symbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
+
+  if (inserted) {
+    symbol.id = symid;
+    fillSymbol(symbol, name, macroInfo);
+  }
+
+  // TODO: we may have to delay the call to isUsedForHeaderGuard() if 
+  // we want to have its correct value as it appears to not be set the
+  // first time handleMacroOccurrence() is called.
+  if (macroInfo->isUsedForHeaderGuard()) {
+    symbol.setFlag(Symbol::MacroUsedAsHeaderGuard);
+  }
+
+  // TODO: write this as a flag ?
+  (void)macroInfo->isFunctionLike();
+
+  return &symbol;
+}
+
 SymbolID SymbolCollector::getSymbolId(const clang::Decl* decl) const
 {
   auto it = m_symbolIdCache.find(decl);
+  return it != m_symbolIdCache.end() ? it->second : SymbolID();
+}
+
+SymbolID SymbolCollector::getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const
+{
+  auto it = m_symbolIdCache.find(macroInfo);
   return it != m_symbolIdCache.end() ? it->second : SymbolID();
 }
 
@@ -218,6 +275,8 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
     symbol.setLocal();
   }
 
+  // j'imagine qu'au moment de récupérer le parent on peut savoir si le symbol est exporté
+  // en regardant si l'un des parents est un ExportDecl.
   Symbol* parent_symbol = getParentSymbol(symbol, decl); 
   if (parent_symbol) {
     symbol.parent_id = parent_symbol->id;
@@ -252,6 +311,7 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   {
     auto* rdecl = llvm::dyn_cast<clang::RecordDecl>(decl);
     
+    // TODO: anonymous struct can have an empty name too! need to give them one...
     if (rdecl->isLambda()) {
       symbol.kind = SymbolKind::Lambda;
 
@@ -362,9 +422,30 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
     }
   }
   break;
+  case clang::Decl::Kind::Import:
+  {
+    auto* imp = llvm::dyn_cast<clang::ImportDecl>(decl);
+
+    // see clang::Sema::ActOnModuleDecl
+    clang::TranslationUnitDecl* tu_decl = m_indexer.getAstContext()->getTranslationUnitDecl();
+    clang::Module* m = tu_decl->getLocalOwningModule();
+    m = m_indexer.getAstContext()->getCurrentNamedModule();
+  }
+  break;
+  case clang::Decl::Kind::Export:
+  {
+    auto* expo = llvm::dyn_cast<clang::ExportDecl>(decl);
+  }
+  break;
   default:
     break;
   }
+}
+
+void SymbolCollector::fillSymbol(Symbol& symbol, const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo)
+{
+  symbol.name = name->getName().str();
+  symbol.kind = SymbolKind::Macro;
 }
 
 void SymbolCollector::fillDisplayName(Symbol& symbol, const clang::Decl* decl)
@@ -446,6 +527,135 @@ void IdxrDiagnosticConsumer::finish()
   clang::DiagnosticConsumer::finish();
 }
 
+PreprocessingRecordIndexer::PreprocessingRecordIndexer(Indexer& idxr) :
+  m_indexer(idxr)
+{
+  assert(m_indexer.getCurrentIndex());
+}
+
+void PreprocessingRecordIndexer::process(clang::PreprocessingRecord* ppRecord)
+{
+  if (!ppRecord) {
+    return;
+  }
+
+  clang::SourceManager& sourceman = m_indexer.getAstContext()->getSourceManager();
+
+  for (clang::PreprocessedEntity* ppe : *(ppRecord)) {
+    switch (ppe->getKind())
+    {
+    case clang::PreprocessedEntity::InclusionDirectiveKind:
+      process(*llvm::dyn_cast<clang::InclusionDirective>(ppe));
+    break;
+    case clang::PreprocessedEntity::MacroDefinitionKind:
+      process(*llvm::dyn_cast<clang::MacroDefinitionRecord>(ppe));
+      break;
+    case clang::PreprocessedEntity::MacroExpansionKind:
+      process(*llvm::dyn_cast<clang::MacroExpansion>(ppe));
+      break;
+    default:
+      break;
+    }
+  }
+}
+
+clang::SourceManager& PreprocessingRecordIndexer::getSourceManager() const
+{
+  return m_indexer.getAstContext()->getSourceManager();
+}
+
+bool PreprocessingRecordIndexer::shouldIndexFile(const clang::FileID fileId) const
+{
+  return m_indexer.shouldIndexFile(fileId);
+}
+
+TranslationUnitIndex& PreprocessingRecordIndexer::currentIndex() const
+{
+  return *m_indexer.getCurrentIndex();
+}
+
+cppscanner::FileID PreprocessingRecordIndexer::idFile(const clang::FileID& fileId) const
+{
+  return m_indexer.getFileID(fileId);
+}
+
+cppscanner::FileID PreprocessingRecordIndexer::idFile(const std::string& filePath) const
+{
+  return m_indexer.fileIdentificator().getIdentification(filePath);
+}
+
+void PreprocessingRecordIndexer::process(clang::InclusionDirective& inclusionDirective)
+{
+  clang::SourceLocation range_begin = inclusionDirective.getSourceRange().getBegin();
+  clang::FileID fileid = getSourceManager().getFileID(range_begin);
+
+  if (!shouldIndexFile(fileid)) {
+    return;
+  }
+
+  if (!inclusionDirective.getFile().has_value()) {
+    return;
+  }
+
+  const clang::FileEntry& fileentry = inclusionDirective.getFile()->getFileEntry();
+  llvm::StringRef realpath = fileentry.tryGetRealPathName();
+
+  if (realpath.empty()) {
+    return;
+  }
+
+  Include inc;
+  inc.fileID = idFile(fileid);
+  inc.line = getSourceManager().getSpellingLineNumber(range_begin);
+  inc.includedFileID = idFile(realpath.str());
+
+  currentIndex().add(inc);
+}
+
+void PreprocessingRecordIndexer::process(clang::MacroDefinitionRecord& mdr)
+{
+  // Since the preprocessing record is indexed after the translation unit
+  // is parsed, we may have more information about a macro (e.g., whether 
+  // it is used) then when it was collected.
+
+  clang::Preprocessor* pp = m_indexer.getPreprocessor();
+  const clang::MacroInfo* macro_info = pp->getMacroInfo(mdr.getName());
+
+  if (!macro_info) {
+    return;
+  }
+
+  // If everything worked fine, the macro definition should already have been 
+  // handled by handleMacroOccurrence(), so we should be able to get its id
+  // from the cache.
+  SymbolID symid = m_indexer.symbolCollector().getMacroSymbolIdFromCache(macro_info);
+
+  if (!symid) {
+    return;
+  }
+
+  Symbol* symbol = m_indexer.getCurrentIndex()->getSymbolById(symid);
+
+  if (!symbol) {
+    return;
+  }
+
+  assert(symbol->kind == SymbolKind::Macro);
+
+  symbol->setFlag(Symbol::MacroUsedAsHeaderGuard, macro_info->isUsedForHeaderGuard());
+}
+
+void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
+{
+  // The MacroExpansion object contains information about where a macro 
+  // was expanded while parsing the translation unit.
+  // However, we can already collect that information in handleMacroOccurrence()
+  // (which is called before the macro is expanded) and since clang does not appear 
+  // to keep in memory the result of the macro expansion, 
+  // there really is nothing more we can do here...
+  (void)macroExpansion;
+}
+
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
   m_fileIndexingArbiter(fileIndexingArbiter),
   m_resultsQueue(resultsQueue),
@@ -461,6 +671,11 @@ Indexer::~Indexer() = default;
 FileIdentificator& Indexer::fileIdentificator()
 {
   return m_fileIdentificator;
+}
+
+SymbolCollector& Indexer::symbolCollector()
+{
+  return m_symbolCollector;
 }
 
 clang::DiagnosticConsumer* Indexer::getDiagnosticConsumer()
@@ -537,6 +752,11 @@ clang::ASTContext* Indexer::getAstContext() const
   return mAstContext;
 }
 
+clang::Preprocessor* Indexer::getPreprocessor() const
+{
+  return m_pp.get();
+}
+
 bool Indexer::initialized() const
 {
   return mAstContext != nullptr && m_index != nullptr;
@@ -557,6 +777,10 @@ void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
 {
   m_pp = pp;
 
+  // note: we need to wait until after the translation unit was indexed
+  // to get a non-empty preprocessing record.
+  // therefore indexPreprocessingRecord() is called in finish() and not
+  // here!
   /*if (pp && pp->getPreprocessingRecord()) {
     indexPreprocessingRecord(*pp);
   }*/
@@ -610,11 +834,54 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
   return true;
 }
 
-bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo *Name,
-  const clang::MacroInfo *MI, clang::index::SymbolRoleSet Roles,
-  clang::SourceLocation Loc) 
+bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
+  const clang::MacroInfo* macroInfo, clang::index::SymbolRoleSet roles,
+  clang::SourceLocation loc) 
 {
-  // TODO: handle macro occurrence
+  if (!shouldIndexFile(getSourceManager().getFileID(loc))) {
+    return true;
+  }
+
+  Symbol* symbol = m_symbolCollector.process(name, macroInfo, loc);
+
+  if (!symbol)
+    return true;
+
+  if (roles & (int)clang::index::SymbolRole::Definition) {
+    if (!macroInfo->tokens_empty()) {
+      // TODO: use another field to record the definition ?
+      const clang::Token& first_token = macroInfo->tokens().front();
+      const clang::Token& last_token = macroInfo->tokens().back();
+      auto range = clang::CharSourceRange::getCharRange(first_token.getLocation(), last_token.getEndLoc());
+      symbol->value = clang::Lexer::getSourceText(range, getSourceManager(), getAstContext()->getLangOpts()).str();
+    }
+  }
+
+  int line = getSourceManager().getSpellingLineNumber(loc);
+  int col = getSourceManager().getSpellingColumnNumber(loc);
+
+  SymbolReference symref;
+  symref.fileID = getFileID(getSourceManager().getFileID(loc));
+  symref.symbolID = symbol->id;
+  symref.position = FilePosition(line, col);
+
+  symref.flags = 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Definition) ? SymbolReference::Definition : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Declaration) ? SymbolReference::Declaration : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0;
+
+  if (roles & (int)clang::index::SymbolRole::Reference) {
+    // TODO: record the result of expanding the macro ?
+
+    // Looking at Preprocessor::HandleMacroExpandedIdentifier(), it appears the macro 
+    // is actually expanded after this function is called ; meaning we have no way
+    // to easily get information about the expansion from clang at this point.
+    // The Woboq codebrowser expands the macro manually in PreprocessorCallback::MacroExpands()
+    // by creating its own clang::Lexer which is honestly too much of a pain.
+  }
+
+  getCurrentIndex()->add(symref);
+
   return true;
 }
 
@@ -732,41 +999,8 @@ void Indexer::processRelations(std::pair<const clang::Decl*, Symbol*> declAndSym
 
 void Indexer::indexPreprocessingRecord(clang::Preprocessor& pp)
 {
-  if (!pp.getPreprocessingRecord()) {
-    return;
-  }
-
-  clang::SourceManager& sourceman = mAstContext->getSourceManager();
-
-  for (clang::PreprocessedEntity* ppe : *(pp.getPreprocessingRecord())) {
-    if (auto* inclusion_directive = llvm::dyn_cast<clang::InclusionDirective>(ppe)) {
-
-      clang::SourceLocation range_begin = inclusion_directive->getSourceRange().getBegin();
-      clang::FileID fileid = sourceman.getFileID(range_begin);
-
-      if (!shouldIndexFile(fileid)) {
-        continue;
-      }
-
-      if (!inclusion_directive->getFile().has_value()) {
-        continue;
-      }
-
-      const clang::FileEntry& fileentry = inclusion_directive->getFile()->getFileEntry();
-      llvm::StringRef realpath = fileentry.tryGetRealPathName();
-
-      if (realpath.empty()) {
-        continue;
-      }
-
-      Include inc;
-      inc.fileID = getFileID(fileid);
-      inc.line = sourceman.getSpellingLineNumber(range_begin);
-      inc.includedFileID = m_fileIdentificator.getIdentification(realpath.str());
-
-      m_index->add(inc);
-    }
-  }
+  PreprocessingRecordIndexer pprindexer{ *this };
+  pprindexer.process(pp.getPreprocessingRecord());
 }
 
 } // namespace cppscanner
