@@ -31,7 +31,7 @@ class SymbolCollector
 {
 private:
   Indexer& m_indexer;
-  std::map<const clang::Decl*, SymbolID> m_symbolIdCache;
+  std::map<const void*, SymbolID> m_symbolIdCache;
 
 public:
   explicit SymbolCollector(Indexer& idxr);
@@ -39,12 +39,14 @@ public:
   void reset();
 
   Symbol* process(const clang::Decl* decl);
+  Symbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc);
 
   SymbolID getSymbolId(const clang::Decl* decl) const;
 
 protected:
   std::string getDeclSpelling(const clang::Decl* decl);
   void fillSymbol(Symbol& symbol, const clang::Decl* decl);
+  void fillSymbol(Symbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
   void fillDisplayName(Symbol& symbol, const clang::Decl* decl);
   Symbol* getParentSymbol(const Symbol& symbol, const clang::Decl* decl);
 };

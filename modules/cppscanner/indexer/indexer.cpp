@@ -54,6 +54,19 @@ std::string getUSR(const clang::Decl* decl)
   return std::string(chars.data(), chars.size());
 }
 
+std::string getUSR(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, const clang::SourceLocation& loc, const clang::SourceManager& sourceManager)
+{
+  llvm::SmallVector<char> chars;
+
+  bool ignore = clang::index::generateUSRForMacro(name->getName(), loc, sourceManager, chars);
+
+  if (ignore) {
+    throw std::runtime_error("could not generate usr");
+  }
+
+  return std::string(chars.data(), chars.size());
+}
+
 SymbolKind tr(const clang::index::SymbolKind k)
 {
   switch (k)
@@ -93,10 +106,15 @@ SymbolKind tr(const clang::index::SymbolKind k)
   }
 }
 
+SymbolID computeSymbolIdFromUsr(const std::string& usr)
+{
+  return usr2symid(usr);
+}
+
 SymbolID computeSymbolID(const clang::Decl* decl)
 {
   std::string usr = getUSR(decl);
-  return usr2symid(usr);
+  return computeSymbolIdFromUsr(usr);
 }
 
 clang::PrintingPolicy getPrettyPrintPrintingPolicy(const Indexer& idxr)
@@ -185,6 +203,29 @@ Symbol* SymbolCollector::process(const clang::Decl* decl)
   return &symbol;
 }
 
+Symbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc)
+{
+  auto [it, inserted] = m_symbolIdCache.try_emplace(macroInfo, SymbolID());
+
+  if (inserted) {
+    try {
+      it->second = computeSymbolIdFromUsr(getUSR(name, macroInfo, loc, m_indexer.getAstContext()->getSourceManager()));
+    } catch (const std::exception&) {
+      return nullptr;
+    }
+  };
+
+  SymbolID symid = it->second;
+  Symbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
+
+  if (inserted) {
+    symbol.id = symid;
+    fillSymbol(symbol, name, macroInfo);
+  }
+
+  return &symbol;
+}
+
 SymbolID SymbolCollector::getSymbolId(const clang::Decl* decl) const
 {
   auto it = m_symbolIdCache.find(decl);
@@ -218,6 +259,8 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
     symbol.setLocal();
   }
 
+  // j'imagine qu'au moment de récupérer le parent on peut savoir si le symbol est exporté
+  // en regardant si l'un des parents est un ExportDecl.
   Symbol* parent_symbol = getParentSymbol(symbol, decl); 
   if (parent_symbol) {
     symbol.parent_id = parent_symbol->id;
@@ -252,6 +295,7 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   {
     auto* rdecl = llvm::dyn_cast<clang::RecordDecl>(decl);
     
+    // TODO: anonymous struct can have an empty name too! need to give them one...
     if (rdecl->isLambda()) {
       symbol.kind = SymbolKind::Lambda;
 
@@ -362,9 +406,30 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
     }
   }
   break;
+  case clang::Decl::Kind::Import:
+  {
+    auto* imp = llvm::dyn_cast<clang::ImportDecl>(decl);
+
+    // see clang::Sema::ActOnModuleDecl
+    clang::TranslationUnitDecl* tu_decl = m_indexer.getAstContext()->getTranslationUnitDecl();
+    clang::Module* m = tu_decl->getLocalOwningModule();
+    m = m_indexer.getAstContext()->getCurrentNamedModule();
+  }
+  break;
+  case clang::Decl::Kind::Export:
+  {
+    auto* expo = llvm::dyn_cast<clang::ExportDecl>(decl);
+  }
+  break;
   default:
     break;
   }
+}
+
+void SymbolCollector::fillSymbol(Symbol& symbol, const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo)
+{
+  symbol.name = name->getName().str();
+  symbol.kind = SymbolKind::Macro;
 }
 
 void SymbolCollector::fillDisplayName(Symbol& symbol, const clang::Decl* decl)
@@ -610,11 +675,39 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
   return true;
 }
 
-bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo *Name,
-  const clang::MacroInfo *MI, clang::index::SymbolRoleSet Roles,
-  clang::SourceLocation Loc) 
+bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
+  const clang::MacroInfo* macroInfo, clang::index::SymbolRoleSet roles,
+  clang::SourceLocation loc) 
 {
-  // TODO: handle macro occurrence
+  if (macroInfo->isUsedForHeaderGuard()) {
+    return true;
+  }
+
+  if (!shouldIndexFile(getSourceManager().getFileID(loc))) {
+    return true;
+  }
+
+  Symbol* symbol = m_symbolCollector.process(name, macroInfo, loc);
+
+  if (!symbol)
+    return true;
+
+  int line = getSourceManager().getSpellingLineNumber(loc);
+  int col = getSourceManager().getSpellingColumnNumber(loc);
+
+  SymbolReference symref;
+  symref.fileID = getFileID(getSourceManager().getFileID(loc));
+  symref.symbolID = symbol->id;
+  symref.position = FilePosition(line, col);
+
+  symref.flags = 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Definition) ? SymbolReference::Definition : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Declaration) ? SymbolReference::Declaration : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0; // useful ?
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Implicit) ? SymbolReference::Implicit : 0;
+
+  getCurrentIndex()->add(symref);
+
   return true;
 }
 
