@@ -154,10 +154,27 @@ std::string prettyPrint(const clang::Decl* decl, const Indexer& idxr)
   return os.str().str();
 }
 
-void fillLambdaName(Symbol& lambda, const clang::RecordDecl& decl)
+void fillEmptyRecordName(Symbol& symbol, const clang::RecordDecl& decl)
 {
   (void)decl; // we are not going to use 'decl' for now
-  lambda.name = "__lambda_" + lambda.id.toHex();
+
+  switch (symbol.kind)
+  {
+  case SymbolKind::Lambda:
+    symbol.name = "__lambda_" + symbol.id.toHex();
+    break;
+  case SymbolKind::Struct:
+    symbol.name = "__anonymous_struct_" + symbol.id.toHex();
+    break;
+  case SymbolKind::Class:
+    symbol.name = "__anonymous_class_" + symbol.id.toHex();
+    break;
+  case SymbolKind::Union:
+    symbol.name = "__anonymous_union_" + symbol.id.toHex();
+    break;
+  default:
+    break;
+  }
 }
 
 SymbolCollector::SymbolCollector(Indexer& idxr) : 
@@ -311,17 +328,21 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   {
     auto* rdecl = llvm::dyn_cast<clang::RecordDecl>(decl);
     
-    // TODO: anonymous struct can have an empty name too! need to give them one...
     if (rdecl->isLambda()) {
+      // clang currently does not define a specific "symbol kind" for 
+      // lambdas and uses "class" instead ; but the distinction seems
+      // useful so we overwrite any previously set value.
       symbol.kind = SymbolKind::Lambda;
-
-      // lambdas have an empty name by default.
-      // i.e. getDeclSpelling() returns an empty string for such declarations.
-      // but having no name is not very practical whenever printing is required, 
-      // so we compute a fake name for the lambda.
-      if (symbol.name.empty()) {
-        fillLambdaName(symbol, *rdecl);
-      }
+    }
+    
+    // An empty name is not practical for printing, so we compute
+    // a placeholder if none is present.
+    // Note that lambdas have an empty name by default ;
+    // i.e., getDeclSpelling() returns an empty string for such declarations
+    // so it is expected that fillEmptyRecordName() will always be called
+    // for a lambda.
+    if (symbol.name.empty()) {
+      fillEmptyRecordName(symbol, *rdecl);
     }
   }
   break;
