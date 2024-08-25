@@ -25,7 +25,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   auto s = Snapshot::open(snapshot_name);
 
   std::vector<File> files = s.getFiles();
-  REQUIRE(files.size() == 4);
+  REQUIRE(files.size() == 6);
   File maincpp = getFile(files, std::regex("main\\.cpp"));
   File lambdacpp = getFile(files, std::regex("lambda\\.cpp"));
 

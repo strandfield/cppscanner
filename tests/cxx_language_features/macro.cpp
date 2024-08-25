@@ -1,7 +1,7 @@
 
 #include "macro.h"
 
-int incrByConstant(int& n)
+void incrByConstant(int& n)
 {
   n += MY_CONSTANT;
 }

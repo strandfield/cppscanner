@@ -223,12 +223,28 @@ Symbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang:
     fillSymbol(symbol, name, macroInfo);
   }
 
+  // TODO: we may have to delay the call to isUsedForHeaderGuard() if 
+  // we want to have its correct value as it appears to not be set the
+  // first time handleMacroOccurrence() is called.
+  if (macroInfo->isUsedForHeaderGuard()) {
+    symbol.setFlag(Symbol::MacroUsedAsHeaderGuard);
+  }
+
+  // TODO: write this as a flag ?
+  (void)macroInfo->isFunctionLike();
+
   return &symbol;
 }
 
 SymbolID SymbolCollector::getSymbolId(const clang::Decl* decl) const
 {
   auto it = m_symbolIdCache.find(decl);
+  return it != m_symbolIdCache.end() ? it->second : SymbolID();
+}
+
+SymbolID SymbolCollector::getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const
+{
+  auto it = m_symbolIdCache.find(macroInfo);
   return it != m_symbolIdCache.end() ? it->second : SymbolID();
 }
 
@@ -598,15 +614,46 @@ void PreprocessingRecordIndexer::process(clang::InclusionDirective& inclusionDir
 
 void PreprocessingRecordIndexer::process(clang::MacroDefinitionRecord& mdr)
 {
-  // There is nothing to do here.
+  // Since the preprocessing record is indexed after the translation unit
+  // is parsed, we may have more information about a macro (e.g., whether 
+  // it is used) then when it was collected.
+
+  clang::Preprocessor* pp = m_indexer.getPreprocessor();
+  const clang::MacroInfo* macro_info = pp->getMacroInfo(mdr.getName());
+
+  if (!macro_info) {
+    return;
+  }
+
   // If everything worked fine, the macro definition should already have been 
-  // handled by handleMacroOccurrence().
-  (void)mdr;
+  // handled by handleMacroOccurrence(), so we should be able to get its id
+  // from the cache.
+  SymbolID symid = m_indexer.symbolCollector().getMacroSymbolIdFromCache(macro_info);
+
+  if (!symid) {
+    return;
+  }
+
+  Symbol* symbol = m_indexer.getCurrentIndex()->getSymbolById(symid);
+
+  if (!symbol) {
+    return;
+  }
+
+  assert(symbol->kind == SymbolKind::Macro);
+
+  symbol->setFlag(Symbol::MacroUsedAsHeaderGuard, macro_info->isUsedForHeaderGuard());
 }
 
 void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
 {
-  // TODO ?
+  // The MacroExpansion object contains information about where a macro 
+  // was expanded while parsing the translation unit.
+  // However, we can already collect that information in handleMacroOccurrence()
+  // (which is called before the macro is expanded) and since clang does not appear 
+  // to keep in memory the result of the macro expansion, 
+  // there really is nothing more we can do here...
+  (void)macroExpansion;
 }
 
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
@@ -624,6 +671,11 @@ Indexer::~Indexer() = default;
 FileIdentificator& Indexer::fileIdentificator()
 {
   return m_fileIdentificator;
+}
+
+SymbolCollector& Indexer::symbolCollector()
+{
+  return m_symbolCollector;
 }
 
 clang::DiagnosticConsumer* Indexer::getDiagnosticConsumer()
@@ -700,6 +752,11 @@ clang::ASTContext* Indexer::getAstContext() const
   return mAstContext;
 }
 
+clang::Preprocessor* Indexer::getPreprocessor() const
+{
+  return m_pp.get();
+}
+
 bool Indexer::initialized() const
 {
   return mAstContext != nullptr && m_index != nullptr;
@@ -720,6 +777,10 @@ void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
 {
   m_pp = pp;
 
+  // note: we need to wait until after the translation unit was indexed
+  // to get a non-empty preprocessing record.
+  // therefore indexPreprocessingRecord() is called in finish() and not
+  // here!
   /*if (pp && pp->getPreprocessingRecord()) {
     indexPreprocessingRecord(*pp);
   }*/
@@ -777,13 +838,6 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
   const clang::MacroInfo* macroInfo, clang::index::SymbolRoleSet roles,
   clang::SourceLocation loc) 
 {
-  // TODO: we may have to delay the call to isUsedForHeaderGuard() if 
-  // we want to have its correct value as it appears to not be set the
-  // first time handleMacroOccurrence() is called.
-  if (macroInfo->isUsedForHeaderGuard()) {
-    return true;
-  }
-
   if (!shouldIndexFile(getSourceManager().getFileID(loc))) {
     return true;
   }
@@ -814,8 +868,17 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
   symref.flags = 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Definition) ? SymbolReference::Definition : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Declaration) ? SymbolReference::Declaration : 0;
-  symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0; // useful ?
-  symref.flags |= (roles & (int)clang::index::SymbolRole::Implicit) ? SymbolReference::Implicit : 0;
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0;
+
+  if (roles & (int)clang::index::SymbolRole::Reference) {
+    // TODO: record the result of expanding the macro ?
+
+    // Looking at Preprocessor::HandleMacroExpandedIdentifier(), it appears the macro 
+    // is actually expanded after this function is called ; meaning we have no way
+    // to easily get information about the expansion from clang at this point.
+    // The Woboq codebrowser expands the macro manually in PreprocessorCallback::MacroExpands()
+    // by creating its own clang::Lexer which is honestly too much of a pain.
+  }
 
   getCurrentIndex()->add(symref);
 

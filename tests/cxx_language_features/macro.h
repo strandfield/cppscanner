@@ -8,4 +8,4 @@
 
 #define GREATER_THAN_MY_CONSTANT(a) (MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)
 
-#endif MY_GUARD
+#endif // MY_GUARD

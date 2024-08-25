@@ -49,6 +49,7 @@ public:
   Symbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc);
 
   SymbolID getSymbolId(const clang::Decl* decl) const;
+  SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
 
 protected:
   std::string getDeclSpelling(const clang::Decl* decl);
@@ -123,6 +124,7 @@ public:
 
   FileIdentificator& fileIdentificator();
 
+  SymbolCollector& symbolCollector();
   clang::DiagnosticConsumer* getDiagnosticConsumer();
 
   TranslationUnitIndex* getCurrentIndex() const;
@@ -131,6 +133,7 @@ public:
   bool ShouldTraverseDecl(const clang::Decl* decl);
   cppscanner::FileID getFileID(clang::FileID clangFileId);
   clang::ASTContext* getAstContext() const;
+  clang::Preprocessor* getPreprocessor() const;
   bool initialized() const;
 
   void initialize(clang::ASTContext& Ctx) final;

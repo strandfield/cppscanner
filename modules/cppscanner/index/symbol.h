@@ -160,6 +160,8 @@ public:
     Explicit  = 0x2000,
     Default   = 0x4000,
     Delete    = 0x8000,
+    // TODO: we need to redesign flags...
+    MacroUsedAsHeaderGuard = 0x10000,
     // TODO:
     Mutable = 0,
     ThreadLocal = 0,
@@ -247,23 +249,24 @@ inline void set_access_specifier(Symbol& s, AccessSpecifier a)
 inline std::string_view getSymbolFlagString(Symbol::Flag flag)
 {
   switch (flag) {
-  case Symbol::Local:     return "local";
-  case Symbol::Public:    return "public";
-  case Symbol::Protected: return "protected";
-  case Symbol::Private:   return "private";
-  case Symbol::Inline:    return "inline";
-  case Symbol::Static:    return "static";
-  case Symbol::Constexpr: return "constexpr";
-  case Symbol::IsScoped:  return "scoped";
-  case Symbol::Virtual:   return "virtual";
-  case Symbol::Override:  return "override";
-  case Symbol::Final:     return "final";
-  case Symbol::Const:     return "const";
-  case Symbol::Pure:      return "pure";
-  case Symbol::Noexcept:  return "noexcept";
-  case Symbol::Explicit:  return "explicit";
-  case Symbol::Default:   return "default";
-  case Symbol::Delete:    return "delete";
+  case Symbol::Local:                  return "local";
+  case Symbol::Public:                 return "public";
+  case Symbol::Protected:              return "protected";
+  case Symbol::Private:                return "private";
+  case Symbol::Inline:                 return "inline";
+  case Symbol::Static:                 return "static";
+  case Symbol::Constexpr:              return "constexpr";
+  case Symbol::IsScoped:               return "scoped";
+  case Symbol::Virtual:                return "virtual";
+  case Symbol::Override:               return "override";
+  case Symbol::Final:                  return "final";
+  case Symbol::Const:                  return "const";
+  case Symbol::Pure:                   return "pure";
+  case Symbol::Noexcept:               return "noexcept";
+  case Symbol::Explicit:               return "explicit";
+  case Symbol::Default:                return "default";
+  case Symbol::Delete:                 return "delete";
+  case Symbol::MacroUsedAsHeaderGuard: return "macro-used-as-header-guard";
   default: return "<invalid>";
   }
 }
@@ -288,6 +291,7 @@ void enumerateSymbolFlag(F&& fn)
   fn(Symbol::Explicit);
   fn(Symbol::Default);
   fn(Symbol::Delete);
+  fn(Symbol::MacroUsedAsHeaderGuard);
 }
 
 } // namespace cppscanner
