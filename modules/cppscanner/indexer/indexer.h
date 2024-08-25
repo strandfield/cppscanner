@@ -18,6 +18,8 @@
 namespace clang
 {
 class InclusionDirective;
+class MacroDefinitionRecord;
+class MacroExpansion;
 } // namespace clang
 
 namespace cppscanner
@@ -93,6 +95,8 @@ protected:
 
 protected:
   void process(clang::InclusionDirective& inclusionDirective);
+  void process(clang::MacroDefinitionRecord& mdr);
+  void process(clang::MacroExpansion& macroExpansion);
 };
 
 /**

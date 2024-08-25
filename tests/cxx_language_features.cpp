@@ -149,5 +149,13 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   REQUIRE(my_min0.kind == SymbolKind::Macro);
   REQUIRE(my_min1.kind == SymbolKind::Macro);
 
+  if (my_min0.value == "min_int(a, b)") {
+    std::swap(my_min0, my_min1);
+  }
+
+  REQUIRE(my_min0.value == "( (a) < (b) ? (a) : (b) )");
+  REQUIRE(my_min1.value == "min_int(a, b)");
+  REQUIRE(greater_than_my_constant.value == "(MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)");
+
  // REQUIRE_THROWS(s.getSymbolByName("MY_GUARD"));
 }

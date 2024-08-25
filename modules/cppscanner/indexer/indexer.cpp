@@ -526,8 +526,19 @@ void PreprocessingRecordIndexer::process(clang::PreprocessingRecord* ppRecord)
   clang::SourceManager& sourceman = m_indexer.getAstContext()->getSourceManager();
 
   for (clang::PreprocessedEntity* ppe : *(ppRecord)) {
-    if (auto* inclusion_directive = llvm::dyn_cast<clang::InclusionDirective>(ppe)) {
-      process(*inclusion_directive);
+    switch (ppe->getKind())
+    {
+    case clang::PreprocessedEntity::InclusionDirectiveKind:
+      process(*llvm::dyn_cast<clang::InclusionDirective>(ppe));
+    break;
+    case clang::PreprocessedEntity::MacroDefinitionKind:
+      process(*llvm::dyn_cast<clang::MacroDefinitionRecord>(ppe));
+      break;
+    case clang::PreprocessedEntity::MacroExpansionKind:
+      process(*llvm::dyn_cast<clang::MacroExpansion>(ppe));
+      break;
+    default:
+      break;
     }
   }
 }
@@ -583,6 +594,19 @@ void PreprocessingRecordIndexer::process(clang::InclusionDirective& inclusionDir
   inc.includedFileID = idFile(realpath.str());
 
   currentIndex().add(inc);
+}
+
+void PreprocessingRecordIndexer::process(clang::MacroDefinitionRecord& mdr)
+{
+  // There is nothing to do here.
+  // If everything worked fine, the macro definition should already have been 
+  // handled by handleMacroOccurrence().
+  (void)mdr;
+}
+
+void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
+{
+  // TODO ?
 }
 
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
@@ -753,6 +777,9 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
   const clang::MacroInfo* macroInfo, clang::index::SymbolRoleSet roles,
   clang::SourceLocation loc) 
 {
+  // TODO: we may have to delay the call to isUsedForHeaderGuard() if 
+  // we want to have its correct value as it appears to not be set the
+  // first time handleMacroOccurrence() is called.
   if (macroInfo->isUsedForHeaderGuard()) {
     return true;
   }
@@ -765,6 +792,16 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
 
   if (!symbol)
     return true;
+
+  if (roles & (int)clang::index::SymbolRole::Definition) {
+    if (!macroInfo->tokens_empty()) {
+      // TODO: use another field to record the definition ?
+      const clang::Token& first_token = macroInfo->tokens().front();
+      const clang::Token& last_token = macroInfo->tokens().back();
+      auto range = clang::CharSourceRange::getCharRange(first_token.getLocation(), last_token.getEndLoc());
+      symbol->value = clang::Lexer::getSourceText(range, getSourceManager(), getAstContext()->getLangOpts()).str();
+    }
+  }
 
   int line = getSourceManager().getSpellingLineNumber(loc);
   int col = getSourceManager().getSpellingColumnNumber(loc);
