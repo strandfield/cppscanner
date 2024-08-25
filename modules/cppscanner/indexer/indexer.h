@@ -15,6 +15,11 @@
 #include <map>
 #include <memory>
 
+namespace clang
+{
+class InclusionDirective;
+} // namespace clang
+
 namespace cppscanner
 {
 
@@ -68,6 +73,26 @@ public:
 
   void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo) final;
   void finish() final;
+};
+
+class PreprocessingRecordIndexer
+{
+private:
+  Indexer& m_indexer;
+public:
+  explicit PreprocessingRecordIndexer(Indexer& idxr);
+
+  void process(clang::PreprocessingRecord* ppRecord);
+
+protected:
+  clang::SourceManager& getSourceManager() const;
+  bool shouldIndexFile(const clang::FileID fileId) const;
+  TranslationUnitIndex& currentIndex() const;
+  cppscanner::FileID idFile(const clang::FileID& fileId) const;
+  cppscanner::FileID idFile(const std::string& filePath) const;
+
+protected:
+  void process(clang::InclusionDirective& inclusionDirective);
 };
 
 /**

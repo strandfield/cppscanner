@@ -511,6 +511,80 @@ void IdxrDiagnosticConsumer::finish()
   clang::DiagnosticConsumer::finish();
 }
 
+PreprocessingRecordIndexer::PreprocessingRecordIndexer(Indexer& idxr) :
+  m_indexer(idxr)
+{
+  assert(m_indexer.getCurrentIndex());
+}
+
+void PreprocessingRecordIndexer::process(clang::PreprocessingRecord* ppRecord)
+{
+  if (!ppRecord) {
+    return;
+  }
+
+  clang::SourceManager& sourceman = m_indexer.getAstContext()->getSourceManager();
+
+  for (clang::PreprocessedEntity* ppe : *(ppRecord)) {
+    if (auto* inclusion_directive = llvm::dyn_cast<clang::InclusionDirective>(ppe)) {
+      process(*inclusion_directive);
+    }
+  }
+}
+
+clang::SourceManager& PreprocessingRecordIndexer::getSourceManager() const
+{
+  return m_indexer.getAstContext()->getSourceManager();
+}
+
+bool PreprocessingRecordIndexer::shouldIndexFile(const clang::FileID fileId) const
+{
+  return m_indexer.shouldIndexFile(fileId);
+}
+
+TranslationUnitIndex& PreprocessingRecordIndexer::currentIndex() const
+{
+  return *m_indexer.getCurrentIndex();
+}
+
+cppscanner::FileID PreprocessingRecordIndexer::idFile(const clang::FileID& fileId) const
+{
+  return m_indexer.getFileID(fileId);
+}
+
+cppscanner::FileID PreprocessingRecordIndexer::idFile(const std::string& filePath) const
+{
+  return m_indexer.fileIdentificator().getIdentification(filePath);
+}
+
+void PreprocessingRecordIndexer::process(clang::InclusionDirective& inclusionDirective)
+{
+  clang::SourceLocation range_begin = inclusionDirective.getSourceRange().getBegin();
+  clang::FileID fileid = getSourceManager().getFileID(range_begin);
+
+  if (!shouldIndexFile(fileid)) {
+    return;
+  }
+
+  if (!inclusionDirective.getFile().has_value()) {
+    return;
+  }
+
+  const clang::FileEntry& fileentry = inclusionDirective.getFile()->getFileEntry();
+  llvm::StringRef realpath = fileentry.tryGetRealPathName();
+
+  if (realpath.empty()) {
+    return;
+  }
+
+  Include inc;
+  inc.fileID = idFile(fileid);
+  inc.line = getSourceManager().getSpellingLineNumber(range_begin);
+  inc.includedFileID = idFile(realpath.str());
+
+  currentIndex().add(inc);
+}
+
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
   m_fileIndexingArbiter(fileIndexingArbiter),
   m_resultsQueue(resultsQueue),
@@ -825,41 +899,8 @@ void Indexer::processRelations(std::pair<const clang::Decl*, Symbol*> declAndSym
 
 void Indexer::indexPreprocessingRecord(clang::Preprocessor& pp)
 {
-  if (!pp.getPreprocessingRecord()) {
-    return;
-  }
-
-  clang::SourceManager& sourceman = mAstContext->getSourceManager();
-
-  for (clang::PreprocessedEntity* ppe : *(pp.getPreprocessingRecord())) {
-    if (auto* inclusion_directive = llvm::dyn_cast<clang::InclusionDirective>(ppe)) {
-
-      clang::SourceLocation range_begin = inclusion_directive->getSourceRange().getBegin();
-      clang::FileID fileid = sourceman.getFileID(range_begin);
-
-      if (!shouldIndexFile(fileid)) {
-        continue;
-      }
-
-      if (!inclusion_directive->getFile().has_value()) {
-        continue;
-      }
-
-      const clang::FileEntry& fileentry = inclusion_directive->getFile()->getFileEntry();
-      llvm::StringRef realpath = fileentry.tryGetRealPathName();
-
-      if (realpath.empty()) {
-        continue;
-      }
-
-      Include inc;
-      inc.fileID = getFileID(fileid);
-      inc.line = sourceman.getSpellingLineNumber(range_begin);
-      inc.includedFileID = m_fileIdentificator.getIdentification(realpath.str());
-
-      m_index->add(inc);
-    }
-  }
+  PreprocessingRecordIndexer pprindexer{ *this };
+  pprindexer.process(pp.getPreprocessingRecord());
 }
 
 } // namespace cppscanner
