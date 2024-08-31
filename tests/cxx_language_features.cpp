@@ -179,7 +179,6 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
   }
 
   TemporarySnapshot s{ snapshot_name };
-  s.delete_on_close = false;
 
   Symbol namespaceA = s.getSymbolByName("namespaceA");
   Symbol namespaceB = s.getSymbolByName("namespaceB");
