@@ -131,7 +131,6 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   }
 
   TemporarySnapshot s{ snapshot_name };
-  s.delete_on_close = false;
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() > 0);
@@ -157,5 +156,39 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   REQUIRE(my_min1.value == "min_int(a, b)");
   REQUIRE(greater_than_my_constant.value == "(MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)");
 
- // REQUIRE_THROWS(s.getSymbolByName("MY_GUARD"));
+  Symbol my_guard = s.getSymbolByName("MY_GUARD");
+  REQUIRE(my_guard.testFlag(Symbol::MacroUsedAsHeaderGuard));
+}
+
+TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-namespace.db";
+
+  ScannerInvocation inv{
+    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "-f:tu", "namespace.cpp",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  TemporarySnapshot s{ snapshot_name };
+  s.delete_on_close = false;
+
+  Symbol namespaceA = s.getSymbolByName("namespaceA");
+  Symbol namespaceB = s.getSymbolByName("namespaceB");
+
+  Symbol nsA = s.getSymbolByName("nsA");
+  Symbol nsB = s.getSymbolByName("nsB");
+  REQUIRE(nsA.value == "namespaceA");
+  REQUIRE(nsB.value == "nsA::namespaceB");
+
+  Symbol inlNs = s.getSymbolByName("inlineNamespace");
+  REQUIRE(inlNs.testFlag(Symbol::Inline));
 }

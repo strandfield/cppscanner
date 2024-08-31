@@ -154,6 +154,16 @@ std::string prettyPrint(const clang::Decl* decl, const Indexer& idxr)
   return os.str().str();
 }
 
+std::string prettyPrint(const clang::NestedNameSpecifier& nns, const Indexer& idxr)
+{
+  llvm::SmallString<64> str;
+  llvm::raw_svector_ostream os{ str };
+
+  nns.print(os, getPrettyPrintPrintingPolicy(idxr));
+
+  return os.str().str();
+}
+
 void fillEmptyRecordName(Symbol& symbol, const clang::RecordDecl& decl)
 {
   (void)decl; // we are not going to use 'decl' for now
@@ -441,6 +451,28 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
     if (parmdecl->hasDefaultArgument()) {
       symbol.value = prettyPrint(parmdecl->getDefaultArgument(), m_indexer);
     }
+  }
+  break;
+  case clang::Decl::Kind::Namespace:
+  {
+    auto* nsdecl = llvm::dyn_cast<clang::NamespaceDecl>(decl);
+    if (nsdecl->isInline()) {
+      // TODO: use another symbol kind for inline namespaces ?
+      symbol.setFlag(Symbol::Inline);
+    }
+  }
+  break;
+  case clang::Decl::Kind::NamespaceAlias:
+  {
+    auto* nsalias = llvm::dyn_cast<clang::NamespaceAliasDecl>(decl);
+
+    if (auto* qual = nsalias->getQualifier()) {
+      symbol.value = prettyPrint(*qual, m_indexer);
+    }
+
+    symbol.value += nsalias->getNamespace()->getName().str();
+    // TODO: ideally, we would like to save the id of the target namespace, 
+    // not just the string representation of it.
   }
   break;
   case clang::Decl::Kind::Import:
