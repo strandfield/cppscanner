@@ -774,7 +774,7 @@ SymbolReference readSymbolReference(sql::Statement& row)
   r.symbolID = SymbolID::fromRawID(row.columnInt64(0));
   r.fileID = row.columnInt(1);
   r.position = FilePosition(row.columnInt(2), row.columnInt(3));
-  r.referencedBySymbolID = SymbolID::fromRawID(row.columnInt(4));
+  r.referencedBySymbolID = SymbolID::fromRawID(row.columnInt64(4));
   r.flags = row.columnInt(5);
   return r;
 }
