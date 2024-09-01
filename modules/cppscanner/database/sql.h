@@ -30,6 +30,16 @@ struct Blob
   }
 };
 
+class Like
+{
+  std::string m_value;
+public:
+  explicit Like(const char* val) : m_value(val) { }
+  explicit Like(std::string val) : m_value(std::move(val)) { }
+
+  const std::string& str() const { return m_value; }
+};
+
 /**
  * \brief wrapper for a SQLite statement
  */

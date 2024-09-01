@@ -4,6 +4,8 @@
 
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 
+#include "cppscanner/database/sql.h"
+
 #include "catch.hpp"
 
 using namespace cppscanner;
@@ -25,20 +27,20 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   auto s = Snapshot::open(snapshot_name);
 
   std::vector<File> files = s.getFiles();
-  REQUIRE(files.size() == 6);
+  REQUIRE(files.size() == 8);
   File maincpp = getFile(files, std::regex("main\\.cpp"));
   File lambdacpp = getFile(files, std::regex("lambda\\.cpp"));
 
   // lambda
   {
-    Symbol fwithlambda = s.getSymbolByName("functionWithLambda");
+    Symbol fwithlambda = s.getSymbolByName("functionWithLambda(int&, int)");
     std::vector<Symbol> alllambdas = s.getSymbols(fwithlambda.id, SymbolKind::Lambda);
     REQUIRE(alllambdas.size() == 1);
     const Symbol& lambda = alllambdas.front();
     REQUIRE(!lambda.name.empty());
     REQUIRE(lambda.name.rfind("__lambda_", 0) != std::string::npos);
 
-    Symbol add_to_a = s.getSymbol({ "functionWithLambda", "add_to_a" });
+    Symbol add_to_a = s.getSymbol({ "functionWithLambda(int&, int)", "add_to_a" });
     REQUIRE(add_to_a.kind == SymbolKind::Variable);
   }
 
@@ -53,7 +55,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   
   // function template with type parameter
   {
-    Symbol incr = s.getSymbol({ "max" });
+    Symbol incr = s.getSymbolByName(sql::Like("max(%)"));
     REQUIRE(incr.kind == SymbolKind::Function);
     std::vector<Symbol> ttps = s.getSymbols(incr.id, SymbolKind::TemplateTypeParameter);
     REQUIRE(ttps.size() == 1);
@@ -64,7 +66,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // function template with non-type parameter
   {
-    Symbol incr = s.getSymbol({ "incr" });
+    Symbol incr = s.getSymbolByName(sql::Like("incr(%)"));
     REQUIRE(incr.kind == SymbolKind::Function);
     std::vector<Symbol> ntps = s.getSymbols(incr.id, SymbolKind::NonTypeTemplateParameter);
     REQUIRE(ntps.size() == 1);

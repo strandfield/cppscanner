@@ -29,7 +29,7 @@ TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
   TemporarySnapshot s{ snapshot_name };
 
   Symbol intpair = s.getSymbolByName("IntPair");
-  Symbol spaceship = s.getSymbolByName("operator<=>", intpair.id);
+  Symbol spaceship = s.getSymbolByName("operator<=>(const IntPair&) const", intpair.id);
 
   REQUIRE(spaceship.testFlag(Symbol::Const));
   REQUIRE(spaceship.testFlag(Symbol::Default));
@@ -64,7 +64,7 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
   REQUIRE(n.type == "int");
   REQUIRE(x.type == "float");
 
-  Symbol init_aggregate = s.getSymbolByName("init_aggregate");
+  Symbol init_aggregate = s.getSymbolByName("init_aggregate()");
   REQUIRE(init_aggregate.kind == SymbolKind::Function);
 
   std::vector<File> files = s.getFiles();

@@ -19,6 +19,11 @@
 #include <memory>
 #include <utility>
 
+namespace sql
+{
+class Like;
+} // namespace sql
+
 namespace cppscanner
 {
 
@@ -81,7 +86,9 @@ public:
   std::vector<File> getFiles() const;
   std::vector<Include> getIncludedFiles(FileID fid) const;
   std::vector<Symbol> findSymbolsByName(const std::string& name) const;
+  std::vector<Symbol> findSymbolsByName(const sql::Like& name) const;
   Symbol getSymbolByName(const std::string& name, SymbolID parentID = {}) const;
+  Symbol getSymbolByName(const sql::Like& name, SymbolID parentID = {}) const;
   Symbol getSymbol(const std::vector<std::string>& qualifiedName) const;
   std::vector<Symbol> getSymbols(SymbolID parentID) const;
   std::vector<Symbol> getSymbols(SymbolID parentID, SymbolKind kind) const;

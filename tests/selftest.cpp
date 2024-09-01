@@ -3,6 +3,7 @@
 
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 #include "cppscanner/index/symbol.h"
+#include "cppscanner/database/sql.h"
 
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
@@ -62,11 +63,11 @@ TEST_CASE("Self parsing test", "[scanner][self]")
     REQUIRE(indexer.kind == SymbolKind::Class);
     REQUIRE(bases.front().baseClassID == idxdtcon.id);
 
-    Symbol handle_decl_occurrence_derived = s.getSymbolByName("handleDeclOccurrence", indexer.id);
+    Symbol handle_decl_occurrence_derived = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), indexer.id);
     REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::InstanceMethod);
     REQUIRE(handle_decl_occurrence_derived.testFlag(Symbol::Final));
 
-    Symbol handle_decl_occurrence_base = s.getSymbolByName("handleDeclOccurrence", idxdtcon.id);
+    Symbol handle_decl_occurrence_base = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), idxdtcon.id);
     std::vector<Override> overrides = s.getOverridesOf(handle_decl_occurrence_base.id);
     REQUIRE(!overrides.empty());
     REQUIRE(overrides.size() == 1);

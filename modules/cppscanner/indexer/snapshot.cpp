@@ -647,6 +647,17 @@ std::vector<Symbol> Snapshot::findSymbolsByName(const std::string& name) const
   return readRowsAsVector<Symbol>(stmt, readSymbol);
 }
 
+std::vector<Symbol> Snapshot::findSymbolsByName(const sql::Like& name) const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ?"
+  };
+
+  stmt.bind(1, name.str());
+  return readRowsAsVector<Symbol>(stmt, readSymbol);
+}
+
 Symbol Snapshot::getSymbolByName(const std::string& name, SymbolID parentID) const
 {
   std::vector<Symbol> symbols;
@@ -665,7 +676,31 @@ Symbol Snapshot::getSymbolByName(const std::string& name, SymbolID parentID) con
   }
 
   if (symbols.size() != 1) {
-    throw std::runtime_error("could not find unique symbol with given name");
+    throw std::runtime_error("could not find unique symbol with given name: " + name);
+  }
+
+  return symbols.front();
+}
+
+Symbol Snapshot::getSymbolByName(const sql::Like& name, SymbolID parentID) const
+{
+  std::vector<Symbol> symbols;
+
+  if (parentID == SymbolID()) {
+    symbols = findSymbolsByName(name);
+  } else {
+    sql::Statement stmt{ 
+      database(),
+      "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ? and parent = ?"
+    };
+
+    stmt.bind(1, name.str());
+    stmt.bind(2, parentID.rawID());
+    symbols = readRowsAsVector<Symbol>(stmt, readSymbol);
+  }
+
+  if (symbols.size() != 1) {
+    throw std::runtime_error("could not find unique symbol with name like: " + name.str());
   }
 
   return symbols.front();

@@ -55,7 +55,6 @@ protected:
   std::string getDeclSpelling(const clang::Decl* decl);
   void fillSymbol(Symbol& symbol, const clang::Decl* decl);
   void fillSymbol(Symbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
-  void fillDisplayName(Symbol& symbol, const clang::Decl* decl);
   Symbol* getParentSymbol(const Symbol& symbol, const clang::Decl* decl);
 };
 

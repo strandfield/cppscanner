@@ -71,8 +71,8 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // method overrides are indexed correcly
   {
-    Symbol base_method = s.getSymbolByName("vmethod", classBase.id);
-    Symbol derived_method = s.getSymbolByName("vmethod", classDerived.id);
+    Symbol base_method = s.getSymbolByName("vmethod()", classBase.id);
+    Symbol derived_method = s.getSymbolByName("vmethod()", classDerived.id);
     REQUIRE(base_method.testFlag(Symbol::Virtual));
     REQUIRE(base_method.testFlag(Symbol::Pure));
     REQUIRE(derived_method.testFlag(Symbol::Override));
@@ -112,7 +112,7 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
   {
     Symbol foobar = s.getSymbolByName("foobar");
     REQUIRE(foobar.kind == SymbolKind::Namespace);
-    Symbol qux = s.getSymbolByName("qux");
+    Symbol qux = s.getSymbolByName("qux()");
     REQUIRE(qux.kind == SymbolKind::Function);
     REQUIRE(qux.parent_id == foobar.id);
   }

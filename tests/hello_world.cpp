@@ -4,6 +4,8 @@
 
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 
+#include "cppscanner/database/sql.h"
+
 #include "catch.hpp"
 
 using namespace cppscanner;
@@ -42,7 +44,7 @@ TEST_CASE("The Scanner runs properly on hello_world", "[scanner][hello_world]")
   Symbol stdns = s.getSymbolByName("std");
   REQUIRE(stdns.kind == SymbolKind::Namespace);
   Symbol stdcout = s.getSymbolByName("cout");
-  Symbol stdendl = s.getSymbolByName("endl", stdns.id);
+  Symbol stdendl = s.getSymbolByName(sql::Like("endl(%)"), stdns.id);
 
   // references to std symbols are correct
   {

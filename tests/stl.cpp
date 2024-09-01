@@ -33,7 +33,7 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   File stringcpp = getFile(files, std::regex("string\\.cpp"));
   REQUIRE_THROWS(getFile(files, std::regex("vector\\.cpp")));
 
-  Symbol init = s.getSymbolByName("init");
+  Symbol init = s.getSymbolByName("init()");
   REQUIRE(init.kind == SymbolKind::Function);
 }
 
@@ -62,7 +62,7 @@ TEST_CASE("vector.cpp", "[scanner][stl]")
   File vectorcpp = getFile(files, std::regex("vector\\.cpp"));
   REQUIRE_THROWS(getFile(files, std::regex("string\\.cpp")));
 
-  Symbol sortThisVector = s.getSymbolByName("sortThisVector");
+  Symbol sortThisVector = s.getSymbolByName("sortThisVector(std::vector<int>&)");
   REQUIRE(sortThisVector.kind == SymbolKind::Function);
 }
 

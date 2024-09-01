@@ -128,10 +128,8 @@ clang::PrintingPolicy getPrettyPrintPrintingPolicy(const Indexer& idxr)
 
 std::string prettyPrint(const clang::QualType& type, const Indexer& idxr)
 {
-  llvm::SmallString<64> str;
-  llvm::raw_svector_ostream os{ str };
-  type.print(os, getPrettyPrintPrintingPolicy(idxr));
-  return os.str().str();
+  clang::PrintingPolicy pp = getPrettyPrintPrintingPolicy(idxr);
+  return type.getAsString(pp);
 }
 
 std::string prettyPrint(const clang::Expr* expr, const Indexer& idxr)
@@ -162,6 +160,55 @@ std::string prettyPrint(const clang::NestedNameSpecifier& nns, const Indexer& id
   nns.print(os, getPrettyPrintPrintingPolicy(idxr));
 
   return os.str().str();
+}
+
+inline static void remove_space_before_ref(std::string& str)
+{
+  if (str.find(" &", str.size() - 2) != std::string::npos)
+  {
+    str.erase(str.size() - 2, 1);
+  }
+  else if (str.find(" &&", str.size() - 3) != std::string::npos)
+  {
+    str.erase(str.size() - 3, 1);
+  }
+}
+
+std::string computeName(const clang::FunctionDecl& decl, const Indexer& idxr)
+{
+  std::string ret = decl.getNameInfo().getAsString();
+
+  ret.push_back('(');
+
+  bool first_param = true;
+
+  for (const clang::ParmVarDecl* param : decl.parameters())
+  {
+    if (!first_param) {
+      ret += ", ";
+    } else {
+      first_param = false;
+    }
+
+    ret += prettyPrint(param->getOriginalType(), idxr);
+
+    remove_space_before_ref(ret);
+  }
+
+  ret.push_back(')');
+
+  if (auto* mdecl = llvm::dyn_cast<clang::CXXMethodDecl>(&decl))
+  {
+    if (mdecl->isConst()) {
+      ret += " const";
+    }
+  }
+
+  if (clang::isNoexceptExceptionSpec(decl.getExceptionSpecType())) {
+    ret += " noexcept";
+  }
+
+  return ret;
 }
 
 void fillEmptyRecordName(Symbol& symbol, const clang::RecordDecl& decl)
@@ -296,7 +343,10 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   
   symbol.kind = tr(info.Kind);
 
-  fillDisplayName(symbol, decl);
+  if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 
+  {
+    symbol.name = computeName(*fun, m_indexer);
+  }
 
   if (info.Properties & (clang::index::SymbolPropertySet)clang::index::SymbolProperty::Local) {
     symbol.setLocal();
@@ -330,6 +380,7 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
     symbol.setFlag(Symbol::Static, fdecl.isStatic());
     symbol.setFlag(Symbol::Constexpr, fdecl.isConstexpr());
     symbol.setFlag(Symbol::Inline, fdecl.isInlined());
+    symbol.setFlag(Symbol::Noexcept, clang::isNoexceptExceptionSpec(fdecl.getExceptionSpecType()));
     };
 
   switch (decl->getKind())
@@ -499,14 +550,6 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::IdentifierInfo* na
 {
   symbol.name = name->getName().str();
   symbol.kind = SymbolKind::Macro;
-}
-
-void SymbolCollector::fillDisplayName(Symbol& symbol, const clang::Decl* decl)
-{
-  if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 
-  {
-    symbol.display_name = prettyPrint(fun, m_indexer);
-  }
 }
 
 Symbol* SymbolCollector::getParentSymbol(const Symbol& symbol, const clang::Decl* decl)
