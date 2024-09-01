@@ -126,7 +126,6 @@ public:
   SymbolID id;
   SymbolKind kind = SymbolKind::Unknown;
   std::string name;
-  [[deprecated]] std::string display_name; // could be left empty to save space ?
   SymbolID parent_id;
   int flags = 0;
   // TODO: should the following fields be moved to another "extra info" class ?

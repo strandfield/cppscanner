@@ -62,7 +62,6 @@ CREATE TABLE "symbol" (
   "kind"              INTEGER NOT NULL,
   "parent"            INTEGER,
   "name"              TEXT NOT NULL,
-  "displayname"       TEXT,
   "flags"             INTEGER NOT NULL DEFAULT 0,
   "parameterIndex"    INTEGER,
   "type"              TEXT,
@@ -359,7 +358,7 @@ void Snapshot::insertSymbols(const std::vector<const Symbol*>& symbols)
 
   sql::Statement stmt{ 
     database(),
-    "INSERT OR REPLACE INTO symbol(id, kind, parent, name, displayname, flags, parameterIndex, type, value) VALUES(?,?,?,?,?,?,?,?,?)" };
+    "INSERT OR REPLACE INTO symbol(id, kind, parent, name, flags, parameterIndex, type, value) VALUES(?,?,?,?,?,?,?,?)" };
 
   for (auto sptr : symbols)
   {
@@ -375,27 +374,22 @@ void Snapshot::insertSymbols(const std::vector<const Symbol*>& symbols)
 
     stmt.bind(4, sym.name.c_str());
 
-    if (!sym.display_name.empty())
-      stmt.bind(5, sym.display_name.c_str());
-    else
-      stmt.bind(5, nullptr);
-
-    stmt.bind(6, sym.flags);
+    stmt.bind(5, sym.flags);
 
     if (sym.parameterIndex >= 0)
-      stmt.bind(7, sym.parameterIndex);
+      stmt.bind(6, sym.parameterIndex);
+    else
+      stmt.bind(6, nullptr);
+
+    if (!sym.type.empty())
+      stmt.bind(7, sym.type);
     else
       stmt.bind(7, nullptr);
 
-    if (!sym.type.empty())
-      stmt.bind(8, sym.type);
+    if (!sym.value.empty())
+      stmt.bind(8, sym.value);
     else
       stmt.bind(8, nullptr);
-
-    if (!sym.value.empty())
-      stmt.bind(9, sym.value);
-    else
-      stmt.bind(9, nullptr);
 
     stmt.step();
     stmt.reset();
@@ -628,11 +622,10 @@ Symbol readSymbol(sql::Statement& row)
   s.kind = static_cast<SymbolKind>(row.columnInt(1));
   s.parent_id = SymbolID::fromRawID(row.columnInt64(2));
   s.name = row.column(3);
-  s.display_name = row.column(4);
-  s.flags = row.columnInt(5);
-  s.parameterIndex = row.nullColumn(6) ? -1 : row.columnInt(6);
-  s.type = row.column(7);
-  s.value = row.column(8);
+  s.flags = row.columnInt(4);
+  s.parameterIndex = row.nullColumn(5) ? -1 : row.columnInt(5);
+  s.type = row.column(6);
+  s.value = row.column(7);
   return s;
 }
 
@@ -640,7 +633,7 @@ std::vector<Symbol> Snapshot::findSymbolsByName(const std::string& name) const
 {
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE name = ?"
+    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name = ?"
   };
 
   stmt.bind(1, name);
@@ -651,7 +644,7 @@ std::vector<Symbol> Snapshot::findSymbolsByName(const sql::Like& name) const
 {
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ?"
+    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ?"
   };
 
   stmt.bind(1, name.str());
@@ -667,7 +660,7 @@ Symbol Snapshot::getSymbolByName(const std::string& name, SymbolID parentID) con
   } else {
     sql::Statement stmt{ 
       database(),
-      "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE name = ? and parent = ?"
+      "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name = ? and parent = ?"
     };
 
     stmt.bind(1, name);
@@ -691,7 +684,7 @@ Symbol Snapshot::getSymbolByName(const sql::Like& name, SymbolID parentID) const
   } else {
     sql::Statement stmt{ 
       database(),
-      "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ? and parent = ?"
+      "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ? and parent = ?"
     };
 
     stmt.bind(1, name.str());
@@ -722,7 +715,7 @@ std::vector<Symbol> Snapshot::getSymbols(SymbolID parentID) const
 {
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE parent = ?"
+    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE parent = ?"
   };
 
   stmt.bind(1, parentID.rawID());
@@ -733,7 +726,7 @@ std::vector<Symbol> Snapshot::getSymbols(SymbolID parentID, SymbolKind kind) con
 {
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE parent = ? AND kind = ?"
+    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE parent = ? AND kind = ?"
   };
 
   stmt.bind(1, parentID.rawID());
@@ -747,7 +740,7 @@ std::vector<Symbol> Snapshot::getEnumConstantsForEnum(SymbolID enumID) const
 
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, displayname, flags, parameterIndex, type, value FROM symbol WHERE parent = ? AND kind = 14"
+    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE parent = ? AND kind = 14"
   };
 
   stmt.bind(1, enumID.rawID());
