@@ -14,6 +14,7 @@
 namespace cppscanner
 {
 
+// TODO: reorder, add inline-namespace, scoped-enum, operator
 /**
  * \brief enum describing the kind of a symbol
  */
@@ -117,10 +118,155 @@ void enumerateSymbolKind(F&& fn)
   fn(SymbolKind::Concept);
 }
 
+struct SymbolFlag
+{
+  enum Value
+  {
+    Local         = 0x0001,
+    Protected     = 0x0002,
+    Private       = 0x0004,
+    Reserved1     = 0x0008,
+    Reserved2     = 0x0010,
+    MinCustomFlag = 0x0020
+  };
+};
+
+/**
+ * \brief stores basic information about a symbol
+ */
+struct SymbolRecord
+{
+  SymbolID id; //< the id of the symbol
+  SymbolKind kind; //< what kind of symbol is this
+  std::string name; //< the name of the symbol
+  SymbolID parentId; //< the id of the symbol's parent
+  int flags = 0; //< OR-combination of flags
+};
+
+/**
+ * \brief stores extra information about a macro
+ */
+struct MacroInfo
+{
+  enum Flag
+  {
+    MacroUsedAsHeaderGuard = 0x0020,
+    FunctionLike           = 0x0040
+  };
+
+  static_assert(MacroUsedAsHeaderGuard == SymbolFlag::MinCustomFlag);
+
+  std::string definition;
+};
+
+using MacroRecord = struct : SymbolRecord, MacroInfo { };
+
+struct NamespaceInfo
+{
+  enum Flag
+  {
+    Inline = 0x0020,
+  };
+
+  static_assert(Inline == SymbolFlag::MinCustomFlag);
+};
+
+struct NamespaceAliasInfo
+{
+  std::string value;
+};
+
+struct VariableInfo
+{
+  enum Flag
+  {
+    Const       = 0x0020,
+    Constexpr   = 0x0040,
+    Static      = 0x0080,
+    Mutable     = 0x0100,
+    ThreadLocal = 0x0200,
+    Inline      = 0x0400,
+  };
+
+  static_assert(Const == SymbolFlag::MinCustomFlag);
+
+  std::string type;
+  std::string init;
+};
+
+struct ParameterInfo
+{
+  int parameterIndex;
+  std::string type;
+  std::string defaultValue;
+};
+
+struct ParameterRecord : SymbolRecord, ParameterInfo { };
+
+struct FunctionInfo
+{
+  enum Flag
+  {
+    Inline    = 0x00020,
+    Static    = 0x00040,
+    Constexpr = 0x00080,
+    Consteval = 0x00100,
+    Noexcept  = 0x00200,   
+    Default   = 0x00400,
+    Delete    = 0x00800,
+    Const     = 0x01000,
+    Virtual   = 0x02000,
+    Pure      = 0x04000,
+    Override  = 0x08000,
+    Final     = 0x10000,
+    Explicit  = 0x20000,
+  };
+
+  static_assert(Inline == SymbolFlag::MinCustomFlag);
+
+  std::string returnType;
+  std::string declaration;
+};
+
+struct FunctionRecord : SymbolRecord, FunctionInfo { };
+
+struct EnumInfo
+{
+  enum Flag
+  {
+    IsScoped    = 0x00020,
+  };
+
+  static_assert(IsScoped == SymbolFlag::MinCustomFlag);
+
+
+  std::string underlyingType;
+};
+
+struct EnumRecord : SymbolRecord, EnumInfo { };
+
+struct EnumConstantInfo
+{
+  int64_t value;
+  std::string expression;
+};
+
+struct EnumConstantRecord : SymbolRecord, EnumConstantInfo { };
+
+struct ClassInfo
+{
+  enum Flag
+  {
+    Final = SymbolFlag::MinCustomFlag
+  };
+
+  static_assert(Final == SymbolFlag::MinCustomFlag);
+};
+
 /**
  * \brief represents a symbol in a C++ program
  */
-class Symbol
+ class [[deprecated]] Symbol
 {
 public:
   SymbolID id;
@@ -174,12 +320,18 @@ public:
   explicit Symbol(SymbolKind w, std::string name, Symbol* parent = nullptr);
 
   bool testFlag(Symbol::Flag f) const;
+  bool testFlag(int f) const;
   void setFlag(Symbol::Flag f, bool on = true);
 
   void setLocal(bool on = true);
 };
 
 inline bool Symbol::testFlag(Symbol::Flag f) const
+{
+  return flags & f;
+}
+
+inline bool Symbol::testFlag(int f) const
 {
   return flags & f;
 }

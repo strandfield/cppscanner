@@ -54,8 +54,8 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
     REQUIRE(a.kind == SymbolKind::Field);
     Symbol b = s.getSymbolByName("b", structFoo.id);
     REQUIRE(b.kind == SymbolKind::StaticProperty);
-    REQUIRE(b.testFlag(Symbol::Static));
-    REQUIRE(b.testFlag(Symbol::Const));
+    REQUIRE(b.testFlag(VariableInfo::Static));
+    REQUIRE(b.testFlag(VariableInfo::Const));
   }
 
   Symbol classBase = s.getSymbolByName("Base");
@@ -73,9 +73,9 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
   {
     Symbol base_method = s.getSymbolByName("vmethod()", classBase.id);
     Symbol derived_method = s.getSymbolByName("vmethod()", classDerived.id);
-    REQUIRE(base_method.testFlag(Symbol::Virtual));
-    REQUIRE(base_method.testFlag(Symbol::Pure));
-    REQUIRE(derived_method.testFlag(Symbol::Override));
+    REQUIRE(base_method.testFlag(FunctionInfo::Virtual));
+    REQUIRE(base_method.testFlag(FunctionInfo::Pure));
+    REQUIRE(derived_method.testFlag(FunctionInfo::Override));
     std::vector<Override> overrides = s.getOverridesOf(base_method.id);
     REQUIRE(overrides.size() == 1);
     REQUIRE(overrides.front().overrideMethodID == derived_method.id);

@@ -4,6 +4,8 @@
 
 #include "snapshot.h"
 
+#include "indexersymbol.h"
+
 #include "cppscanner/database/sql.h"
 #include "cppscanner/database/transaction.h"
 
@@ -394,6 +396,172 @@ void Snapshot::insertSymbols(const std::vector<const Symbol*>& symbols)
     stmt.step();
     stmt.reset();
   }
+}
+
+class SymbolExtraInfoInserter
+{
+private:
+  sql::Statement m_stmt;
+  constexpr static int ParameterIndex = 1;
+  constexpr static int Type = 2;
+  constexpr static int Value = 3;
+
+public:
+  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db)
+  {
+    m_stmt.prepare("UPDATE symbol SET parameterIndex = ?, type = ?, value = ? WHERE id = ?");
+  }
+
+  void process(const std::vector<const IndexerSymbol*>& symbols)
+  {
+    for (auto sptr : symbols)
+    {
+      const IndexerSymbol& sym = *sptr;
+      m_stmt.bind(4, sym.id.rawID());
+      std::visit(*this, sym.extraInfo);
+    }
+  }
+
+  void operator()(std::monostate)
+  {
+
+  }
+
+  void operator()(const MacroInfo& info)
+  {
+    m_stmt.bind(ParameterIndex, nullptr);
+    m_stmt.bind(Type, nullptr);
+    m_stmt.bind(Value, info.definition);
+
+    m_stmt.step();
+    m_stmt.reset();
+  }
+
+  void operator()(const FunctionInfo& info)
+  {
+    m_stmt.bind(ParameterIndex, nullptr);
+    m_stmt.bind(Type, info.returnType);
+    m_stmt.bind(Value, nullptr);
+
+    m_stmt.step();
+    m_stmt.reset();
+  }
+
+  void operator()(const ParameterInfo& info)
+  {
+    m_stmt.bind(ParameterIndex, info.parameterIndex);
+    m_stmt.bind(Type, info.type);
+
+    if (!info.defaultValue.empty())
+      m_stmt.bind(Value, info.defaultValue);
+    else
+      m_stmt.bind(Value, nullptr);
+
+    m_stmt.step();
+    m_stmt.reset();
+  }
+
+  void operator()(const EnumInfo& info)
+  {
+    m_stmt.bind(ParameterIndex, nullptr);
+    m_stmt.bind(Value, nullptr);
+
+    if (!info.underlyingType.empty())
+      m_stmt.bind(Type, info.underlyingType);
+    else
+      m_stmt.bind(Type, nullptr);
+
+    m_stmt.step();
+    m_stmt.reset();
+  }
+
+  void operator()(const EnumConstantInfo& info)
+  {
+    m_stmt.bind(ParameterIndex, nullptr);
+    m_stmt.bind(Type, nullptr);
+
+    if (!info.expression.empty())
+      m_stmt.bind(Value, info.expression);
+    else
+      m_stmt.bind(Value, nullptr);
+
+    m_stmt.step();
+    m_stmt.reset();
+  }
+
+  void operator()(const VariableInfo& info)
+  {
+    m_stmt.bind(ParameterIndex, nullptr);
+
+    if (!info.type.empty())
+      m_stmt.bind(Type, info.type);
+    else
+      m_stmt.bind(Type, nullptr);
+
+    if (!info.init.empty())
+      m_stmt.bind(Value, info.init);
+    else
+      m_stmt.bind(Value, nullptr);
+
+    m_stmt.step();
+    m_stmt.reset();
+  }
+
+  void operator()(const NamespaceAliasInfo& info)
+  {
+    m_stmt.bind(ParameterIndex, nullptr);
+    m_stmt.bind(Type, nullptr);
+
+    if (!info.value.empty())
+      m_stmt.bind(Value, info.value);
+    else
+      m_stmt.bind(Value, nullptr);
+
+
+    m_stmt.step();
+    m_stmt.reset();
+  }
+};
+
+void insert_symbols_extra_info(Database& db, const std::vector<const IndexerSymbol*>& symbols)
+{
+  SymbolExtraInfoInserter inserter{ db };
+  inserter.process(symbols);
+}
+
+void Snapshot::insertSymbols(const std::vector<const IndexerSymbol*>& symbols)
+{
+  if (symbols.empty()) {
+    return;
+  }
+
+  sql::Statement stmt{ 
+    database(),
+    "INSERT OR REPLACE INTO symbol(id, kind, parent, name, flags) VALUES(?,?,?,?,?)" };
+
+  for (auto sptr : symbols)
+  {
+    const IndexerSymbol& sym = *sptr;
+
+    stmt.bind(1, sym.id.rawID());
+    stmt.bind(2, static_cast<int>(sym.kind));
+
+    if (sym.parentId.isValid())
+      stmt.bind(3, sym.parentId.rawID());
+    else
+      stmt.bind(3, nullptr);
+
+    stmt.bind(4, sym.name.c_str());
+
+    stmt.bind(5, sym.flags);
+
+    stmt.step();
+    stmt.reset();
+  }
+
+  stmt.finalize();
+
+  insert_symbols_extra_info(database(), symbols);
 }
 
 void Snapshot::insertBaseOfs(const std::vector<BaseOf>& bofs)

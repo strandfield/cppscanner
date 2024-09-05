@@ -39,7 +39,7 @@ struct ScannerData
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
-  std::map<SymbolID, Symbol> symbols;
+  std::map<SymbolID, IndexerSymbol> symbols;
 };
 
 void set_flag(std::vector<bool>& flags, size_t i)
@@ -440,11 +440,11 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
 
   // TODO: insert new symbols, update the others that need it
   {
-    std::vector<const Symbol*> symbols;
+    std::vector<const IndexerSymbol*> symbols;
 
     for (auto& p : tuIndex.symbols) {
       if (d->symbols.find(p.first) == d->symbols.end()) {
-        Symbol& newsymbol = d->symbols[p.first];
+        IndexerSymbol& newsymbol = d->symbols[p.first];
         newsymbol = std::move(p.second);
         symbols.push_back(&newsymbol);
       } else {

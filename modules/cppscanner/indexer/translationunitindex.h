@@ -5,16 +5,19 @@
 #ifndef CPPSCANNER_TRANSLATIONUNITINDEX_H
 #define CPPSCANNER_TRANSLATIONUNITINDEX_H
 
+#include "indexersymbol.h"
+
 #include "cppscanner/index/baseof.h"
 #include "cppscanner/index/diagnostic.h"
 #include "cppscanner/index/include.h"
 #include "cppscanner/index/override.h"
 #include "cppscanner/index/reference.h"
-#include "cppscanner/index/symbol.h"
 
 #include <map>
 #include <set>
 #include <vector>
+
+#include <variant>
 
 namespace cppscanner
 {
@@ -35,7 +38,7 @@ public:
 
   std::vector<Include> ppIncludes;
 
-  std::map<SymbolID, Symbol> symbols;
+  std::map<SymbolID, IndexerSymbol> symbols;
 
   std::vector<SymbolReference> symReferences;
 
@@ -53,7 +56,7 @@ public:
   void add(const Override& fnOverride);
   void add(Diagnostic d);
 
-  Symbol* getSymbolById(const SymbolID& id);
+  IndexerSymbol* getSymbolById(const SymbolID& id);
 };
 
 
@@ -82,7 +85,7 @@ inline void TranslationUnitIndex::add(Diagnostic d)
   diagnostics.push_back(std::move(d));
 }
 
-inline Symbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
+inline IndexerSymbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
 {
   auto it = this->symbols.find(id);
   return it != this->symbols.end() ? &(it->second) : nullptr;

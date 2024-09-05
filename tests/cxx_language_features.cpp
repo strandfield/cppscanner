@@ -47,7 +47,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   // enum
   {
     Symbol enumclass = s.getSymbol({ "cxx", "EnumClass" });
-    REQUIRE(enumclass.testFlag(Symbol::IsScoped));
+    REQUIRE(enumclass.testFlag(EnumInfo::IsScoped));
 
     Symbol enumclass_z = s.getSymbol({ "cxx", "EnumClass", "Z" });
     REQUIRE(enumclass_z.value == "25");
@@ -159,7 +159,7 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   REQUIRE(greater_than_my_constant.value == "(MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)");
 
   Symbol my_guard = s.getSymbolByName("MY_GUARD");
-  REQUIRE(my_guard.testFlag(Symbol::MacroUsedAsHeaderGuard));
+  REQUIRE(my_guard.testFlag(MacroInfo::MacroUsedAsHeaderGuard));
 }
 
 TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
@@ -191,5 +191,5 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
   REQUIRE(nsB.value == "nsA::namespaceB");
 
   Symbol inlNs = s.getSymbolByName("inlineNamespace");
-  REQUIRE(inlNs.testFlag(Symbol::Inline));
+  REQUIRE(inlNs.testFlag(NamespaceInfo::Inline));
 }

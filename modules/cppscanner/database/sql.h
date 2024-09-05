@@ -56,6 +56,8 @@ public:
   Statement(Statement&& other);
   ~Statement();
 
+  Database& database() const;
+
   bool prepare(const char* query);
   bool step();
   void reset();
@@ -101,6 +103,11 @@ inline Statement::Statement(Statement&& other) :
 inline Statement::~Statement()
 {
   finalize();
+}
+
+inline Database& Statement::database() const
+{
+  return m_database;
 }
 
 inline bool Statement::prepare(const char* query)

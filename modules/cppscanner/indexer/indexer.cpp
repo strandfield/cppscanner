@@ -162,6 +162,13 @@ std::string prettyPrint(const clang::NestedNameSpecifier& nns, const Indexer& id
   return os.str().str();
 }
 
+inline std::string to_string(const llvm::APSInt& value)
+{
+  llvm::SmallString<64> str;
+  value.toString(str);
+  return str.str().str();
+}
+
 inline static void remove_space_before_ref(std::string& str)
 {
   if (str.find(" &", str.size() - 2) != std::string::npos)
@@ -211,7 +218,7 @@ std::string computeName(const clang::FunctionDecl& decl, const Indexer& idxr)
   return ret;
 }
 
-void fillEmptyRecordName(Symbol& symbol, const clang::RecordDecl& decl)
+void fillEmptyRecordName(IndexerSymbol& symbol, const clang::RecordDecl& decl)
 {
   (void)decl; // we are not going to use 'decl' for now
 
@@ -245,7 +252,7 @@ void SymbolCollector::reset()
   m_symbolIdCache.clear();
 }
 
-Symbol* SymbolCollector::process(const clang::Decl* decl)
+IndexerSymbol* SymbolCollector::process(const clang::Decl* decl)
 {
   auto [it, inserted] = m_symbolIdCache.try_emplace(decl, SymbolID());
 
@@ -258,7 +265,7 @@ Symbol* SymbolCollector::process(const clang::Decl* decl)
   };
 
   SymbolID symid = it->second;
-  Symbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
+  IndexerSymbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
 
   if (inserted) {
     symbol.id = symid;
@@ -277,7 +284,7 @@ Symbol* SymbolCollector::process(const clang::Decl* decl)
   return &symbol;
 }
 
-Symbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc)
+IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc)
 {
   auto [it, inserted] = m_symbolIdCache.try_emplace(macroInfo, SymbolID());
 
@@ -290,7 +297,7 @@ Symbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang:
   };
 
   SymbolID symid = it->second;
-  Symbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
+  IndexerSymbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
 
   if (inserted) {
     symbol.id = symid;
@@ -301,11 +308,10 @@ Symbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang:
   // we want to have its correct value as it appears to not be set the
   // first time handleMacroOccurrence() is called.
   if (macroInfo->isUsedForHeaderGuard()) {
-    symbol.setFlag(Symbol::MacroUsedAsHeaderGuard);
+    symbol.setFlag(MacroInfo::MacroUsedAsHeaderGuard);
   }
 
-  // TODO: write this as a flag ?
-  (void)macroInfo->isFunctionLike();
+  symbol.setFlag(MacroInfo::FunctionLike, macroInfo->isFunctionLike());
 
   return &symbol;
 }
@@ -333,7 +339,7 @@ std::string SymbolCollector::getDeclSpelling(const clang::Decl* decl)
   return nd->getNameAsString();
 }
 
-void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
+void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
 {
   if (symbol.name.empty()) {
     symbol.name = getDeclSpelling(decl);
@@ -354,33 +360,35 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
 
   // j'imagine qu'au moment de récupérer le parent on peut savoir si le symbol est exporté
   // en regardant si l'un des parents est un ExportDecl.
-  Symbol* parent_symbol = getParentSymbol(symbol, decl); 
+  IndexerSymbol* parent_symbol = getParentSymbol(symbol, decl); 
   if (parent_symbol) {
-    symbol.parent_id = parent_symbol->id;
+    symbol.parentId = parent_symbol->id;
   }
+
+  bool attr_const = false, attr_final = false, attr_override = false;
 
   for (const clang::Attr* attr : decl->attrs())
   {
     switch (attr->getKind())
     {
     case clang::attr::Const:
-      symbol.setFlag(Symbol::Const);
+      attr_const = true;
       break;
     case clang::attr::Final:
-      symbol.setFlag(Symbol::Final);
+      attr_final = true;
       break;
     case clang::attr::Override:
-      symbol.setFlag(Symbol::Override);
+      attr_override = true;
       break;
     }
   }
 
   auto read_fdecl_flags = [&symbol](const clang::FunctionDecl& fdecl) {
-    symbol.setFlag(Symbol::Delete, fdecl.isDeleted());
-    symbol.setFlag(Symbol::Static, fdecl.isStatic());
-    symbol.setFlag(Symbol::Constexpr, fdecl.isConstexpr());
-    symbol.setFlag(Symbol::Inline, fdecl.isInlined());
-    symbol.setFlag(Symbol::Noexcept, clang::isNoexceptExceptionSpec(fdecl.getExceptionSpecType()));
+    symbol.setFlag(FunctionInfo::Delete, fdecl.isDeleted());
+    symbol.setFlag(FunctionInfo::Static, fdecl.isStatic());
+    symbol.setFlag(FunctionInfo::Constexpr, fdecl.isConstexpr());
+    symbol.setFlag(FunctionInfo::Inline, fdecl.isInlined());
+    symbol.setFlag(FunctionInfo::Noexcept, clang::isNoexceptExceptionSpec(fdecl.getExceptionSpecType()));
     };
 
   switch (decl->getKind())
@@ -388,6 +396,10 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::CXXRecord:
   {
     auto* rdecl = llvm::dyn_cast<clang::RecordDecl>(decl);
+
+    if (attr_final) {
+      symbol.setFlag(ClassInfo::Final);
+    }
     
     if (rdecl->isLambda()) {
       // clang currently does not define a specific "symbol kind" for 
@@ -410,14 +422,15 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::Enum:
   {
     bool scoped = llvm::dyn_cast<clang::EnumDecl>(decl)->isScoped();
-    symbol.setFlag(Symbol::IsScoped, scoped);
+    symbol.setFlag(EnumInfo::IsScoped, scoped);
   }
   break;
   case clang::Decl::Kind::EnumConstant:
   {
     const auto* cst = llvm::dyn_cast<clang::EnumConstantDecl>(decl);
     if (cst->getInitExpr()) {
-      symbol.value = prettyPrint(cst->getInitExpr(), m_indexer);
+      symbol.getExtraInfo<EnumConstantInfo>().expression = prettyPrint(cst->getInitExpr(), m_indexer);
+      symbol.getExtraInfo<EnumConstantInfo>().value = cst->getInitVal().getExtValue();
     }
   }
   break;
@@ -430,30 +443,34 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::Field:
   {
     auto* fdecl = llvm::dyn_cast<clang::FieldDecl>(decl);
-    symbol.setFlag(Symbol::Const, fdecl->getTypeSourceInfo()->getType().isConstQualified());
+    symbol.setFlag(VariableInfo::Const, fdecl->getTypeSourceInfo()->getType().isConstQualified());
 
-    symbol.type = prettyPrint(fdecl->getTypeSourceInfo()->getType(), m_indexer);
+    auto& varinfo = symbol.getExtraInfo<VariableInfo>();
+
+    varinfo.type = prettyPrint(fdecl->getTypeSourceInfo()->getType(), m_indexer);
 
     if (fdecl->getInClassInitializer()) {
-      symbol.value = prettyPrint(fdecl->getInClassInitializer(), m_indexer);
+      varinfo.init = prettyPrint(fdecl->getInClassInitializer(), m_indexer);
     }
   }
   break;
   case clang::Decl::Kind::Var:
   {
     auto* vardecl = llvm::dyn_cast<clang::VarDecl>(decl);
+
+    auto& varinfo = symbol.getExtraInfo<VariableInfo>();
     
     if (vardecl->isStaticDataMember()) {
-      symbol.setFlag(Symbol::Static);
+      symbol.setFlag(VariableInfo::Static);
 
       if (vardecl->getInit()) {
-        symbol.value = prettyPrint(vardecl->getInit(), m_indexer);
+        varinfo.init = prettyPrint(vardecl->getInit(), m_indexer);
       }
     }
 
-    symbol.setFlag(Symbol::Const, vardecl->getTypeSourceInfo()->getType().isConstQualified());
+    symbol.setFlag(VariableInfo::Const, vardecl->getTypeSourceInfo()->getType().isConstQualified());
 
-    symbol.type = prettyPrint(vardecl->getTypeSourceInfo()->getType(), m_indexer);
+    varinfo.type = prettyPrint(vardecl->getTypeSourceInfo()->getType(), m_indexer);
   }
   break;
   case clang::Decl::Kind::CXXMethod:
@@ -462,45 +479,56 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   {
     auto* mdecl = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
     read_fdecl_flags(*mdecl);
-    symbol.setFlag(Symbol::Default, mdecl->isDefaulted());
-    symbol.setFlag(Symbol::Const, mdecl->isConst());
-    symbol.setFlag(Symbol::Virtual, mdecl->isVirtual());
-    symbol.setFlag(Symbol::Pure, mdecl->isPureVirtual());
+    symbol.setFlag(FunctionInfo::Default, mdecl->isDefaulted());
+    symbol.setFlag(FunctionInfo::Const, mdecl->isConst()); // TODO: or attr_const ?
+    symbol.setFlag(FunctionInfo::Virtual, mdecl->isVirtual());
+    symbol.setFlag(FunctionInfo::Pure, mdecl->isPureVirtual());
+
+    // TODO: is this how it's supposed to be done ?
+    symbol.setFlag(FunctionInfo::Final, attr_final);
+    symbol.setFlag(FunctionInfo::Override, attr_override);
+
   }
   break;
   case clang::Decl::Kind::ParmVar:
   {
     auto* parmdecl = llvm::dyn_cast<clang::ParmVarDecl>(decl);
-    symbol.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
-    symbol.setFlag(Symbol::Const, parmdecl->getTypeSourceInfo()->getType().isConstQualified());
-    symbol.parameterIndex = parmdecl->getFunctionScopeIndex(); 
+    symbol.setFlag(VariableInfo::Const, parmdecl->getTypeSourceInfo()->getType().isConstQualified());
+
+    auto& info = symbol.getExtraInfo<ParameterInfo>();
+    info.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
+    info.parameterIndex = parmdecl->getFunctionScopeIndex(); 
     
     if (parmdecl->hasDefaultArg()) {
-      symbol.value = prettyPrint(parmdecl->getDefaultArg(), m_indexer);
+      info.defaultValue = prettyPrint(parmdecl->getDefaultArg(), m_indexer);
     }
   }
   break;
   case clang::Decl::Kind::TemplateTypeParm:
   {
     auto* parmdecl = llvm::dyn_cast<clang::TemplateTypeParmDecl>(decl);
-    symbol.parameterIndex = parmdecl->getIndex();
+
+    auto& info = symbol.getExtraInfo<ParameterInfo>();
+    info.parameterIndex = parmdecl->getIndex();
 
     if (parmdecl->hasDefaultArgument()) {
-      symbol.value = prettyPrint(parmdecl->getDefaultArgument(), m_indexer);
+      info.defaultValue = prettyPrint(parmdecl->getDefaultArgument(), m_indexer);
     }
   }
   break;
   case clang::Decl::Kind::NonTypeTemplateParm:
   {
     auto* parmdecl = llvm::dyn_cast<clang::NonTypeTemplateParmDecl>(decl);
-    symbol.parameterIndex = parmdecl->getIndex();
+
+    auto& info = symbol.getExtraInfo<ParameterInfo>();
+    info.parameterIndex = parmdecl->getIndex();
 
     if (parmdecl->getTypeSourceInfo()) {
-      symbol.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
+      info.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
     }
 
     if (parmdecl->hasDefaultArgument()) {
-      symbol.value = prettyPrint(parmdecl->getDefaultArgument(), m_indexer);
+      info.defaultValue = prettyPrint(parmdecl->getDefaultArgument(), m_indexer);
     }
   }
   break;
@@ -509,7 +537,7 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
     auto* nsdecl = llvm::dyn_cast<clang::NamespaceDecl>(decl);
     if (nsdecl->isInline()) {
       // TODO: use another symbol kind for inline namespaces ?
-      symbol.setFlag(Symbol::Inline);
+      symbol.setFlag(NamespaceInfo::Inline);
     }
   }
   break;
@@ -517,11 +545,13 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   {
     auto* nsalias = llvm::dyn_cast<clang::NamespaceAliasDecl>(decl);
 
+    auto& info = symbol.getExtraInfo<NamespaceAliasInfo>();
+
     if (auto* qual = nsalias->getQualifier()) {
-      symbol.value = prettyPrint(*qual, m_indexer);
+      info.value = prettyPrint(*qual, m_indexer);
     }
 
-    symbol.value += nsalias->getNamespace()->getName().str();
+    info.value += nsalias->getNamespace()->getName().str();
     // TODO: ideally, we would like to save the id of the target namespace, 
     // not just the string representation of it.
   }
@@ -546,13 +576,13 @@ void SymbolCollector::fillSymbol(Symbol& symbol, const clang::Decl* decl)
   }
 }
 
-void SymbolCollector::fillSymbol(Symbol& symbol, const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo)
+void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo)
 {
   symbol.name = name->getName().str();
   symbol.kind = SymbolKind::Macro;
 }
 
-Symbol* SymbolCollector::getParentSymbol(const Symbol& symbol, const clang::Decl* decl)
+IndexerSymbol* SymbolCollector::getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl)
 {
   if (!decl->getDeclContext()) {
     return nullptr;
@@ -574,7 +604,7 @@ Symbol* SymbolCollector::getParentSymbol(const Symbol& symbol, const clang::Decl
     return nullptr;
   }
   
-  Symbol* parent_symbol = process(parent_decl); 
+  IndexerSymbol* parent_symbol = process(parent_decl); 
   return parent_symbol;
 }
 
@@ -730,7 +760,7 @@ void PreprocessingRecordIndexer::process(clang::MacroDefinitionRecord& mdr)
     return;
   }
 
-  Symbol* symbol = m_indexer.getCurrentIndex()->getSymbolById(symid);
+  IndexerSymbol* symbol = m_indexer.getCurrentIndex()->getSymbolById(symid);
 
   if (!symbol) {
     return;
@@ -738,7 +768,7 @@ void PreprocessingRecordIndexer::process(clang::MacroDefinitionRecord& mdr)
 
   assert(symbol->kind == SymbolKind::Macro);
 
-  symbol->setFlag(Symbol::MacroUsedAsHeaderGuard, macro_info->isUsedForHeaderGuard());
+  symbol->setFlag(MacroInfo::MacroUsedAsHeaderGuard, macro_info->isUsedForHeaderGuard());
 }
 
 void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
@@ -890,7 +920,7 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
     return true;
   }
 
-  Symbol* symbol = m_symbolCollector.process(decl);
+  IndexerSymbol* symbol = m_symbolCollector.process(decl);
 
   if (!symbol)
     return true;
@@ -905,7 +935,7 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
 
   if (astNode.Parent) {
     if (auto* fndecl = llvm::dyn_cast<clang::FunctionDecl>(astNode.Parent)) {
-      Symbol* function_symbol = m_symbolCollector.process(fndecl);
+      IndexerSymbol* function_symbol = m_symbolCollector.process(fndecl);
       if (function_symbol) {
         symref.referencedBySymbolID = function_symbol->id;
       }
@@ -938,18 +968,17 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
     return true;
   }
 
-  Symbol* symbol = m_symbolCollector.process(name, macroInfo, loc);
+  IndexerSymbol* symbol = m_symbolCollector.process(name, macroInfo, loc);
 
   if (!symbol)
     return true;
 
   if (roles & (int)clang::index::SymbolRole::Definition) {
     if (!macroInfo->tokens_empty()) {
-      // TODO: use another field to record the definition ?
       const clang::Token& first_token = macroInfo->tokens().front();
       const clang::Token& last_token = macroInfo->tokens().back();
       auto range = clang::CharSourceRange::getCharRange(first_token.getLocation(), last_token.getEndLoc());
-      symbol->value = clang::Lexer::getSourceText(range, getSourceManager(), getAstContext()->getLangOpts()).str();
+      symbol->getExtraInfo<MacroInfo>().definition = clang::Lexer::getSourceText(range, getSourceManager(), getAstContext()->getLangOpts()).str();
     }
   }
 
@@ -1033,7 +1062,7 @@ AccessSpecifier tr(const clang::AccessSpecifier access)
 
 } // namespace
 
-void Indexer::processRelations(std::pair<const clang::Decl*, Symbol*> declAndSymbol, clang::SourceLocation refLocation, llvm::ArrayRef<clang::index::SymbolRelation> relations)
+void Indexer::processRelations(std::pair<const clang::Decl*, IndexerSymbol*> declAndSymbol, clang::SourceLocation refLocation, llvm::ArrayRef<clang::index::SymbolRelation> relations)
 {
   for (const clang::index::SymbolRelation& rel : relations)
   {
@@ -1049,7 +1078,7 @@ void Indexer::processRelations(std::pair<const clang::Decl*, Symbol*> declAndSym
     {
     case RelationKind::BaseOf:
     {
-      Symbol* derived = m_symbolCollector.process(rel.RelatedSymbol);
+      IndexerSymbol* derived = m_symbolCollector.process(rel.RelatedSymbol);
 
       if (!derived)
         break;
@@ -1075,7 +1104,7 @@ void Indexer::processRelations(std::pair<const clang::Decl*, Symbol*> declAndSym
     break;
     case RelationKind::OverriddenBy:
     {
-      Symbol* base_function = m_symbolCollector.process(rel.RelatedSymbol);
+      IndexerSymbol* base_function = m_symbolCollector.process(rel.RelatedSymbol);
 
       if (!base_function)
         break;

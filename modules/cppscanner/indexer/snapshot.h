@@ -28,6 +28,7 @@ namespace cppscanner
 {
 
 class Symbol;
+class IndexerSymbol;
 enum class SymbolKind;
 
 /**
@@ -68,7 +69,8 @@ public:
 
   void insertFilePaths(const std::vector<File>& files);
   void insertIncludes(const std::vector<Include>& includes);
-  void insertSymbols(const std::vector<const Symbol*>& symbols);
+  [[deprecated]] void insertSymbols(const std::vector<const Symbol*>& symbols);
+  void insertSymbols(const std::vector<const IndexerSymbol*>& symbols);
   void insertBaseOfs(const std::vector<BaseOf>& bofs);
   void insertOverrides(const std::vector<Override>& overrides);
   void insertDiagnostics(const std::vector<Diagnostic>& diagnostics);
@@ -85,6 +87,7 @@ public:
   // for testing purposes
   std::vector<File> getFiles() const;
   std::vector<Include> getIncludedFiles(FileID fid) const;
+  // TODO: renvoyer SymbolRecord à la place de SYmbol
   std::vector<Symbol> findSymbolsByName(const std::string& name) const;
   std::vector<Symbol> findSymbolsByName(const sql::Like& name) const;
   Symbol getSymbolByName(const std::string& name, SymbolID parentID = {}) const;

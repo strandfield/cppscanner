@@ -31,8 +31,8 @@ TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
   Symbol intpair = s.getSymbolByName("IntPair");
   Symbol spaceship = s.getSymbolByName("operator<=>(const IntPair&) const", intpair.id);
 
-  REQUIRE(spaceship.testFlag(Symbol::Const));
-  REQUIRE(spaceship.testFlag(Symbol::Default));
+  REQUIRE(spaceship.testFlag(FunctionInfo::Const));
+  REQUIRE(spaceship.testFlag(FunctionInfo::Default));
 }
 
 TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")

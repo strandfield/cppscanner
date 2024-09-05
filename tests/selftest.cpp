@@ -65,7 +65,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
 
     Symbol handle_decl_occurrence_derived = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), indexer.id);
     REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::InstanceMethod);
-    REQUIRE(handle_decl_occurrence_derived.testFlag(Symbol::Final));
+    REQUIRE(handle_decl_occurrence_derived.testFlag(FunctionInfo::Final));
 
     Symbol handle_decl_occurrence_base = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), idxdtcon.id);
     std::vector<Override> overrides = s.getOverridesOf(handle_decl_occurrence_base.id);
