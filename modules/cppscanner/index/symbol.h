@@ -143,6 +143,11 @@ struct SymbolRecord
   int flags = 0; //< OR-combination of flags
 };
 
+inline bool testFlag(const SymbolRecord& record, int f)
+{
+  return record.flags & f;
+}
+
 /**
  * \brief stores extra information about a macro
  */
@@ -176,6 +181,8 @@ struct NamespaceAliasInfo
   std::string value;
 };
 
+struct NamespaceAliasRecord : SymbolRecord, NamespaceAliasInfo { };
+
 struct VariableInfo
 {
   enum Flag
@@ -193,6 +200,8 @@ struct VariableInfo
   std::string type;
   std::string init;
 };
+
+struct VariableRecord : SymbolRecord, VariableInfo { };
 
 struct ParameterInfo
 {

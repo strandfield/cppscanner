@@ -30,7 +30,7 @@ public:
   std::optional<int> line;
 
 public:
-  explicit SymbolRefPattern(const cppscanner::Symbol& s) : symbolID(s.id) { }
+  explicit SymbolRefPattern(const cppscanner::SymbolRecord& s) : symbolID(s.id) { }
 
   SymbolRefPattern& inFile(const cppscanner::File& f) {
     this->fileID = f.id;

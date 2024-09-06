@@ -39,27 +39,27 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // enum are indexed correcly
   {
-    std::vector<Symbol> symbols = s.findSymbolsByName("ColorChannel");
+    std::vector<SymbolRecord> symbols = s.findSymbolsByName("ColorChannel");
     REQUIRE(symbols.size() == 1);
-    symbols = s.getEnumConstantsForEnum(symbols.front().id);
-    REQUIRE(symbols.size() == 3);
+    std::vector<EnumConstantRecord> values = s.getEnumConstantsForEnum(symbols.front().id);
+    REQUIRE(values.size() == 3);
   }
 
-  Symbol structFoo = s.getSymbolByName("Foo");
+  SymbolRecord structFoo = s.getSymbolByName("Foo");
   REQUIRE(structFoo.kind == SymbolKind::Struct);
 
   // data members are indexed correcly
   {
-    Symbol a = s.getSymbolByName("a", structFoo.id);
+    SymbolRecord a = s.getSymbolByName("a", structFoo.id);
     REQUIRE(a.kind == SymbolKind::Field);
-    Symbol b = s.getSymbolByName("b", structFoo.id);
+    SymbolRecord b = s.getSymbolByName("b", structFoo.id);
     REQUIRE(b.kind == SymbolKind::StaticProperty);
-    REQUIRE(b.testFlag(VariableInfo::Static));
-    REQUIRE(b.testFlag(VariableInfo::Const));
+    REQUIRE(testFlag(b, VariableInfo::Static));
+    REQUIRE(testFlag(b, VariableInfo::Const));
   }
 
-  Symbol classBase = s.getSymbolByName("Base");
-  Symbol classDerived = s.getSymbolByName("Derived");
+  SymbolRecord classBase = s.getSymbolByName("Base");
+  SymbolRecord classDerived = s.getSymbolByName("Derived");
 
   // derived classes are indexed correcly
   {
@@ -71,11 +71,11 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // method overrides are indexed correcly
   {
-    Symbol base_method = s.getSymbolByName("vmethod()", classBase.id);
-    Symbol derived_method = s.getSymbolByName("vmethod()", classDerived.id);
-    REQUIRE(base_method.testFlag(FunctionInfo::Virtual));
-    REQUIRE(base_method.testFlag(FunctionInfo::Pure));
-    REQUIRE(derived_method.testFlag(FunctionInfo::Override));
+    SymbolRecord base_method = s.getSymbolByName("vmethod()", classBase.id);
+    SymbolRecord derived_method = s.getSymbolByName("vmethod()", classDerived.id);
+    REQUIRE(testFlag(base_method, FunctionInfo::Virtual));
+    REQUIRE(testFlag(base_method, FunctionInfo::Pure));
+    REQUIRE(testFlag(derived_method, FunctionInfo::Override));
     std::vector<Override> overrides = s.getOverridesOf(base_method.id);
     REQUIRE(overrides.size() == 1);
     REQUIRE(overrides.front().overrideMethodID == derived_method.id);
@@ -83,8 +83,8 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // symbol references are indexed correcly
   {
-    Symbol a = s.getSymbolByName("a");
-    Symbol b = s.getSymbolByName("b");
+    SymbolRecord a = s.getSymbolByName("a");
+    SymbolRecord b = s.getSymbolByName("b");
 
     std::vector<SymbolReference> refs = s.findReferences(a.id);
     REQUIRE(!refs.empty());
@@ -110,10 +110,10 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // a function inside a namespace is indexed
   {
-    Symbol foobar = s.getSymbolByName("foobar");
+    SymbolRecord foobar = s.getSymbolByName("foobar");
     REQUIRE(foobar.kind == SymbolKind::Namespace);
-    Symbol qux = s.getSymbolByName("qux()");
+    SymbolRecord qux = s.getSymbolByName("qux()");
     REQUIRE(qux.kind == SymbolKind::Function);
-    REQUIRE(qux.parent_id == foobar.id);
+    REQUIRE(qux.parentId == foobar.id);
   }
 }

@@ -352,52 +352,6 @@ void Snapshot::insertIncludes(const std::vector<Include>& includes)
   stmt.finalize();
 }
 
-void Snapshot::insertSymbols(const std::vector<const Symbol*>& symbols)
-{
-  if (symbols.empty()) {
-    return;
-  }
-
-  sql::Statement stmt{ 
-    database(),
-    "INSERT OR REPLACE INTO symbol(id, kind, parent, name, flags, parameterIndex, type, value) VALUES(?,?,?,?,?,?,?,?)" };
-
-  for (auto sptr : symbols)
-  {
-    const Symbol& sym = *sptr;
-
-    stmt.bind(1, sym.id.rawID());
-    stmt.bind(2, static_cast<int>(sym.kind));
-
-    if (sym.parent_id.isValid())
-      stmt.bind(3, sym.parent_id.rawID());
-    else
-      stmt.bind(3, nullptr);
-
-    stmt.bind(4, sym.name.c_str());
-
-    stmt.bind(5, sym.flags);
-
-    if (sym.parameterIndex >= 0)
-      stmt.bind(6, sym.parameterIndex);
-    else
-      stmt.bind(6, nullptr);
-
-    if (!sym.type.empty())
-      stmt.bind(7, sym.type);
-    else
-      stmt.bind(7, nullptr);
-
-    if (!sym.value.empty())
-      stmt.bind(8, sym.value);
-    else
-      stmt.bind(8, nullptr);
-
-    stmt.step();
-    stmt.reset();
-  }
-}
-
 class SymbolExtraInfoInserter
 {
 private:
@@ -632,6 +586,25 @@ void Snapshot::insertDiagnostics(const std::vector<Diagnostic>& diagnostics)
 }
 
 template<typename T, typename F>
+T readUniqueRow(sql::Statement& stmt, F&& func)
+{
+  if (!stmt.step())
+  {
+    throw std::runtime_error("no rows");
+  }
+
+  T value{ func(stmt) };
+
+  if (stmt.step())
+  {
+    throw std::runtime_error("no unique row");
+  }
+
+  return value;
+}
+
+
+template<typename T, typename F>
 std::vector<T> readRowsAsVector(sql::Statement& stmt, F&& func)
 {
   std::vector<T> r;
@@ -783,57 +756,54 @@ std::vector<Include> Snapshot::getIncludedFiles(FileID fid) const
   return readRowsAsVector<Include>(stmt, readInclude);
 }
 
-Symbol readSymbol(sql::Statement& row)
+SymbolRecord readSymbol(sql::Statement& row)
 {
-  Symbol s;
+  SymbolRecord s;
   s.id = SymbolID::fromRawID(row.columnInt64(0));
   s.kind = static_cast<SymbolKind>(row.columnInt(1));
-  s.parent_id = SymbolID::fromRawID(row.columnInt64(2));
+  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
   s.name = row.column(3);
   s.flags = row.columnInt(4);
-  s.parameterIndex = row.nullColumn(5) ? -1 : row.columnInt(5);
-  s.type = row.column(6);
-  s.value = row.column(7);
   return s;
 }
 
-std::vector<Symbol> Snapshot::findSymbolsByName(const std::string& name) const
+std::vector<SymbolRecord> Snapshot::findSymbolsByName(const std::string& name) const
 {
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name = ?"
+    "SELECT id, kind, parent, name, flags FROM symbol WHERE name = ?"
   };
 
   stmt.bind(1, name);
-  return readRowsAsVector<Symbol>(stmt, readSymbol);
+  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
 }
 
-std::vector<Symbol> Snapshot::findSymbolsByName(const sql::Like& name) const
+std::vector<SymbolRecord> Snapshot::findSymbolsByName(const sql::Like& name) const
 {
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ?"
+    "SELECT id, kind, parent, name, flags FROM symbol WHERE name LIKE ?"
   };
 
   stmt.bind(1, name.str());
-  return readRowsAsVector<Symbol>(stmt, readSymbol);
+  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
 }
 
-Symbol Snapshot::getSymbolByName(const std::string& name, SymbolID parentID) const
+SymbolRecord Snapshot::getSymbolByName(const std::string& name, SymbolID parentID) const
 {
-  std::vector<Symbol> symbols;
+  std::vector<SymbolRecord> symbols;
 
   if (parentID == SymbolID()) {
     symbols = findSymbolsByName(name);
   } else {
     sql::Statement stmt{ 
       database(),
-      "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name = ? and parent = ?"
+      "SELECT id, kind, parent, name, flags FROM symbol WHERE name = ? and parent = ?"
     };
 
     stmt.bind(1, name);
     stmt.bind(2, parentID.rawID());
-    symbols = readRowsAsVector<Symbol>(stmt, readSymbol);
+    symbols = readRowsAsVector<SymbolRecord>(stmt, readSymbol);
   }
 
   if (symbols.size() != 1) {
@@ -843,21 +813,21 @@ Symbol Snapshot::getSymbolByName(const std::string& name, SymbolID parentID) con
   return symbols.front();
 }
 
-Symbol Snapshot::getSymbolByName(const sql::Like& name, SymbolID parentID) const
+SymbolRecord Snapshot::getSymbolByName(const sql::Like& name, SymbolID parentID) const
 {
-  std::vector<Symbol> symbols;
+  std::vector<SymbolRecord> symbols;
 
   if (parentID == SymbolID()) {
     symbols = findSymbolsByName(name);
   } else {
     sql::Statement stmt{ 
       database(),
-      "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE name LIKE ? and parent = ?"
+      "SELECT id, kind, parent, name, flags FROM symbol WHERE name LIKE ? and parent = ?"
     };
 
     stmt.bind(1, name.str());
     stmt.bind(2, parentID.rawID());
-    symbols = readRowsAsVector<Symbol>(stmt, readSymbol);
+    symbols = readRowsAsVector<SymbolRecord>(stmt, readSymbol);
   }
 
   if (symbols.size() != 1) {
@@ -867,9 +837,9 @@ Symbol Snapshot::getSymbolByName(const sql::Like& name, SymbolID parentID) const
   return symbols.front();
 }
 
-Symbol Snapshot::getSymbol(const std::vector<std::string>& qualifiedName) const
+SymbolRecord Snapshot::getSymbol(const std::vector<std::string>& qualifiedName) const
 {
-  Symbol s;
+  SymbolRecord s;
 
   for (const std::string& name : qualifiedName)
   {
@@ -879,40 +849,213 @@ Symbol Snapshot::getSymbol(const std::vector<std::string>& qualifiedName) const
   return s;
 }
 
-std::vector<Symbol> Snapshot::getSymbols(SymbolID parentID) const
+std::vector<SymbolRecord> Snapshot::getSymbols(SymbolID parentID) const
 {
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE parent = ?"
+    "SELECT id, kind, parent, name, flags FROM symbol WHERE parent = ?"
   };
 
   stmt.bind(1, parentID.rawID());
-  return readRowsAsVector<Symbol>(stmt, readSymbol);
+  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
 }
 
-std::vector<Symbol> Snapshot::getSymbols(SymbolID parentID, SymbolKind kind) const
+std::vector<SymbolRecord> Snapshot::getSymbols(SymbolID parentID, SymbolKind kind) const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT id, kind, parent, name, flags FROM symbol WHERE parent = ? AND kind = ?"
+  };
+
+  stmt.bind(1, parentID.rawID());
+  stmt.bind(2, static_cast<int>(kind));
+  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
+}
+
+inline static MacroRecord readMacroRecord(sql::Statement& row)
+{
+  MacroRecord s;
+  s.id = SymbolID::fromRawID(row.columnInt64(0));
+  s.kind = static_cast<SymbolKind>(row.columnInt(1));
+  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
+  s.name = row.column(3);
+  s.flags = row.columnInt(4);
+  s.definition = row.column(5);
+  return s;
+}
+
+MacroRecord Snapshot::getMacroRecord(const std::string& name) const
+{
+  static_assert((int)SymbolKind::Macro == 4, "Macro != 4");
+
+  sql::Statement stmt{ 
+    database(),
+    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 4 and name = ?"
+  };
+
+  stmt.bind(1, name);
+
+  return readUniqueRow<MacroRecord>(stmt, readMacroRecord);
+}
+
+std::vector<MacroRecord> Snapshot::getMacroRecords(const std::string& name) const
+{
+  static_assert((int)SymbolKind::Macro == 4, "Macro != 4");
+
+  sql::Statement stmt{ 
+    database(),
+    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 4 and name = ?"
+  };
+
+  stmt.bind(1, name);
+
+  return readRowsAsVector<MacroRecord>(stmt, readMacroRecord);
+}
+
+inline static NamespaceAliasRecord readNamespaceAliasRecord(sql::Statement& row)
+{
+  NamespaceAliasRecord r;
+  r.id = SymbolID::fromRawID(row.columnInt64(0));
+  r.kind = static_cast<SymbolKind>(row.columnInt(1));
+  r.parentId = SymbolID::fromRawID(row.columnInt64(2));
+  r.name = row.column(3);
+  r.flags = row.columnInt(4);
+  r.value = row.column(5);
+  return r;
+}
+
+NamespaceAliasRecord Snapshot::getNamespaceAliasRecord(const std::string& name) const
+{
+  static_assert((int)SymbolKind::NamespaceAlias == 3);
+
+  sql::Statement stmt{ 
+    database(),
+    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 3 and name = ?"
+  };
+
+  stmt.bind(1, name);
+
+  return readUniqueRow<NamespaceAliasRecord>(stmt, readNamespaceAliasRecord);
+}
+
+inline static EnumConstantRecord readEnumConstantRecord(sql::Statement& row)
+{
+  EnumConstantRecord s;
+  s.id = SymbolID::fromRawID(row.columnInt64(0));
+  s.kind = static_cast<SymbolKind>(row.columnInt(1));
+  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
+  s.name = row.column(3);
+  s.flags = row.columnInt(4);
+  s.expression = row.column(5);
+  return s;
+}
+
+EnumConstantRecord Snapshot::getEnumConstantRecord(SymbolID enumID, const std::string& name) const
+{
+  static_assert((int)SymbolKind::EnumConstant == 14);
+
+  sql::Statement stmt{ 
+    database(),
+    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE parent = ? AND kind = 14 AND name = ?"
+  };
+
+  stmt.bind(1, enumID.rawID());
+  stmt.bind(2, name);
+
+  return readUniqueRow<EnumConstantRecord>(stmt, readEnumConstantRecord);
+}
+
+std::vector<EnumConstantRecord> Snapshot::getEnumConstantsForEnum(SymbolID enumID) const
+{
+  static_assert((int)SymbolKind::EnumConstant == 14, "EnumConstant != 14");
+
+  sql::Statement stmt{ 
+    database(),
+    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE parent = ? AND kind = 14"
+  };
+
+  stmt.bind(1, enumID.rawID());
+  return readRowsAsVector<EnumConstantRecord>(stmt, readEnumConstantRecord);
+}
+
+inline static ParameterRecord readParameterRecord(sql::Statement& row)
+{
+  ParameterRecord s;
+  s.id = SymbolID::fromRawID(row.columnInt64(0));
+  s.kind = static_cast<SymbolKind>(row.columnInt(1));
+  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
+  s.name = row.column(3);
+  s.flags = row.columnInt(4);
+  s.parameterIndex = row.columnInt(5);
+  s.type = row.column(6);
+  s.defaultValue = row.column(7);
+  return s;
+}
+
+std::vector<ParameterRecord> Snapshot::getParameters(SymbolID symbolId, SymbolKind parameterKind) const
 {
   sql::Statement stmt{ 
     database(),
     "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE parent = ? AND kind = ?"
   };
 
-  stmt.bind(1, parentID.rawID());
-  stmt.bind(2, static_cast<int>(kind));
-  return readRowsAsVector<Symbol>(stmt, readSymbol);
+  stmt.bind(1, symbolId.rawID());
+  stmt.bind(2, static_cast<int>(parameterKind));
+  return readRowsAsVector<ParameterRecord>(stmt, readParameterRecord);
 }
 
-std::vector<Symbol> Snapshot::getEnumConstantsForEnum(SymbolID enumID) const
+std::vector<ParameterRecord> Snapshot::getFunctionParameters(SymbolID functionId, SymbolKind kind) const
 {
-  static_assert((int)SymbolKind::EnumConstant == 14, "EnumConstant != 14");
+  return getParameters(functionId, kind);
+}
+
+inline static VariableRecord readVariableRecord(sql::Statement& row)
+{
+  VariableRecord r;
+  r.id = SymbolID::fromRawID(row.columnInt64(0));
+  r.kind = static_cast<SymbolKind>(row.columnInt(1));
+  r.parentId = SymbolID::fromRawID(row.columnInt64(2));
+  r.name = row.column(3);
+  r.flags = row.columnInt(4);
+  r.type = row.column(5);
+  r.init = row.column(6);
+  return r;
+}
+
+inline static std::vector<VariableRecord> readVariableLikeRecords(Database& db, SymbolID parentId, SymbolKind kind)
+{
+  sql::Statement stmt{ 
+    db,
+    "SELECT id, kind, parent, name, flags, type, value FROM symbol WHERE parent = ? AND kind = ?"
+  };
+
+  stmt.bind(1, parentId.rawID());
+  stmt.bind(2, static_cast<int>(kind));
+  return readRowsAsVector<VariableRecord>(stmt, readVariableRecord);
+}
+
+VariableRecord Snapshot::getField(SymbolID classId, const std::string& name) const
+{
+  static_assert((int)SymbolKind::Field == 13);
 
   sql::Statement stmt{ 
     database(),
-    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE parent = ? AND kind = 14"
+    "SELECT id, kind, parent, name, flags, type, value FROM symbol WHERE parent = ? AND kind = 13 AND name = ?"
   };
 
-  stmt.bind(1, enumID.rawID());
-  return readRowsAsVector<Symbol>(stmt, readSymbol);
+  stmt.bind(1, classId.rawID());
+  stmt.bind(2, name);
+  return readUniqueRow<VariableRecord>(stmt, readVariableRecord);
+}
+
+std::vector<VariableRecord> Snapshot::getFields(SymbolID classId) const
+{
+  return readVariableLikeRecords(database(), classId, SymbolKind::Field);
+}
+
+std::vector<VariableRecord> Snapshot::getStaticProperties(SymbolID classId) const
+{
+  return readVariableLikeRecords(database(), classId, SymbolKind::StaticProperty);
 }
 
 SymbolID sqlColumnAsSymbolID(sql::Statement& row, int col)

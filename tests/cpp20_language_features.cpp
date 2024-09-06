@@ -28,11 +28,11 @@ TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
 
   TemporarySnapshot s{ snapshot_name };
 
-  Symbol intpair = s.getSymbolByName("IntPair");
-  Symbol spaceship = s.getSymbolByName("operator<=>(const IntPair&) const", intpair.id);
+  SymbolRecord intpair = s.getSymbolByName("IntPair");
+  SymbolRecord spaceship = s.getSymbolByName("operator<=>(const IntPair&) const", intpair.id);
 
-  REQUIRE(spaceship.testFlag(FunctionInfo::Const));
-  REQUIRE(spaceship.testFlag(FunctionInfo::Default));
+  REQUIRE(testFlag(spaceship, FunctionInfo::Const));
+  REQUIRE(testFlag(spaceship, FunctionInfo::Default));
 }
 
 TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
@@ -55,16 +55,16 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
 
   TemporarySnapshot s{ snapshot_name };
 
-  Symbol myaggregate = s.getSymbolByName("MyAggregate");
-  Symbol flag = s.getSymbolByName("flag", myaggregate.id);
-  Symbol n = s.getSymbolByName("n", myaggregate.id);
-  Symbol x = s.getSymbolByName("x", myaggregate.id);
+  SymbolRecord myaggregate = s.getSymbolByName("MyAggregate");
+  VariableRecord flag = s.getField(myaggregate.id, "flag");
+  VariableRecord n = s.getField(myaggregate.id, "n");
+  VariableRecord x = s.getField(myaggregate.id, "x");
 
   REQUIRE(flag.type == "bool");
   REQUIRE(n.type == "int");
   REQUIRE(x.type == "float");
 
-  Symbol init_aggregate = s.getSymbolByName("init_aggregate()");
+  SymbolRecord init_aggregate = s.getSymbolByName("init_aggregate()");
   REQUIRE(init_aggregate.kind == SymbolKind::Function);
 
   std::vector<File> files = s.getFiles();

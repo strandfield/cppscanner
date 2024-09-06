@@ -41,10 +41,10 @@ TEST_CASE("The Scanner runs properly on hello_world", "[scanner][hello_world]")
     REQUIRE(includes.front().includedFileID == iostream.id);
   }
 
-  Symbol stdns = s.getSymbolByName("std");
+  SymbolRecord stdns = s.getSymbolByName("std");
   REQUIRE(stdns.kind == SymbolKind::Namespace);
-  Symbol stdcout = s.getSymbolByName("cout");
-  Symbol stdendl = s.getSymbolByName(sql::Like("endl(%)"), stdns.id);
+  SymbolRecord stdcout = s.getSymbolByName("cout");
+  SymbolRecord stdendl = s.getSymbolByName(sql::Like("endl(%)"), stdns.id);
 
   // references to std symbols are correct
   {

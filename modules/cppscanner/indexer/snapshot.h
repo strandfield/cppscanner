@@ -13,11 +13,13 @@
 #include "cppscanner/index/include.h"
 #include "cppscanner/index/override.h"
 #include "cppscanner/index/reference.h"
+#include "cppscanner/index/symbol.h"
 
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace sql
 {
@@ -27,9 +29,7 @@ class Like;
 namespace cppscanner
 {
 
-class Symbol;
 class IndexerSymbol;
-enum class SymbolKind;
 
 /**
  * \brief a snapshot of a C++ program stored as a SQLite database
@@ -69,7 +69,6 @@ public:
 
   void insertFilePaths(const std::vector<File>& files);
   void insertIncludes(const std::vector<Include>& includes);
-  [[deprecated]] void insertSymbols(const std::vector<const Symbol*>& symbols);
   void insertSymbols(const std::vector<const IndexerSymbol*>& symbols);
   void insertBaseOfs(const std::vector<BaseOf>& bofs);
   void insertOverrides(const std::vector<Override>& overrides);
@@ -87,15 +86,25 @@ public:
   // for testing purposes
   std::vector<File> getFiles() const;
   std::vector<Include> getIncludedFiles(FileID fid) const;
-  // TODO: renvoyer SymbolRecord à la place de SYmbol
-  std::vector<Symbol> findSymbolsByName(const std::string& name) const;
-  std::vector<Symbol> findSymbolsByName(const sql::Like& name) const;
-  Symbol getSymbolByName(const std::string& name, SymbolID parentID = {}) const;
-  Symbol getSymbolByName(const sql::Like& name, SymbolID parentID = {}) const;
-  Symbol getSymbol(const std::vector<std::string>& qualifiedName) const;
-  std::vector<Symbol> getSymbols(SymbolID parentID) const;
-  std::vector<Symbol> getSymbols(SymbolID parentID, SymbolKind kind) const;
-  std::vector<Symbol> getEnumConstantsForEnum(SymbolID enumID) const;
+
+  std::vector<SymbolRecord> findSymbolsByName(const std::string& name) const;
+  std::vector<SymbolRecord> findSymbolsByName(const sql::Like& name) const;
+  SymbolRecord getSymbolByName(const std::string& name, SymbolID parentID = {}) const;
+  SymbolRecord getSymbolByName(const sql::Like& name, SymbolID parentID = {}) const;
+  SymbolRecord getSymbol(const std::vector<std::string>& qualifiedName) const;
+  std::vector<SymbolRecord> getSymbols(SymbolID parentID) const;
+  std::vector<SymbolRecord> getSymbols(SymbolID parentID, SymbolKind kind) const;
+  MacroRecord getMacroRecord(const std::string& name) const;
+  std::vector<MacroRecord> getMacroRecords(const std::string& name) const;
+  NamespaceAliasRecord getNamespaceAliasRecord(const std::string& name) const;
+  EnumConstantRecord getEnumConstantRecord(SymbolID enumID, const std::string& name) const;
+  std::vector<EnumConstantRecord> getEnumConstantsForEnum(SymbolID enumID) const;
+  std::vector<ParameterRecord> getParameters(SymbolID symbolId, SymbolKind parameterKind) const;
+  std::vector<ParameterRecord> getFunctionParameters(SymbolID functionId, SymbolKind kind = SymbolKind::Parameter) const;
+  VariableRecord getField(SymbolID classId, const std::string& name) const;
+  std::vector<VariableRecord> getFields(SymbolID classId) const;
+  std::vector<VariableRecord> getStaticProperties(SymbolID classId) const;
+
   std::vector<BaseOf> getBasesOf(SymbolID classID) const;
   std::vector<Override> getOverridesOf(SymbolID methodID) const;
   std::vector<SymbolReference> findReferences(SymbolID symbolID);

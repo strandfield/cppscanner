@@ -43,31 +43,31 @@ TEST_CASE("Self parsing test", "[scanner][self]")
 
   // verify the presence of some classes
   {
-    Symbol ns = s.getSymbolByName("cppscanner");
+    SymbolRecord ns = s.getSymbolByName("cppscanner");
     REQUIRE(ns.kind == SymbolKind::Namespace);
-    Symbol indexer = s.getSymbolByName("Indexer", ns.id);
+    SymbolRecord indexer = s.getSymbolByName("Indexer", ns.id);
     REQUIRE(indexer.kind == SymbolKind::Class);
-    Symbol scanner = s.getSymbolByName("Scanner", ns.id);
+    SymbolRecord scanner = s.getSymbolByName("Scanner", ns.id);
     REQUIRE(scanner.kind == SymbolKind::Class);
   }
 
   // Indexer derives from clang
   {
-    Symbol indexer = s.getSymbol({ "cppscanner", "Indexer" });
+    SymbolRecord indexer = s.getSymbol({ "cppscanner", "Indexer" });
     REQUIRE(indexer.kind == SymbolKind::Class);
     
     std::vector<BaseOf> bases = s.getBasesOf(indexer.id);
     REQUIRE(bases.size() == 1);
 
-    Symbol idxdtcon = s.getSymbol({ "clang", "index", "IndexDataConsumer" });
+    SymbolRecord idxdtcon = s.getSymbol({ "clang", "index", "IndexDataConsumer" });
     REQUIRE(indexer.kind == SymbolKind::Class);
     REQUIRE(bases.front().baseClassID == idxdtcon.id);
 
-    Symbol handle_decl_occurrence_derived = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), indexer.id);
+    SymbolRecord handle_decl_occurrence_derived = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), indexer.id);
     REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::InstanceMethod);
-    REQUIRE(handle_decl_occurrence_derived.testFlag(FunctionInfo::Final));
+    REQUIRE(testFlag(handle_decl_occurrence_derived, FunctionInfo::Final));
 
-    Symbol handle_decl_occurrence_base = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), idxdtcon.id);
+    SymbolRecord handle_decl_occurrence_base = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), idxdtcon.id);
     std::vector<Override> overrides = s.getOverridesOf(handle_decl_occurrence_base.id);
     REQUIRE(!overrides.empty());
     REQUIRE(overrides.size() == 1);

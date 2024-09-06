@@ -33,44 +33,44 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // lambda
   {
-    Symbol fwithlambda = s.getSymbolByName("functionWithLambda(int&, int)");
-    std::vector<Symbol> alllambdas = s.getSymbols(fwithlambda.id, SymbolKind::Lambda);
+    SymbolRecord fwithlambda = s.getSymbolByName("functionWithLambda(int&, int)");
+    std::vector<SymbolRecord> alllambdas = s.getSymbols(fwithlambda.id, SymbolKind::Lambda);
     REQUIRE(alllambdas.size() == 1);
-    const Symbol& lambda = alllambdas.front();
+    const SymbolRecord& lambda = alllambdas.front();
     REQUIRE(!lambda.name.empty());
     REQUIRE(lambda.name.rfind("__lambda_", 0) != std::string::npos);
 
-    Symbol add_to_a = s.getSymbol({ "functionWithLambda(int&, int)", "add_to_a" });
+    SymbolRecord add_to_a = s.getSymbol({ "functionWithLambda(int&, int)", "add_to_a" });
     REQUIRE(add_to_a.kind == SymbolKind::Variable);
   }
 
   // enum
   {
-    Symbol enumclass = s.getSymbol({ "cxx", "EnumClass" });
-    REQUIRE(enumclass.testFlag(EnumInfo::IsScoped));
+    SymbolRecord enumclass = s.getSymbol({ "cxx", "EnumClass" });
+    REQUIRE(testFlag(enumclass, EnumInfo::IsScoped));
 
-    Symbol enumclass_z = s.getSymbol({ "cxx", "EnumClass", "Z" });
-    REQUIRE(enumclass_z.value == "25");
+    EnumConstantRecord enumclass_z = s.getEnumConstantRecord(enumclass.id, "Z");
+    REQUIRE(enumclass_z.expression == "25");
   }
   
   // function template with type parameter
   {
-    Symbol incr = s.getSymbolByName(sql::Like("max(%)"));
+    SymbolRecord incr = s.getSymbolByName(sql::Like("max(%)"));
     REQUIRE(incr.kind == SymbolKind::Function);
-    std::vector<Symbol> ttps = s.getSymbols(incr.id, SymbolKind::TemplateTypeParameter);
+    std::vector<ParameterRecord> ttps = s.getFunctionParameters(incr.id, SymbolKind::TemplateTypeParameter);
     REQUIRE(ttps.size() == 1);
-    Symbol T = ttps.front();
+    ParameterRecord T = ttps.front();
     REQUIRE(T.name == "T");
     REQUIRE(T.parameterIndex == 0);
   }
 
   // function template with non-type parameter
   {
-    Symbol incr = s.getSymbolByName(sql::Like("incr(%)"));
+    SymbolRecord incr = s.getSymbolByName(sql::Like("incr(%)"));
     REQUIRE(incr.kind == SymbolKind::Function);
-    std::vector<Symbol> ntps = s.getSymbols(incr.id, SymbolKind::NonTypeTemplateParameter);
+    std::vector<ParameterRecord> ntps = s.getFunctionParameters(incr.id, SymbolKind::NonTypeTemplateParameter);
     REQUIRE(ntps.size() == 1);
-    Symbol N = ntps.front();
+    ParameterRecord N = ntps.front();
     REQUIRE(N.name == "N");
     REQUIRE(N.parameterIndex == 0);
     REQUIRE(N.type == "int");
@@ -78,10 +78,10 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // class template with a specialization
   {
-    std::vector<Symbol> symbols = s.findSymbolsByName("is_same");
+    std::vector<SymbolRecord> symbols = s.findSymbolsByName("is_same");
     REQUIRE(symbols.size() == 2);
-    Symbol base = symbols.front();
-    Symbol spec = symbols.back();
+    SymbolRecord base = symbols.front();
+    SymbolRecord spec = symbols.back();
 
     symbols = s.getSymbols(base.id, SymbolKind::TemplateTypeParameter);
     if (symbols.size() != 2)
@@ -92,24 +92,24 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
     REQUIRE(symbols.size() == 2);
     {
-      symbols = s.getSymbols(base.id, SymbolKind::StaticProperty);
-      REQUIRE(symbols.size() == 1);
-      Symbol value = symbols.front();
+      std::vector<VariableRecord> properties = s.getStaticProperties(base.id);
+      REQUIRE(properties.size() == 1);
+      VariableRecord value = properties.front();
       REQUIRE(value.name == "value");
       REQUIRE(value.type == "const bool");
-      REQUIRE(value.value == "false");
+      REQUIRE(value.init == "false");
     }
 
     symbols = s.getSymbols(spec.id, SymbolKind::TemplateTypeParameter);
     REQUIRE(symbols.size() == 1);
     REQUIRE(symbols.front().name == "T");
     {
-      symbols = s.getSymbols(spec.id, SymbolKind::StaticProperty);
-      REQUIRE(symbols.size() == 1);
-      Symbol value = symbols.front();
+      std::vector<VariableRecord> properties = s.getStaticProperties(spec.id);
+      REQUIRE(properties.size() == 1);
+      VariableRecord value = properties.front();
       REQUIRE(value.name == "value");
       REQUIRE(value.type == "const bool");
-      REQUIRE(value.value == "true");
+      REQUIRE(value.init == "true");
     }
   }
 }
@@ -138,28 +138,28 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   REQUIRE(files.size() > 0);
   File macro_cpp = getFile(files, std::regex("macro\\.cpp"));
 
-  Symbol my_constant = s.getSymbolByName("MY_CONSTANT");
-  Symbol greater_than_my_constant = s.getSymbolByName("GREATER_THAN_MY_CONSTANT");
+  MacroRecord my_constant = s.getMacroRecord("MY_CONSTANT");
+  MacroRecord greater_than_my_constant = s.getMacroRecord("GREATER_THAN_MY_CONSTANT");
   REQUIRE(my_constant.kind == SymbolKind::Macro);
   REQUIRE(greater_than_my_constant.kind == SymbolKind::Macro);
 
-  std::vector<Symbol> my_mins = s.findSymbolsByName("MY_MIN");
+  std::vector<MacroRecord> my_mins = s.getMacroRecords("MY_MIN");
   REQUIRE(my_mins.size() == 2);
-  Symbol my_min0 = my_mins[0];
-  Symbol my_min1 = my_mins[1];
+  MacroRecord my_min0 = my_mins[0];
+  MacroRecord my_min1 = my_mins[1];
   REQUIRE(my_min0.kind == SymbolKind::Macro);
   REQUIRE(my_min1.kind == SymbolKind::Macro);
 
-  if (my_min0.value == "min_int(a, b)") {
+  if (my_min0.definition == "min_int(a, b)") {
     std::swap(my_min0, my_min1);
   }
 
-  REQUIRE(my_min0.value == "( (a) < (b) ? (a) : (b) )");
-  REQUIRE(my_min1.value == "min_int(a, b)");
-  REQUIRE(greater_than_my_constant.value == "(MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)");
+  REQUIRE(my_min0.definition == "( (a) < (b) ? (a) : (b) )");
+  REQUIRE(my_min1.definition == "min_int(a, b)");
+  REQUIRE(greater_than_my_constant.definition == "(MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)");
 
-  Symbol my_guard = s.getSymbolByName("MY_GUARD");
-  REQUIRE(my_guard.testFlag(MacroInfo::MacroUsedAsHeaderGuard));
+  MacroRecord my_guard = s.getMacroRecord("MY_GUARD");
+  REQUIRE(testFlag(my_guard, MacroInfo::MacroUsedAsHeaderGuard));
 }
 
 TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
@@ -182,14 +182,14 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
 
   TemporarySnapshot s{ snapshot_name };
 
-  Symbol namespaceA = s.getSymbolByName("namespaceA");
-  Symbol namespaceB = s.getSymbolByName("namespaceB");
+  SymbolRecord namespaceA = s.getSymbolByName("namespaceA");
+  SymbolRecord namespaceB = s.getSymbolByName("namespaceB");
 
-  Symbol nsA = s.getSymbolByName("nsA");
-  Symbol nsB = s.getSymbolByName("nsB");
+  NamespaceAliasRecord nsA = s.getNamespaceAliasRecord("nsA");
+  NamespaceAliasRecord nsB = s.getNamespaceAliasRecord("nsB");
   REQUIRE(nsA.value == "namespaceA");
   REQUIRE(nsB.value == "nsA::namespaceB");
 
-  Symbol inlNs = s.getSymbolByName("inlineNamespace");
-  REQUIRE(inlNs.testFlag(NamespaceInfo::Inline));
+  SymbolRecord inlNs = s.getSymbolByName("inlineNamespace");
+  REQUIRE(testFlag(inlNs, NamespaceInfo::Inline));
 }
