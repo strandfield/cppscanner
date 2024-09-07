@@ -33,7 +33,7 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   File stringcpp = getFile(files, std::regex("string\\.cpp"));
   REQUIRE_THROWS(getFile(files, std::regex("vector\\.cpp")));
 
-  SymbolRecord init = s.getSymbolByName("init()");
+  SymbolRecord init = s.getChildSymbolByName("init()");
   REQUIRE(init.kind == SymbolKind::Function);
 }
 
@@ -62,7 +62,7 @@ TEST_CASE("vector.cpp", "[scanner][stl]")
   File vectorcpp = getFile(files, std::regex("vector\\.cpp"));
   REQUIRE_THROWS(getFile(files, std::regex("string\\.cpp")));
 
-  SymbolRecord sortThisVector = s.getSymbolByName("sortThisVector(std::vector<int>&)");
+  SymbolRecord sortThisVector = s.getChildSymbolByName("sortThisVector(std::vector<int>&)");
   REQUIRE(sortThisVector.kind == SymbolKind::Function);
 }
 

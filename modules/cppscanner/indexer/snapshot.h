@@ -22,11 +22,6 @@
 #include <utility>
 #include <vector>
 
-namespace sql
-{
-class Like;
-} // namespace sql
-
 namespace cppscanner
 {
 
@@ -88,13 +83,11 @@ public:
   std::vector<File> getFiles() const;
   std::vector<Include> getIncludedFiles(FileID fid) const;
 
-  std::vector<SymbolRecord> findSymbolsByName(const std::string& name) const;
-  std::vector<SymbolRecord> findSymbolsByName(const sql::Like& name) const;
-  SymbolRecord getSymbolByName(const std::string& name, SymbolID parentID = {}) const;
-  SymbolRecord getSymbolByName(const sql::Like& name, SymbolID parentID = {}) const;
-  SymbolRecord getSymbol(const std::vector<std::string>& qualifiedName) const;
-  std::vector<SymbolRecord> getSymbols(SymbolID parentID) const;
-  std::vector<SymbolRecord> getSymbols(SymbolID parentID, SymbolKind kind) const;
+  std::vector<SymbolRecord> getSymbolsByName(const std::string& name) const;
+  SymbolRecord getChildSymbolByName(const std::string& name, SymbolID parentID = {}) const;
+  SymbolRecord getSymbolByName(const std::vector<std::string>& qualifiedName) const;
+  std::vector<SymbolRecord> getChildSymbols(SymbolID parentID) const;
+  std::vector<SymbolRecord> getChildSymbols(SymbolID parentID, SymbolKind kind) const;
   NamespaceAliasRecord getNamespaceAliasRecord(const std::string& name) const;
   std::vector<ParameterRecord> getParameters(SymbolID symbolId, SymbolKind parameterKind) const;
   std::vector<ParameterRecord> getFunctionParameters(SymbolID functionId, SymbolKind kind = SymbolKind::Parameter) const;

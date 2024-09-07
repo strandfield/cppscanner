@@ -730,109 +730,51 @@ SymbolRecord readSymbol(sql::Statement& row)
   return s;
 }
 
-std::vector<SymbolRecord> Snapshot::findSymbolsByName(const std::string& name) const
+inline SymbolRecord getChildSymbolByName(const Snapshot& s, SymbolID parentId, const std::string& name)
 {
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags FROM symbol WHERE name = ?"
-  };
-
-  stmt.bind(1, std::string_view(name));
-  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
+  return getRecord(s, SymbolRecordFilter().withName(name).withParent(parentId));
 }
 
-std::vector<SymbolRecord> Snapshot::findSymbolsByName(const sql::Like& name) const
+std::vector<SymbolRecord> Snapshot::getSymbolsByName(const std::string& name) const
 {
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags FROM symbol WHERE name LIKE ?"
-  };
-
-  stmt.bind(1, std::string_view(name.str()));
-  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
+  return fetchAll(*this, SymbolRecordFilter().withName(name));
 }
 
-SymbolRecord Snapshot::getSymbolByName(const std::string& name, SymbolID parentID) const
+SymbolRecord Snapshot::getChildSymbolByName(const std::string& name, SymbolID parentID) const
 {
-  std::vector<SymbolRecord> symbols;
-
   if (parentID == SymbolID()) {
-    symbols = findSymbolsByName(name);
+    std::vector<SymbolRecord> symbols = getSymbolsByName(name);
+
+    if (symbols.size() != 1) {
+      throw std::runtime_error("could not find unique symbol with given name: " + name);
+    }
+
+    return symbols.front();
   } else {
-    sql::Statement stmt{ 
-      database(),
-      "SELECT id, kind, parent, name, flags FROM symbol WHERE name = ? and parent = ?"
-    };
-
-    stmt.bind(1, std::string_view(name));
-    stmt.bind(2, parentID.rawID());
-    symbols = readRowsAsVector<SymbolRecord>(stmt, readSymbol);
+    return getRecord(*this, SymbolRecordFilter().withName(name).withParent(parentID));
   }
-
-  if (symbols.size() != 1) {
-    throw std::runtime_error("could not find unique symbol with given name: " + name);
-  }
-
-  return symbols.front();
 }
 
-SymbolRecord Snapshot::getSymbolByName(const sql::Like& name, SymbolID parentID) const
-{
-  std::vector<SymbolRecord> symbols;
-
-  if (parentID == SymbolID()) {
-    symbols = findSymbolsByName(name);
-  } else {
-    sql::Statement stmt{ 
-      database(),
-      "SELECT id, kind, parent, name, flags FROM symbol WHERE name LIKE ? and parent = ?"
-    };
-
-    stmt.bind(1, std::string_view(name.str()));
-    stmt.bind(2, parentID.rawID());
-    symbols = readRowsAsVector<SymbolRecord>(stmt, readSymbol);
-  }
-
-  if (symbols.size() != 1) {
-    throw std::runtime_error("could not find unique symbol with name like: " + name.str());
-  }
-
-  return symbols.front();
-}
-
-SymbolRecord Snapshot::getSymbol(const std::vector<std::string>& qualifiedName) const
+SymbolRecord Snapshot::getSymbolByName(const std::vector<std::string>& qualifiedName) const
 {
   SymbolRecord s;
 
   for (const std::string& name : qualifiedName)
   {
-    s = getSymbolByName(name, s.id);
+    s = getChildSymbolByName(name, s.id);
   }
 
   return s;
 }
 
-std::vector<SymbolRecord> Snapshot::getSymbols(SymbolID parentID) const
+std::vector<SymbolRecord> Snapshot::getChildSymbols(SymbolID parentID) const
 {
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags FROM symbol WHERE parent = ?"
-  };
-
-  stmt.bind(1, parentID.rawID());
-  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
+  return fetchAll(*this, SymbolRecordFilter().withParent(parentID));
 }
 
-std::vector<SymbolRecord> Snapshot::getSymbols(SymbolID parentID, SymbolKind kind) const
+std::vector<SymbolRecord> Snapshot::getChildSymbols(SymbolID parentID, SymbolKind kind) const
 {
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags FROM symbol WHERE parent = ? AND kind = ?"
-  };
-
-  stmt.bind(1, parentID.rawID());
-  stmt.bind(2, static_cast<int>(kind));
-  return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
+  return fetchAll(*this, SymbolRecordFilter().withParent(parentID).ofKind(kind));
 }
 
 inline static NamespaceAliasRecord readNamespaceAliasRecord(sql::Statement& row)

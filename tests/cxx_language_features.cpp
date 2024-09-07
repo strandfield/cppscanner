@@ -38,20 +38,20 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // lambda
   {
-    SymbolRecord fwithlambda = s.getSymbolByName("functionWithLambda(int&, int)");
-    std::vector<SymbolRecord> alllambdas = s.getSymbols(fwithlambda.id, SymbolKind::Lambda);
+    SymbolRecord fwithlambda = s.getChildSymbolByName("functionWithLambda(int&, int)");
+    std::vector<SymbolRecord> alllambdas = s.getChildSymbols(fwithlambda.id, SymbolKind::Lambda);
     REQUIRE(alllambdas.size() == 1);
     const SymbolRecord& lambda = alllambdas.front();
     REQUIRE(!lambda.name.empty());
     REQUIRE(lambda.name.rfind("__lambda_", 0) != std::string::npos);
 
-    SymbolRecord add_to_a = s.getSymbol({ "functionWithLambda(int&, int)", "add_to_a" });
+    SymbolRecord add_to_a = s.getSymbolByName({ "functionWithLambda(int&, int)", "add_to_a" });
     REQUIRE(add_to_a.kind == SymbolKind::Variable);
   }
 
   // enum
   {
-    SymbolRecord enumclass = s.getSymbol({ "cxx", "EnumClass" });
+    SymbolRecord enumclass = s.getSymbolByName({ "cxx", "EnumClass" });
     REQUIRE(testFlag(enumclass, EnumInfo::IsScoped));
 
     EnumConstantRecord enumclass_z = getEnumConstantRecord(s, enumclass.id, "Z");
@@ -60,7 +60,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   
   // function template with type parameter
   {
-    SymbolRecord incr = s.getSymbolByName(sql::Like("max(%)"));
+    SymbolRecord incr = getRecord(s, SymbolRecordFilter().withNameLike("max(%)"));
     REQUIRE(incr.kind == SymbolKind::Function);
     std::vector<ParameterRecord> ttps = s.getFunctionParameters(incr.id, SymbolKind::TemplateTypeParameter);
     REQUIRE(ttps.size() == 1);
@@ -71,7 +71,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // function template with non-type parameter
   {
-    SymbolRecord incr = s.getSymbolByName(sql::Like("incr(%)"));
+    SymbolRecord incr = getRecord(s, SymbolRecordFilter().withNameLike("incr(%)"));
     REQUIRE(incr.kind == SymbolKind::Function);
     std::vector<ParameterRecord> ntps = s.getFunctionParameters(incr.id, SymbolKind::NonTypeTemplateParameter);
     REQUIRE(ntps.size() == 1);
@@ -83,16 +83,16 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // class template with a specialization
   {
-    std::vector<SymbolRecord> symbols = s.findSymbolsByName("is_same");
+    std::vector<SymbolRecord> symbols = s.getSymbolsByName("is_same");
     REQUIRE(symbols.size() == 2);
     SymbolRecord base = symbols.front();
     SymbolRecord spec = symbols.back();
 
-    symbols = s.getSymbols(base.id, SymbolKind::TemplateTypeParameter);
+    symbols = s.getChildSymbols(base.id, SymbolKind::TemplateTypeParameter);
     if (symbols.size() != 2)
     {
       std::swap(base, spec);
-      symbols = s.getSymbols(base.id, SymbolKind::TemplateTypeParameter);
+      symbols = s.getChildSymbols(base.id, SymbolKind::TemplateTypeParameter);
     }
 
     REQUIRE(symbols.size() == 2);
@@ -105,7 +105,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
       REQUIRE(value.init == "false");
     }
 
-    symbols = s.getSymbols(spec.id, SymbolKind::TemplateTypeParameter);
+    symbols = s.getChildSymbols(spec.id, SymbolKind::TemplateTypeParameter);
     REQUIRE(symbols.size() == 1);
     REQUIRE(symbols.front().name == "T");
     {
@@ -197,14 +197,14 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
 
   TemporarySnapshot s{ snapshot_name };
 
-  SymbolRecord namespaceA = s.getSymbolByName("namespaceA");
-  SymbolRecord namespaceB = s.getSymbolByName("namespaceB");
+  SymbolRecord namespaceA = s.getChildSymbolByName("namespaceA");
+  SymbolRecord namespaceB = s.getChildSymbolByName("namespaceB");
 
   NamespaceAliasRecord nsA = s.getNamespaceAliasRecord("nsA");
   NamespaceAliasRecord nsB = s.getNamespaceAliasRecord("nsB");
   REQUIRE(nsA.value == "namespaceA");
   REQUIRE(nsB.value == "nsA::namespaceB");
 
-  SymbolRecord inlNs = s.getSymbolByName("inlineNamespace");
+  SymbolRecord inlNs = s.getChildSymbolByName("inlineNamespace");
   REQUIRE(testFlag(inlNs, NamespaceInfo::Inline));
 }
