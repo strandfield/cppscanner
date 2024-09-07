@@ -59,9 +59,12 @@ public:
   Database& database() const;
 
   bool prepare(const char* query);
-  bool step();
+  bool step(); // TODO: change return type to int
   void reset();
   void finalize();
+
+  bool fetchNextRow();
+  void insert();
 
   std::string errormsg() const;
   int rowid() const;
@@ -131,6 +134,18 @@ inline void Statement::finalize()
 {
   sqlite3_finalize(m_statement);
   m_statement = nullptr;
+}
+
+inline bool Statement::fetchNextRow()
+{
+  int r = sqlite3_step(m_statement);
+  return r == SQLITE_ROW;
+}
+
+inline void Statement::insert()
+{
+  step();
+  reset();
 }
 
 inline std::string Statement::errormsg() const

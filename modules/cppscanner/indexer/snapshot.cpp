@@ -33,7 +33,6 @@ CREATE TABLE "accessSpecifier" (
   "name"   TEXT NOT NULL
 );
 
-
 CREATE TABLE "file" (
   "id"      INTEGER NOT NULL PRIMARY KEY UNIQUE,
   "path"    TEXT NOT NULL,
@@ -147,6 +146,34 @@ const std::string& NormalizedPath(const std::string& p)
 }
 #endif // _WIN32
 
+class EnumConstantRecordIterator
+{
+private:
+  sql::Statement m_stmt;
+  std::optional<std::string> m_name;
+  std::optional<SymbolID> m_id;
+  std::optional<SymbolID> m_parent_id;
+  std::string m_query;
+  int m_name_binding_point = 0;
+  int m_id_binding_point = 0;
+  int m_parent_binding_point = 0;
+  bool m_has_next = false;
+
+public:
+  explicit EnumConstantRecordIterator(const Snapshot& s, const std::optional<std::string>& nameFilter = {}, const std::optional<SymbolID>& parentFilter = {});
+  EnumConstantRecordIterator(const Snapshot& s, SymbolID id);
+
+  typedef EnumConstantRecord value_t;
+
+  bool hasNext() const;
+  EnumConstantRecord next();
+
+  static void fill(EnumConstantRecord& record, sql::Statement& row);
+
+protected:
+  void build_query();
+  void advance();
+};
 
 Snapshot::Snapshot(Snapshot&&) = default;
 Snapshot::~Snapshot() = default;
@@ -186,8 +213,7 @@ static void insert_enum_values(Database& db)
   enumerateSymbolKind([&stmt](SymbolKind k) {
     stmt.bind(1, static_cast<int>(k));
     stmt.bind(2, getSymbolKindString(k));
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
     });
 
   stmt.finalize();
@@ -198,8 +224,7 @@ static void insert_enum_values(Database& db)
     enumerateAccessSpecifier([&stmt](AccessSpecifier access) {
       stmt.bind(1, static_cast<int>(access));
       stmt.bind(2, getAccessSpecifierString(access));
-      stmt.step();
-      stmt.reset();
+      stmt.insert();
       });
 
     stmt.finalize();
@@ -211,8 +236,7 @@ static void insert_enum_values(Database& db)
     enumerateDiagnosticLevel([&stmt](DiagnosticLevel lvl) {
       stmt.bind(1, static_cast<int>(lvl));
       stmt.bind(2, getDiagnosticLevelString(lvl));
-      stmt.step();
-      stmt.reset();
+      stmt.insert();
       });
 
     stmt.finalize();
@@ -235,8 +259,7 @@ static void insert_enum_values(Database& db)
     enumerateSymbolReferenceFlag([&stmt](SymbolReference::Flag f) {
       stmt.bind(1, getSymbolReferenceFlagString(f));
       stmt.bind(2, static_cast<int>(f));
-      stmt.step();
-      stmt.reset();
+      stmt.insert();
       });
 
     stmt.finalize();
@@ -304,8 +327,7 @@ void Snapshot::insertFilePaths(const std::vector<File>& files)
     const std::string& fpath = NormalizedPath(f.path);
     stmt.bind(1, (int)f.id);
     stmt.bind(2, fpath.c_str());
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 
   stmt.finalize();
@@ -327,8 +349,7 @@ void Snapshot::insertIncludes(const std::vector<Include>& includes)
     stmt.bind(2, inc.line);
     stmt.bind(3, (int)inc.includedFileID);
 
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 
   stmt.finalize();
@@ -369,8 +390,7 @@ public:
     m_stmt.bind(Type, nullptr);
     m_stmt.bind(Value, info.definition);
 
-    m_stmt.step();
-    m_stmt.reset();
+    m_stmt.insert();
   }
 
   void operator()(const FunctionInfo& info)
@@ -379,8 +399,7 @@ public:
     m_stmt.bind(Type, info.returnType);
     m_stmt.bind(Value, nullptr);
 
-    m_stmt.step();
-    m_stmt.reset();
+    m_stmt.insert();
   }
 
   void operator()(const ParameterInfo& info)
@@ -393,8 +412,7 @@ public:
     else
       m_stmt.bind(Value, nullptr);
 
-    m_stmt.step();
-    m_stmt.reset();
+    m_stmt.insert();
   }
 
   void operator()(const EnumInfo& info)
@@ -407,8 +425,7 @@ public:
     else
       m_stmt.bind(Type, nullptr);
 
-    m_stmt.step();
-    m_stmt.reset();
+    m_stmt.insert();
   }
 
   void operator()(const EnumConstantInfo& info)
@@ -421,8 +438,7 @@ public:
     else
       m_stmt.bind(Value, nullptr);
 
-    m_stmt.step();
-    m_stmt.reset();
+    m_stmt.insert();
   }
 
   void operator()(const VariableInfo& info)
@@ -439,8 +455,7 @@ public:
     else
       m_stmt.bind(Value, nullptr);
 
-    m_stmt.step();
-    m_stmt.reset();
+    m_stmt.insert();
   }
 
   void operator()(const NamespaceAliasInfo& info)
@@ -453,9 +468,7 @@ public:
     else
       m_stmt.bind(Value, nullptr);
 
-
-    m_stmt.step();
-    m_stmt.reset();
+    m_stmt.insert();
   }
 };
 
@@ -491,8 +504,7 @@ void Snapshot::insertSymbols(const std::vector<const IndexerSymbol*>& symbols)
 
     stmt.bind(5, sym.flags);
 
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 
   stmt.finalize();
@@ -517,8 +529,7 @@ void Snapshot::insertBaseOfs(const std::vector<BaseOf>& bofs)
     stmt.bind(2, bof.derivedClassID.rawID());
     stmt.bind(3, static_cast<int>(bof.accessSpecifier));
 
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 }
 
@@ -538,8 +549,7 @@ void Snapshot::insertOverrides(const std::vector<Override>& overrides)
     stmt.bind(1, ov.overrideMethodID.rawID());
     stmt.bind(2, ov.baseMethodID.rawID());
 
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 }
 
@@ -562,8 +572,7 @@ void Snapshot::insertDiagnostics(const std::vector<Diagnostic>& diagnostics)
     stmt.bind(4, d.position.column());
     stmt.bind(5, d.message);
 
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 }
 
@@ -597,6 +606,37 @@ std::vector<T> readRowsAsVector(sql::Statement& stmt, F&& func)
   }
 
   return r;
+}
+
+template<typename RowIterator>
+auto readRowsAsVector(RowIterator& iterator) -> std::vector<typename RowIterator::value_t>
+{
+  std::vector<typename RowIterator::value_t> r;
+
+  while (iterator.hasNext())
+  {
+    r.push_back(iterator.next());
+  }
+
+  return r;
+}
+
+template<typename RowIterator>
+auto readUniqueRow(RowIterator& iterator) -> typename RowIterator::value_t
+{
+  if (!iterator.hasNext())
+  {
+    throw std::runtime_error("no rows");
+  }
+
+  typename RowIterator::value_t value{ iterator.next() };
+
+  if (iterator.hasNext())
+  {
+    throw std::runtime_error("no unique row");
+  }
+
+  return value;
 }
 
 std::vector<Include> Snapshot::loadAllIncludesInFile(FileID fid)
@@ -920,44 +960,16 @@ NamespaceAliasRecord Snapshot::getNamespaceAliasRecord(const std::string& name) 
   return readUniqueRow<NamespaceAliasRecord>(stmt, readNamespaceAliasRecord);
 }
 
-inline static EnumConstantRecord readEnumConstantRecord(sql::Statement& row)
-{
-  EnumConstantRecord s;
-  s.id = SymbolID::fromRawID(row.columnInt64(0));
-  s.kind = static_cast<SymbolKind>(row.columnInt(1));
-  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
-  s.name = row.column(3);
-  s.flags = row.columnInt(4);
-  s.expression = row.column(5);
-  return s;
-}
-
 EnumConstantRecord Snapshot::getEnumConstantRecord(SymbolID enumID, const std::string& name) const
 {
-  static_assert((int)SymbolKind::EnumConstant == 14);
-
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE parent = ? AND kind = 14 AND name = ?"
-  };
-
-  stmt.bind(1, enumID.rawID());
-  stmt.bind(2, name);
-
-  return readUniqueRow<EnumConstantRecord>(stmt, readEnumConstantRecord);
+  EnumConstantRecordIterator iterator{ *this, name, enumID };
+  return readUniqueRow(iterator);
 }
 
 std::vector<EnumConstantRecord> Snapshot::getEnumConstantsForEnum(SymbolID enumID) const
 {
-  static_assert((int)SymbolKind::EnumConstant == 14, "EnumConstant != 14");
-
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE parent = ? AND kind = 14"
-  };
-
-  stmt.bind(1, enumID.rawID());
-  return readRowsAsVector<EnumConstantRecord>(stmt, readEnumConstantRecord);
+  EnumConstantRecordIterator iterator{ *this, {}, enumID };
+  return readRowsAsVector(iterator);
 }
 
 inline static ParameterRecord readParameterRecord(sql::Statement& row)
@@ -1112,6 +1124,95 @@ std::vector<SymbolReference> Snapshot::findReferences(SymbolID symbolID)
   return readRowsAsVector<SymbolReference>(stmt, readSymbolReference);
 }
 
+EnumConstantRecordIterator::EnumConstantRecordIterator(const Snapshot& s, const std::optional<std::string>& nameFilter, const std::optional<SymbolID>& parentFilter) : 
+  m_stmt(s.database()),
+  m_name(nameFilter),
+  m_parent_id(parentFilter)
+{
+  build_query();
+  advance();
+}
+
+EnumConstantRecordIterator::EnumConstantRecordIterator(const Snapshot& s, SymbolID id) : 
+  m_stmt(s.database()),
+  m_id(id)
+{
+  build_query();
+  advance();
+}
+
+bool EnumConstantRecordIterator::hasNext() const
+{
+  return m_has_next;
+}
+
+EnumConstantRecord EnumConstantRecordIterator::next()
+{
+  EnumConstantRecord r;
+  fill(r, m_stmt);
+  advance();
+  return r;
+}
+
+void EnumConstantRecordIterator::fill(EnumConstantRecord& record, sql::Statement& row)
+{
+  record.id = SymbolID::fromRawID(row.columnInt64(0));
+  record.kind = static_cast<SymbolKind>(row.columnInt(1));
+  record.parentId = SymbolID::fromRawID(row.columnInt64(2));
+  record.name = row.column(3);
+  record.flags = row.columnInt(4);
+  record.expression = row.column(5);
+}
+
+void EnumConstantRecordIterator::build_query()
+{
+  static_assert((int)SymbolKind::EnumConstant == 14);
+
+  m_query = "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 14";
+
+  int binding_point = 0;
+
+  if (m_parent_id.has_value())
+  {
+    m_query += " AND parent = ?";
+    m_parent_binding_point = ++binding_point;
+  }
+
+  if (m_name.has_value())
+  {
+    m_query += " AND name = ?";
+    m_name_binding_point = ++binding_point;
+  }
+
+  if (m_id.has_value())
+  {
+    m_query += " AND id = ?";
+    m_id_binding_point = ++binding_point;
+  }
+
+  m_stmt.prepare(m_query.c_str());
+
+  if (m_parent_binding_point)
+  {
+    m_stmt.bind(m_parent_binding_point, m_parent_id.value().rawID());
+  }
+
+  if (m_name_binding_point)
+  {
+    m_stmt.bind(m_name_binding_point, m_name.value());
+  }
+
+  if (m_id)
+  {
+    m_stmt.bind(m_id_binding_point, m_id.value().rawID());
+  }
+}
+
+void EnumConstantRecordIterator::advance()
+{
+  m_has_next = m_stmt.fetchNextRow();
+}
+
 namespace snapshot
 {
 
@@ -1130,8 +1231,7 @@ void insertFiles(Snapshot& snapshot, const std::vector<File>& files)
     stmt.bind(1, (int)f.id);
     stmt.bind(2, fpath.c_str());
     stmt.bind(3, f.content.c_str());
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 
   stmt.finalize();
@@ -1158,8 +1258,7 @@ void insertSymbolReferences(Snapshot& snapshot, const std::vector<SymbolReferenc
 
     stmt.bind(6, ref.flags);
 
-    stmt.step();
-    stmt.reset();
+    stmt.insert();
   }
 
   stmt.finalize();
