@@ -95,8 +95,6 @@ public:
   SymbolRecord getSymbol(const std::vector<std::string>& qualifiedName) const;
   std::vector<SymbolRecord> getSymbols(SymbolID parentID) const;
   std::vector<SymbolRecord> getSymbols(SymbolID parentID, SymbolKind kind) const;
-  MacroRecord getMacroRecord(const std::string& name) const;
-  std::vector<MacroRecord> getMacroRecords(const std::string& name) const;
   NamespaceAliasRecord getNamespaceAliasRecord(const std::string& name) const;
   EnumConstantRecord getEnumConstantRecord(SymbolID enumID, const std::string& name) const;
   std::vector<EnumConstantRecord> getEnumConstantsForEnum(SymbolID enumID) const;

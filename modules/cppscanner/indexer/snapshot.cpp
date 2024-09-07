@@ -580,37 +580,6 @@ std::vector<T> readRowsAsVector(sql::Statement& stmt, F&& func)
   return r;
 }
 
-template<typename RowIterator>
-auto readRowsAsVector(RowIterator& iterator) -> std::vector<typename RowIterator::value_t>
-{
-  std::vector<typename RowIterator::value_t> r;
-
-  while (iterator.hasNext())
-  {
-    r.push_back(iterator.next());
-  }
-
-  return r;
-}
-
-template<typename RowIterator>
-auto readUniqueRow(RowIterator& iterator) -> typename RowIterator::value_t
-{
-  if (!iterator.hasNext())
-  {
-    throw std::runtime_error("no rows");
-  }
-
-  typename RowIterator::value_t value{ iterator.next() };
-
-  if (iterator.hasNext())
-  {
-    throw std::runtime_error("no unique row");
-  }
-
-  return value;
-}
-
 std::vector<Include> Snapshot::loadAllIncludesInFile(FileID fid)
 {
   sql::Statement stmt{ 
@@ -864,46 +833,6 @@ std::vector<SymbolRecord> Snapshot::getSymbols(SymbolID parentID, SymbolKind kin
   stmt.bind(1, parentID.rawID());
   stmt.bind(2, static_cast<int>(kind));
   return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
-}
-
-inline static MacroRecord readMacroRecord(sql::Statement& row)
-{
-  MacroRecord s;
-  s.id = SymbolID::fromRawID(row.columnInt64(0));
-  s.kind = static_cast<SymbolKind>(row.columnInt(1));
-  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
-  s.name = row.column(3);
-  s.flags = row.columnInt(4);
-  s.definition = row.column(5);
-  return s;
-}
-
-MacroRecord Snapshot::getMacroRecord(const std::string& name) const
-{
-  static_assert((int)SymbolKind::Macro == 4, "Macro != 4");
-
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 4 and name = ?"
-  };
-
-  stmt.bind(1, std::string_view(name));
-
-  return readUniqueRow<MacroRecord>(stmt, readMacroRecord);
-}
-
-std::vector<MacroRecord> Snapshot::getMacroRecords(const std::string& name) const
-{
-  static_assert((int)SymbolKind::Macro == 4, "Macro != 4");
-
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 4 and name = ?"
-  };
-
-  stmt.bind(1, std::string_view(name));
-
-  return readRowsAsVector<MacroRecord>(stmt, readMacroRecord);
 }
 
 inline static NamespaceAliasRecord readNamespaceAliasRecord(sql::Statement& row)

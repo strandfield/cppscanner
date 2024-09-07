@@ -6,6 +6,7 @@
 #include "cppscanner/index/reference.h"
 
 #include "cppscanner/indexer/snapshot.h"
+#include "cppscanner/indexer/symbolrecorditerator.h"
 
 #include <vector>
 #include <optional>

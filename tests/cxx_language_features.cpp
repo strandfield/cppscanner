@@ -114,6 +114,16 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   }
 }
 
+static MacroRecord getMacroRecordByName(const Snapshot& s, const std::string& name)
+{
+  return cppscanner::getRecord<MacroRecord>(s, SymbolRecordFilter().withName(name));
+}
+
+static MacroRecord getMacroRecords(const Snapshot& s, const std::string& name)
+{
+  return cppscanner::getRecord<MacroRecord>(s, SymbolRecordFilter().withName(name));
+}
+
 TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
 {
   const std::string snapshot_name = "cxx_language_features-macro.db";
@@ -138,12 +148,12 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   REQUIRE(files.size() > 0);
   File macro_cpp = getFile(files, std::regex("macro\\.cpp"));
 
-  MacroRecord my_constant = s.getMacroRecord("MY_CONSTANT");
-  MacroRecord greater_than_my_constant = s.getMacroRecord("GREATER_THAN_MY_CONSTANT");
+  MacroRecord my_constant = getMacroRecordByName(s, "MY_CONSTANT");
+  MacroRecord greater_than_my_constant = getMacroRecordByName(s, "GREATER_THAN_MY_CONSTANT");
   REQUIRE(my_constant.kind == SymbolKind::Macro);
   REQUIRE(greater_than_my_constant.kind == SymbolKind::Macro);
 
-  std::vector<MacroRecord> my_mins = s.getMacroRecords("MY_MIN");
+  std::vector<MacroRecord> my_mins = fetchAll<MacroRecord>(s, SymbolRecordFilter().withName("MY_MIN"));
   REQUIRE(my_mins.size() == 2);
   MacroRecord my_min0 = my_mins[0];
   MacroRecord my_min1 = my_mins[1];
@@ -158,7 +168,7 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   REQUIRE(my_min1.definition == "min_int(a, b)");
   REQUIRE(greater_than_my_constant.definition == "(MY_MIN(MY_CONSTANT, (a)) == MY_CONSTANT)");
 
-  MacroRecord my_guard = s.getMacroRecord("MY_GUARD");
+  MacroRecord my_guard = getMacroRecordByName(s, "MY_GUARD");
   REQUIRE(testFlag(my_guard, MacroInfo::MacroUsedAsHeaderGuard));
 }
 

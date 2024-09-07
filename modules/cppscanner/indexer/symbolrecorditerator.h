@@ -10,6 +10,8 @@
 #include "cppscanner/database/sql.h"
 
 #include <optional>
+#include <stdexcept>
+#include <vector>
 
 namespace cppscanner
 {
@@ -217,6 +219,75 @@ inline void SymbolRecordIterator::advance()
 }
 
 
+template<typename RowIterator>
+auto readRowsAsVector(RowIterator& iterator) -> std::vector<typename RowIterator::value_t>
+{
+  std::vector<typename RowIterator::value_t> r;
+
+  while (iterator.hasNext())
+  {
+    r.push_back(iterator.next());
+  }
+
+  return r;
+}
+
+template<typename RowIterator>
+auto readUniqueRow(RowIterator& iterator) -> typename RowIterator::value_t
+{
+  if (!iterator.hasNext())
+  {
+    throw std::runtime_error("no rows");
+  }
+
+  typename RowIterator::value_t value{ iterator.next() };
+
+  if (iterator.hasNext())
+  {
+    throw std::runtime_error("no unique row");
+  }
+
+  return value;
+}
+
+template<typename T>
+struct record_traits
+{
+  typedef SymbolRecordIterator record_iterator_t;
+};
+
+class MacroRecordIterator : public SymbolRecordIterator
+{
+public:
+  explicit MacroRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM symbol", filter.ofKind(SymbolKind::Macro)))
+  {
+
+  }
+
+  typedef MacroRecord value_t;
+
+  MacroRecord next()
+  {
+    MacroRecord r;
+    fill(r, stmt());
+    advance();
+    return r;
+  }
+
+  static void fill(MacroRecord& record, sql::Statement& row)
+  {
+    SymbolRecordIterator::fill(record, row);
+    record.definition = row.column(5);
+  }
+};
+
+template<>
+struct record_traits<MacroRecord>
+{
+  typedef MacroRecordIterator record_iterator_t;
+};
+
 class EnumConstantRecordIterator : public SymbolRecordIterator
 {
 public:
@@ -242,6 +313,33 @@ public:
     record.expression = row.column(5);
   }
 };
+
+template<>
+struct record_traits<EnumConstantRecord>
+{
+  typedef EnumConstantRecordIterator record_iterator_t;
+};
+
+template<typename T = SymbolRecord>
+T getRecord(const Snapshot& s, SymbolID id)
+{
+  typename record_traits<T>::record_iterator_t iterator{ s, SymbolRecordFilter().withId(id) };
+  return readUniqueRow(iterator);
+}
+
+template<typename T = SymbolRecord>
+T getRecord(const Snapshot& s, const SymbolRecordFilter& filter)
+{
+  typename record_traits<T>::record_iterator_t iterator{ s, filter };
+  return readUniqueRow(iterator);
+}
+
+template<typename T = SymbolRecord>
+std::vector<T> fetchAll(const Snapshot& s, const SymbolRecordFilter& filter)
+{
+  typename record_traits<T>::record_iterator_t iterator{ s, filter };
+  return readRowsAsVector(iterator);
+}
 
 } // namespace cppscanner
 
