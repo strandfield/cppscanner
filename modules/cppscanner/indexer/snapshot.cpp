@@ -54,11 +54,6 @@ CREATE TABLE "symbolKind" (
   "name" TEXT NOT NULL
 );
 
-CREATE TABLE "symbolFlag" (
-  "name"   TEXT NOT NULL,
-  "value"  INTEGER NOT NULL
-);
-
 CREATE TABLE "symbol" (
   "id"                INTEGER NOT NULL PRIMARY KEY UNIQUE,
   "kind"              INTEGER NOT NULL,
@@ -233,19 +228,6 @@ static void insert_enum_values(Database& db)
     });
 
   stmt.finalize();*/
-
-  {
-    stmt.prepare("INSERT INTO symbolFlag (name, value) VALUES(?, ?)");
-
-    enumerateSymbolFlag([&stmt](Symbol::Flag f) {
-      stmt.bind(1, getSymbolFlagString(f));
-      stmt.bind(2, static_cast<int>(f));
-      stmt.step();
-      stmt.reset();
-      });
-
-    stmt.finalize();
-  }
 
   {
     stmt.prepare("INSERT INTO symbolReferenceFlag (name, value) VALUES(?, ?)");

@@ -477,6 +477,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::CXXConstructor:
   case clang::Decl::Kind::CXXDestructor:
   {
+    // TODO: read access specifier!!
+
     auto* mdecl = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
     read_fdecl_flags(*mdecl);
     symbol.setFlag(FunctionInfo::Default, mdecl->isDefaulted());

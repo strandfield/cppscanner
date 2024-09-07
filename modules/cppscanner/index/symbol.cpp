@@ -51,12 +51,4 @@ std::string_view getSymbolKindString(SymbolKind w)
     return strs.at(i);
 }
 
-Symbol::Symbol(SymbolKind w, std::string n, Symbol* parent) :
-  kind(w),
-  name(std::move(n)),
-  parent_id(parent ? parent->id : SymbolID())
-{
-
-}
-
 } // namespace cppscanner
