@@ -777,56 +777,14 @@ std::vector<SymbolRecord> Snapshot::getChildSymbols(SymbolID parentID, SymbolKin
   return fetchAll(*this, SymbolRecordFilter().withParent(parentID).ofKind(kind));
 }
 
-inline static NamespaceAliasRecord readNamespaceAliasRecord(sql::Statement& row)
-{
-  NamespaceAliasRecord r;
-  r.id = SymbolID::fromRawID(row.columnInt64(0));
-  r.kind = static_cast<SymbolKind>(row.columnInt(1));
-  r.parentId = SymbolID::fromRawID(row.columnInt64(2));
-  r.name = row.column(3);
-  r.flags = row.columnInt(4);
-  r.value = row.column(5);
-  return r;
-}
-
 NamespaceAliasRecord Snapshot::getNamespaceAliasRecord(const std::string& name) const
 {
-  static_assert((int)SymbolKind::NamespaceAlias == 3);
-
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 3 and name = ?"
-  };
-
-  stmt.bind(1, std::string_view(name));
-
-  return readUniqueRow<NamespaceAliasRecord>(stmt, readNamespaceAliasRecord);
-}
-
-inline static ParameterRecord readParameterRecord(sql::Statement& row)
-{
-  ParameterRecord s;
-  s.id = SymbolID::fromRawID(row.columnInt64(0));
-  s.kind = static_cast<SymbolKind>(row.columnInt(1));
-  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
-  s.name = row.column(3);
-  s.flags = row.columnInt(4);
-  s.parameterIndex = row.columnInt(5);
-  s.type = row.column(6);
-  s.defaultValue = row.column(7);
-  return s;
+  return getRecord<NamespaceAliasRecord>(*this, SymbolRecordFilter().withName(name));
 }
 
 std::vector<ParameterRecord> Snapshot::getParameters(SymbolID symbolId, SymbolKind parameterKind) const
 {
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol WHERE parent = ? AND kind = ?"
-  };
-
-  stmt.bind(1, symbolId.rawID());
-  stmt.bind(2, static_cast<int>(parameterKind));
-  return readRowsAsVector<ParameterRecord>(stmt, readParameterRecord);
+  return fetchAll<ParameterRecord>(*this, SymbolRecordFilter().ofKind(parameterKind).withParent(symbolId));
 }
 
 std::vector<ParameterRecord> Snapshot::getFunctionParameters(SymbolID functionId, SymbolKind kind) const
@@ -834,53 +792,19 @@ std::vector<ParameterRecord> Snapshot::getFunctionParameters(SymbolID functionId
   return getParameters(functionId, kind);
 }
 
-inline static VariableRecord readVariableRecord(sql::Statement& row)
-{
-  VariableRecord r;
-  r.id = SymbolID::fromRawID(row.columnInt64(0));
-  r.kind = static_cast<SymbolKind>(row.columnInt(1));
-  r.parentId = SymbolID::fromRawID(row.columnInt64(2));
-  r.name = row.column(3);
-  r.flags = row.columnInt(4);
-  r.type = row.column(5);
-  r.init = row.column(6);
-  return r;
-}
-
-inline static std::vector<VariableRecord> readVariableLikeRecords(Database& db, SymbolID parentId, SymbolKind kind)
-{
-  sql::Statement stmt{ 
-    db,
-    "SELECT id, kind, parent, name, flags, type, value FROM symbol WHERE parent = ? AND kind = ?"
-  };
-
-  stmt.bind(1, parentId.rawID());
-  stmt.bind(2, static_cast<int>(kind));
-  return readRowsAsVector<VariableRecord>(stmt, readVariableRecord);
-}
-
 VariableRecord Snapshot::getField(SymbolID classId, const std::string& name) const
 {
-  static_assert((int)SymbolKind::Field == 13);
-
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, kind, parent, name, flags, type, value FROM symbol WHERE parent = ? AND kind = 13 AND name = ?"
-  };
-
-  stmt.bind(1, classId.rawID());
-  stmt.bind(2, std::string_view(name));
-  return readUniqueRow<VariableRecord>(stmt, readVariableRecord);
+  return getRecord<VariableRecord>(*this, SymbolRecordFilter().ofKind(SymbolKind::Field).withName(name).withParent(classId));
 }
 
 std::vector<VariableRecord> Snapshot::getFields(SymbolID classId) const
 {
-  return readVariableLikeRecords(database(), classId, SymbolKind::Field);
+  return fetchAll<VariableRecord>(*this, SymbolRecordFilter().ofKind(SymbolKind::Field).withParent(classId));
 }
 
 std::vector<VariableRecord> Snapshot::getStaticProperties(SymbolID classId) const
 {
-  return readVariableLikeRecords(database(), classId, SymbolKind::StaticProperty);
+  return fetchAll<VariableRecord>(*this, SymbolRecordFilter().ofKind(SymbolKind::StaticProperty).withParent(classId));
 }
 
 SymbolID sqlColumnAsSymbolID(sql::Statement& row, int col)

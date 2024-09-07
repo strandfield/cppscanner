@@ -288,6 +288,40 @@ struct record_traits<MacroRecord>
   typedef MacroRecordIterator record_iterator_t;
 };
 
+
+class NamespaceAliasRecordIterator : public SymbolRecordIterator
+{
+public:
+  explicit NamespaceAliasRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM symbol", filter.ofKind(SymbolKind::NamespaceAlias)))
+  {
+
+  }
+
+  typedef NamespaceAliasRecord value_t;
+
+  NamespaceAliasRecord next()
+  {
+    NamespaceAliasRecord r;
+    fill(r, stmt());
+    advance();
+    return r;
+  }
+
+  static void fill(NamespaceAliasRecord& record, sql::Statement& row)
+  {
+    SymbolRecordIterator::fill(record, row);
+    record.value = row.column(5);
+  }
+};
+
+template<>
+struct record_traits<NamespaceAliasRecord>
+{
+  typedef NamespaceAliasRecordIterator record_iterator_t;
+};
+
+
 class EnumConstantRecordIterator : public SymbolRecordIterator
 {
 public:
@@ -319,6 +353,76 @@ struct record_traits<EnumConstantRecord>
 {
   typedef EnumConstantRecordIterator record_iterator_t;
 };
+
+
+class VariableRecordIterator : public SymbolRecordIterator
+{
+public:
+  explicit VariableRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, type, value FROM symbol", filter))
+  {
+
+  }
+
+  typedef VariableRecord value_t;
+
+  VariableRecord next()
+  {
+    VariableRecord r;
+    fill(r, stmt());
+    advance();
+    return r;
+  }
+
+  static void fill(VariableRecord& record, sql::Statement& row)
+  {
+    SymbolRecordIterator::fill(record, row);
+    record.type = row.column(5);
+    record.init = row.column(6);
+  }
+};
+
+template<>
+struct record_traits<VariableRecord>
+{
+  typedef VariableRecordIterator record_iterator_t;
+};
+
+
+class ParameterRecordIterator : public SymbolRecordIterator
+{
+public:
+  explicit ParameterRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol", filter))
+  {
+
+  }
+
+  typedef ParameterRecord value_t;
+
+  ParameterRecord next()
+  {
+    ParameterRecord r;
+    fill(r, stmt());
+    advance();
+    return r;
+  }
+
+  static void fill(ParameterRecord& record, sql::Statement& row)
+  {
+    SymbolRecordIterator::fill(record, row);
+    record.parameterIndex = row.columnInt(5);
+    record.type = row.column(6);
+    record.defaultValue = row.column(7);
+  }
+};
+
+template<>
+struct record_traits<ParameterRecord>
+{
+  typedef ParameterRecordIterator record_iterator_t;
+};
+
 
 template<typename T = SymbolRecord>
 T getRecord(const Snapshot& s, SymbolID id)
