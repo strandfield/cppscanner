@@ -8,6 +8,13 @@
 
 using namespace cppscanner;
 
+
+static std::vector<EnumConstantRecord> getEnumConstantsForEnum(const Snapshot& s, SymbolID enumId)
+{
+  return cppscanner::fetchAll<EnumConstantRecord>(s, SymbolRecordFilter().withParent(enumId));
+}
+
+
 TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_project]")
 {
   const std::string snapshot_name = "simple_project.db";
@@ -41,7 +48,7 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
   {
     std::vector<SymbolRecord> symbols = s.findSymbolsByName("ColorChannel");
     REQUIRE(symbols.size() == 1);
-    std::vector<EnumConstantRecord> values = s.getEnumConstantsForEnum(symbols.front().id);
+    std::vector<EnumConstantRecord> values = getEnumConstantsForEnum(s, symbols.front().id);
     REQUIRE(values.size() == 3);
   }
 

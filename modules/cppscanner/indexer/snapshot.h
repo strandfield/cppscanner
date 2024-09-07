@@ -96,8 +96,6 @@ public:
   std::vector<SymbolRecord> getSymbols(SymbolID parentID) const;
   std::vector<SymbolRecord> getSymbols(SymbolID parentID, SymbolKind kind) const;
   NamespaceAliasRecord getNamespaceAliasRecord(const std::string& name) const;
-  EnumConstantRecord getEnumConstantRecord(SymbolID enumID, const std::string& name) const;
-  std::vector<EnumConstantRecord> getEnumConstantsForEnum(SymbolID enumID) const;
   std::vector<ParameterRecord> getParameters(SymbolID symbolId, SymbolKind parameterKind) const;
   std::vector<ParameterRecord> getFunctionParameters(SymbolID functionId, SymbolKind kind = SymbolKind::Parameter) const;
   VariableRecord getField(SymbolID classId, const std::string& name) const;

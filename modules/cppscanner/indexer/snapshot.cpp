@@ -861,28 +861,6 @@ NamespaceAliasRecord Snapshot::getNamespaceAliasRecord(const std::string& name) 
   return readUniqueRow<NamespaceAliasRecord>(stmt, readNamespaceAliasRecord);
 }
 
-EnumConstantRecord Snapshot::getEnumConstantRecord(SymbolID enumID, const std::string& name) const
-{
-  EnumConstantRecordIterator iterator{ 
-    *this, 
-    SymbolRecordFilter()
-    .ofKind(SymbolKind::EnumConstant)
-    .withName(name)
-    .withParent(enumID)
-  };
-  return readUniqueRow(iterator);
-}
-
-std::vector<EnumConstantRecord> Snapshot::getEnumConstantsForEnum(SymbolID enumID) const
-{
-  EnumConstantRecordIterator iterator{ 
-    *this, 
-    SymbolRecordFilter()
-    .withParent(enumID)
-  };
-  return readRowsAsVector(iterator);
-}
-
 inline static ParameterRecord readParameterRecord(sql::Statement& row)
 {
   ParameterRecord s;

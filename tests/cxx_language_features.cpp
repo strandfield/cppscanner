@@ -10,6 +10,11 @@
 
 using namespace cppscanner;
 
+static EnumConstantRecord getEnumConstantRecord(const Snapshot& s, SymbolID enumId, const std::string& name)
+{
+  return cppscanner::getRecord<EnumConstantRecord>(s, SymbolRecordFilter().withParent(enumId).withName(name));
+}
+
 TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_language_features]")
 {
   const std::string snapshot_name = "cxx_language_features.db";
@@ -49,7 +54,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     SymbolRecord enumclass = s.getSymbol({ "cxx", "EnumClass" });
     REQUIRE(testFlag(enumclass, EnumInfo::IsScoped));
 
-    EnumConstantRecord enumclass_z = s.getEnumConstantRecord(enumclass.id, "Z");
+    EnumConstantRecord enumclass_z = getEnumConstantRecord(s, enumclass.id, "Z");
     REQUIRE(enumclass_z.expression == "25");
   }
   
