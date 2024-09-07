@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_SCANNER_H
 #define CPPSCANNER_SCANNER_H
 
-#include "snapshot.h"
+#include "snapshotwriter.h"
 
 #include <filesystem>
 
@@ -38,7 +38,7 @@ public:
   void setTranslationUnitFilters(const std::vector<std::string>& filters);
 
   void initSnapshot(const std::filesystem::path& p);
-  Snapshot* snapshot() const;
+  SnapshotWriter* snapshot() const;
 
   void scan(const std::filesystem::path& compileCommandsPath);
 
@@ -48,7 +48,7 @@ protected:
   void setFileIndexed(FileID f);
 
 private:
-  std::unique_ptr<Snapshot> m_snapshot;
+  std::unique_ptr<SnapshotWriter> m_snapshot;
   std::unique_ptr<ScannerData> d;
 };
 

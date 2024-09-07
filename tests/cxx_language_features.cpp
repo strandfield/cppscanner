@@ -10,7 +10,7 @@
 
 using namespace cppscanner;
 
-static EnumConstantRecord getEnumConstantRecord(const Snapshot& s, SymbolID enumId, const std::string& name)
+static EnumConstantRecord getEnumConstantRecord(const SnapshotReader& s, SymbolID enumId, const std::string& name)
 {
   return cppscanner::getRecord<EnumConstantRecord>(s, SymbolRecordFilter().withParent(enumId).withName(name));
 }
@@ -29,7 +29,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     REQUIRE(inv.errors().empty());
   }
 
-  auto s = Snapshot::open(snapshot_name);
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() == 8);
@@ -119,12 +119,12 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   }
 }
 
-static MacroRecord getMacroRecordByName(const Snapshot& s, const std::string& name)
+static MacroRecord getMacroRecordByName(const SnapshotReader& s, const std::string& name)
 {
   return cppscanner::getRecord<MacroRecord>(s, SymbolRecordFilter().withName(name));
 }
 
-static MacroRecord getMacroRecords(const Snapshot& s, const std::string& name)
+static MacroRecord getMacroRecords(const SnapshotReader& s, const std::string& name)
 {
   return cppscanner::getRecord<MacroRecord>(s, SymbolRecordFilter().withName(name));
 }

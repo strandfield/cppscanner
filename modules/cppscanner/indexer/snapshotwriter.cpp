@@ -2,21 +2,18 @@
 // This file is part of the 'cppscanner' project.
 // For conditions of distribution and use, see copyright notice in LICENSE.
 
-#include "snapshot.h"
+#include "snapshotwriter.h"
 
 #include "indexersymbol.h"
 #include "symbolrecorditerator.h"
 
-#include "cppscanner/database/sql.h"
+#include "cppscanner/database/readrows.h"
 #include "cppscanner/database/transaction.h"
 
 #include "cppscanner/index/relation.h"
 #include "cppscanner/index/symbol.h"
 
 #include <algorithm>
-#include <fstream>
-#include <map>
-#include <sstream>
 
 namespace cppscanner
 {
@@ -147,35 +144,6 @@ const std::string& NormalizedPath(const std::string& p)
 }
 #endif // _WIN32
 
-Snapshot::Snapshot(Snapshot&&) = default;
-Snapshot::~Snapshot() = default;
-
-Snapshot::Snapshot(Database db) : 
-  m_database(std::make_unique<Database>(std::move(db)))
-{
-  if (!m_database->good())
-    throw std::runtime_error("snapshot constructor expects a good() database");
-}
-
-/**
- * \brief returns the database associated with the snapshot
- */
-Database& Snapshot::database() const
-{
-  return *m_database;
-}
-
-/**
- * \brief opens a snapshot
- * \param p  the path of the snapshot
- */
-Snapshot Snapshot::open(const std::filesystem::path& p)
-{
-  Database db;
-  db.open(p);
-  return Snapshot(std::move(db));
-}
-
 static void insert_enum_values(Database& db)
 {
   sql::Statement stmt{ db };
@@ -217,11 +185,11 @@ static void insert_enum_values(Database& db)
   /*stmt.prepare("INSERT INTO relationPredicate (id, name) VALUES(?, ?)");
 
   enumerateRelationKind([&stmt](RelationKind k) {
-    stmt.bind(1, static_cast<int>(k));
-    stmt.bind(2, getRelationKindString(k));
-    stmt.step();
-    stmt.reset();
-    });
+  stmt.bind(1, static_cast<int>(k));
+  stmt.bind(2, getRelationKindString(k));
+  stmt.step();
+  stmt.reset();
+  });
 
   stmt.finalize();*/
 
@@ -238,31 +206,37 @@ static void insert_enum_values(Database& db)
   }
 }
 
-/**
- * \brief creates a new empty snapshot
- * \param p  file path
- */
-Snapshot Snapshot::create(const std::filesystem::path& p)
+SnapshotWriter::SnapshotWriter(SnapshotWriter&&) = default;
+SnapshotWriter::~SnapshotWriter() = default;
+
+SnapshotWriter::SnapshotWriter(const std::filesystem::path& databasePath) :
+  m_database(std::make_unique<Database>())
+
 {
-  Database db;
-  db.create(p);
-  
-  if (!sql::exec(db, snapshot::db_init_statements()))
+  database().create(databasePath);
+
+  if (!sql::exec(database(), snapshot::db_init_statements()))
     throw std::runtime_error("failed to create snapshot database");
 
-  sql::runTransacted(db, [&db]() {
-    insert_enum_values(db);
+  sql::runTransacted(database(), [this]() {
+    insert_enum_values(database());
     });
-
-  return Snapshot(std::move(db));
 }
 
-std::string Snapshot::normalizedPath(std::string p)
+/**
+ * \brief returns the database associated with the snapshot
+ */
+Database& SnapshotWriter::database() const
+{
+  return *m_database;
+}
+
+std::string SnapshotWriter::normalizedPath(std::string p)
 {
   return cppscanner::NormalizedPath(std::move(p));
 }
 
-void Snapshot::setProperty(const std::string& key, const std::string& value)
+void SnapshotWriter::setProperty(const std::string& key, const std::string& value)
 {
   sql::Statement stmt{ database() };
 
@@ -276,22 +250,22 @@ void Snapshot::setProperty(const std::string& key, const std::string& value)
   stmt.finalize();
 }
 
-void Snapshot::setProperty(const std::string& key, bool value)
+void SnapshotWriter::setProperty(const std::string& key, bool value)
 {
   setProperty(key, value ? "true" : "false");
 }
 
-void Snapshot::setProperty(const std::string& key, const char* value)
+void SnapshotWriter::setProperty(const std::string& key, const char* value)
 {
   setProperty(key, std::string(value));
 }
 
-void Snapshot::setProperty(const std::string& key, const Path& path)
+void SnapshotWriter::setProperty(const std::string& key, const Path& path)
 {
   return setProperty(key, path.str());
 }
 
-void Snapshot::insertFilePaths(const std::vector<File>& files)
+void SnapshotWriter::insertFilePaths(const std::vector<File>& files)
 {
   sql::Statement stmt{ database(), "INSERT OR IGNORE INTO file(id, path) VALUES(?,?)"};
 
@@ -305,7 +279,7 @@ void Snapshot::insertFilePaths(const std::vector<File>& files)
   stmt.finalize();
 }
 
-void Snapshot::insertIncludes(const std::vector<Include>& includes)
+void SnapshotWriter::insertIncludes(const std::vector<Include>& includes)
 {
   // We use INSERT OR IGNORE here so that duplicates are automatically ignored by sqlite.
   // See the UNIQUE constraint in the CREATE statement of the "include" table.
@@ -450,7 +424,7 @@ void insert_symbols_extra_info(Database& db, const std::vector<const IndexerSymb
   inserter.process(symbols);
 }
 
-void Snapshot::insertSymbols(const std::vector<const IndexerSymbol*>& symbols)
+void SnapshotWriter::insertSymbols(const std::vector<const IndexerSymbol*>& symbols)
 {
   if (symbols.empty()) {
     return;
@@ -484,7 +458,7 @@ void Snapshot::insertSymbols(const std::vector<const IndexerSymbol*>& symbols)
   insert_symbols_extra_info(database(), symbols);
 }
 
-void Snapshot::insertBaseOfs(const std::vector<BaseOf>& bofs)
+void SnapshotWriter::insertBaseOfs(const std::vector<BaseOf>& bofs)
 {
   if (bofs.empty()) {
     return;
@@ -505,7 +479,7 @@ void Snapshot::insertBaseOfs(const std::vector<BaseOf>& bofs)
   }
 }
 
-void Snapshot::insertOverrides(const std::vector<Override>& overrides)
+void SnapshotWriter::insertOverrides(const std::vector<Override>& overrides)
 {
   if (overrides.empty()) {
     return;
@@ -525,7 +499,7 @@ void Snapshot::insertOverrides(const std::vector<Override>& overrides)
   }
 }
 
-void Snapshot::insertDiagnostics(const std::vector<Diagnostic>& diagnostics)
+void SnapshotWriter::insertDiagnostics(const std::vector<Diagnostic>& diagnostics)
 {
   if (diagnostics.empty()) {
     return;
@@ -548,39 +522,7 @@ void Snapshot::insertDiagnostics(const std::vector<Diagnostic>& diagnostics)
   }
 }
 
-template<typename T, typename F>
-T readUniqueRow(sql::Statement& stmt, F&& func)
-{
-  if (!stmt.step())
-  {
-    throw std::runtime_error("no rows");
-  }
-
-  T value{ func(stmt) };
-
-  if (stmt.step())
-  {
-    throw std::runtime_error("no unique row");
-  }
-
-  return value;
-}
-
-
-template<typename T, typename F>
-std::vector<T> readRowsAsVector(sql::Statement& stmt, F&& func)
-{
-  std::vector<T> r;
-
-  while (stmt.step())
-  {
-    r.push_back(func(stmt));
-  }
-
-  return r;
-}
-
-std::vector<Include> Snapshot::loadAllIncludesInFile(FileID fid)
+std::vector<Include> SnapshotWriter::loadAllIncludesInFile(FileID fid)
 {
   sql::Statement stmt{ 
     database(),
@@ -597,10 +539,10 @@ std::vector<Include> Snapshot::loadAllIncludesInFile(FileID fid)
     return row;
     };
 
-  return readRowsAsVector<Include>(stmt, read_row);
+  return sql::readRowsAsVector<Include>(stmt, read_row);
 }
 
-void Snapshot::removeAllIncludesInFile(FileID fid)
+void SnapshotWriter::removeAllIncludesInFile(FileID fid)
 {
   sql::Statement stmt{ 
     database(),
@@ -612,7 +554,7 @@ void Snapshot::removeAllIncludesInFile(FileID fid)
   stmt.step();
 }
 
-std::vector<SymbolReference> Snapshot::loadSymbolReferencesInFile(FileID fid)
+std::vector<SymbolReference> SnapshotWriter::loadSymbolReferencesInFile(FileID fid)
 {
   sql::Statement stmt{ 
     database(),
@@ -631,10 +573,10 @@ std::vector<SymbolReference> Snapshot::loadSymbolReferencesInFile(FileID fid)
     return r;
   };
 
-  return readRowsAsVector<SymbolReference>(stmt, read_row);
+  return sql::readRowsAsVector<SymbolReference>(stmt, read_row);
 }
 
-void Snapshot::removeAllSymbolReferencesInFile(FileID fid)
+void SnapshotWriter::removeAllSymbolReferencesInFile(FileID fid)
 {
   sql::Statement stmt{ 
     database(),
@@ -646,7 +588,7 @@ void Snapshot::removeAllSymbolReferencesInFile(FileID fid)
   stmt.step();
 }
 
-std::vector<Diagnostic> Snapshot::loadDiagnosticsInFile(FileID fid)
+std::vector<Diagnostic> SnapshotWriter::loadDiagnosticsInFile(FileID fid)
 {
   sql::Statement stmt{ 
     database(),
@@ -664,10 +606,10 @@ std::vector<Diagnostic> Snapshot::loadDiagnosticsInFile(FileID fid)
     return d;
     };
 
-  return readRowsAsVector<Diagnostic>(stmt, read_row);
+  return sql::readRowsAsVector<Diagnostic>(stmt, read_row);
 }
 
-void Snapshot::removeAllDiagnosticsInFile(FileID fid)
+void SnapshotWriter::removeAllDiagnosticsInFile(FileID fid)
 {
   sql::Statement stmt{ 
     database(),
@@ -679,206 +621,6 @@ void Snapshot::removeAllDiagnosticsInFile(FileID fid)
   stmt.step();
 }
 
-File readFileIdAndPath(sql::Statement& row)
-{
-  File f;
-  f.id = row.columnInt(0);
-  f.path = row.column(1);
-  return f;
-}
-
-std::vector<File> Snapshot::getFiles() const
-{
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, path FROM file"
-  };
-
-  return readRowsAsVector<File>(stmt, readFileIdAndPath);
-}
-
-Include readInclude(sql::Statement& row)
-{
-  Include i;
-  i.fileID = row.columnInt(0);
-  i.includedFileID = row.columnInt(1);
-  i.line = row.columnInt(2);
-  return i;
-}
-
-
-std::vector<Include> Snapshot::getIncludedFiles(FileID fid) const
-{
-  sql::Statement stmt { 
-    database(),
-    "SELECT file_id, included_file_id, line FROM include WHERE file_id = ?"
-  };
-
-  stmt.bind(1, (int)fid);
-
-  return readRowsAsVector<Include>(stmt, readInclude);
-}
-
-SymbolRecord readSymbol(sql::Statement& row)
-{
-  SymbolRecord s;
-  s.id = SymbolID::fromRawID(row.columnInt64(0));
-  s.kind = static_cast<SymbolKind>(row.columnInt(1));
-  s.parentId = SymbolID::fromRawID(row.columnInt64(2));
-  s.name = row.column(3);
-  s.flags = row.columnInt(4);
-  return s;
-}
-
-inline SymbolRecord getChildSymbolByName(const Snapshot& s, SymbolID parentId, const std::string& name)
-{
-  return getRecord(s, SymbolRecordFilter().withName(name).withParent(parentId));
-}
-
-std::vector<SymbolRecord> Snapshot::getSymbolsByName(const std::string& name) const
-{
-  return fetchAll(*this, SymbolRecordFilter().withName(name));
-}
-
-SymbolRecord Snapshot::getChildSymbolByName(const std::string& name, SymbolID parentID) const
-{
-  if (parentID == SymbolID()) {
-    std::vector<SymbolRecord> symbols = getSymbolsByName(name);
-
-    if (symbols.size() != 1) {
-      throw std::runtime_error("could not find unique symbol with given name: " + name);
-    }
-
-    return symbols.front();
-  } else {
-    return getRecord(*this, SymbolRecordFilter().withName(name).withParent(parentID));
-  }
-}
-
-SymbolRecord Snapshot::getSymbolByName(const std::vector<std::string>& qualifiedName) const
-{
-  SymbolRecord s;
-
-  for (const std::string& name : qualifiedName)
-  {
-    s = getChildSymbolByName(name, s.id);
-  }
-
-  return s;
-}
-
-std::vector<SymbolRecord> Snapshot::getChildSymbols(SymbolID parentID) const
-{
-  return fetchAll(*this, SymbolRecordFilter().withParent(parentID));
-}
-
-std::vector<SymbolRecord> Snapshot::getChildSymbols(SymbolID parentID, SymbolKind kind) const
-{
-  return fetchAll(*this, SymbolRecordFilter().withParent(parentID).ofKind(kind));
-}
-
-NamespaceAliasRecord Snapshot::getNamespaceAliasRecord(const std::string& name) const
-{
-  return getRecord<NamespaceAliasRecord>(*this, SymbolRecordFilter().withName(name));
-}
-
-std::vector<ParameterRecord> Snapshot::getParameters(SymbolID symbolId, SymbolKind parameterKind) const
-{
-  return fetchAll<ParameterRecord>(*this, SymbolRecordFilter().ofKind(parameterKind).withParent(symbolId));
-}
-
-std::vector<ParameterRecord> Snapshot::getFunctionParameters(SymbolID functionId, SymbolKind kind) const
-{
-  return getParameters(functionId, kind);
-}
-
-VariableRecord Snapshot::getField(SymbolID classId, const std::string& name) const
-{
-  return getRecord<VariableRecord>(*this, SymbolRecordFilter().ofKind(SymbolKind::Field).withName(name).withParent(classId));
-}
-
-std::vector<VariableRecord> Snapshot::getFields(SymbolID classId) const
-{
-  return fetchAll<VariableRecord>(*this, SymbolRecordFilter().ofKind(SymbolKind::Field).withParent(classId));
-}
-
-std::vector<VariableRecord> Snapshot::getStaticProperties(SymbolID classId) const
-{
-  return fetchAll<VariableRecord>(*this, SymbolRecordFilter().ofKind(SymbolKind::StaticProperty).withParent(classId));
-}
-
-SymbolID sqlColumnAsSymbolID(sql::Statement& row, int col)
-{
-  return SymbolID::fromRawID(row.columnInt64(col));
-}
-
-AccessSpecifier sqlColumnAsAccessSpecifier(sql::Statement& row, int col)
-{
-  return static_cast<AccessSpecifier>(row.columnInt(col));
-}
-
-std::vector<BaseOf> Snapshot::getBasesOf(SymbolID classID) const
-{
-  sql::Statement stmt{ 
-    database(),
-    "SELECT baseClassID, access FROM baseOf WHERE derivedClassID = ?"
-  };
-
-  stmt.bind(1, classID.rawID());
-
-  auto rr = [classID](sql::Statement& row) -> BaseOf {
-    BaseOf bof;
-    bof.derivedClassID = classID;
-    bof.baseClassID = sqlColumnAsSymbolID(row, 0);
-    bof.accessSpecifier = sqlColumnAsAccessSpecifier(row, 1);
-    return bof;
-    };
-
-  return readRowsAsVector<BaseOf>(stmt, rr);
-}
-
-std::vector<Override> Snapshot::getOverridesOf(SymbolID methodID) const
-{
-  sql::Statement stmt{ 
-    database(),
-    "SELECT overrideMethodID FROM override WHERE baseMethodID = ?"
-  };
-
-  stmt.bind(1, methodID.rawID());
-
-  auto rr = [methodID](sql::Statement& row) -> Override {
-    Override ov;
-    ov.baseMethodID = methodID;
-    ov.overrideMethodID = sqlColumnAsSymbolID(row, 0);
-    return ov;
-    };
-
-  return readRowsAsVector<Override>(stmt, rr);
-}
-
-SymbolReference readSymbolReference(sql::Statement& row)
-{
-  SymbolReference r;
-  r.symbolID = SymbolID::fromRawID(row.columnInt64(0));
-  r.fileID = row.columnInt(1);
-  r.position = FilePosition(row.columnInt(2), row.columnInt(3));
-  r.referencedBySymbolID = SymbolID::fromRawID(row.columnInt64(4));
-  r.flags = row.columnInt(5);
-  return r;
-}
-
-std::vector<SymbolReference> Snapshot::findReferences(SymbolID symbolID)
-{
-  sql::Statement stmt{ 
-    database(),
-    "SELECT symbol_id, file_id, line, col, parent_symbol_id, flags FROM symbolReference WHERE symbol_id = ?"
-  };
-
-  stmt.bind(1, symbolID.rawID());
-
-  return readRowsAsVector<SymbolReference>(stmt, readSymbolReference);
-}
-
 namespace snapshot
 {
 
@@ -887,7 +629,7 @@ const char* db_init_statements()
   return SQL_CREATE_STATEMENTS;
 }
 
-void insertFiles(Snapshot& snapshot, const std::vector<File>& files)
+void insertFiles(SnapshotWriter& snapshot, const std::vector<File>& files)
 {
   sql::Statement stmt{ snapshot.database(), "INSERT OR REPLACE INTO file(id, path, content) VALUES(?,?,?)"};
 
@@ -903,7 +645,7 @@ void insertFiles(Snapshot& snapshot, const std::vector<File>& files)
   stmt.finalize();
 }
 
-void insertSymbolReferences(Snapshot& snapshot, const std::vector<SymbolReference>& references)
+void insertSymbolReferences(SnapshotWriter& snapshot, const std::vector<SymbolReference>& references)
 {
   sql::Statement stmt{
     snapshot.database(),

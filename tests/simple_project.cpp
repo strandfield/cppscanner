@@ -9,7 +9,7 @@
 using namespace cppscanner;
 
 
-static std::vector<EnumConstantRecord> getEnumConstantsForEnum(const Snapshot& s, SymbolID enumId)
+static std::vector<EnumConstantRecord> getEnumConstantsForEnum(const SnapshotReader& s, SymbolID enumId)
 {
   return cppscanner::fetchAll<EnumConstantRecord>(s, SymbolRecordFilter().withParent(enumId));
 }
@@ -29,7 +29,7 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
     REQUIRE(inv.errors().empty());
   }
 
-  auto s = Snapshot::open(snapshot_name);
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() == 2);

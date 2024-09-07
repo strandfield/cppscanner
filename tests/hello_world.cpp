@@ -27,7 +27,7 @@ TEST_CASE("The Scanner runs properly on hello_world", "[scanner][hello_world]")
     REQUIRE(inv.errors().empty());
   }
 
-  auto s = Snapshot::open(snapshot_name);
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() >= 2);

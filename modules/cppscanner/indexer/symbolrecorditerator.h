@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_SYMBOLRECORDITERATOR_H
 #define CPPSCANNER_SYMBOLRECORDITERATOR_H
 
-#include "cppscanner/indexer/snapshot.h"
+#include "cppscanner/indexer/snapshotreader.h"
 
 #include "cppscanner/database/sql.h"
 
@@ -76,8 +76,8 @@ private:
   bool m_has_next = false;
 
 public:
-  explicit SymbolRecordIterator(const Snapshot& s, const SymbolRecordFilter& filter = {});
-  SymbolRecordIterator(const Snapshot& s, SymbolID id);
+  explicit SymbolRecordIterator(const SnapshotReader& s, const SymbolRecordFilter& filter = {});
+  SymbolRecordIterator(const SnapshotReader& s, SymbolID id);
 
   typedef SymbolRecord value_t;
 
@@ -91,18 +91,18 @@ protected:
 
   static void fill(SymbolRecord& record, sql::Statement& row);
 
-  static sql::Statement build_query(const Snapshot& s, std::string q, const SymbolRecordFilter& f);
-  static sql::Statement build_query(const Snapshot& s, std::string q, SymbolID id);
+  static sql::Statement build_query(const SnapshotReader& s, std::string q, const SymbolRecordFilter& f);
+  static sql::Statement build_query(const SnapshotReader& s, std::string q, SymbolID id);
   void advance();
 };
 
-inline SymbolRecordIterator::SymbolRecordIterator(const Snapshot& s, const SymbolRecordFilter& filter) : 
+inline SymbolRecordIterator::SymbolRecordIterator(const SnapshotReader& s, const SymbolRecordFilter& filter) : 
   m_stmt(build_query(s, "SELECT id, kind, parent, name, flags FROM symbol", filter))
 {
   advance();
 }
 
-inline SymbolRecordIterator::SymbolRecordIterator(const Snapshot& s, SymbolID id) : 
+inline SymbolRecordIterator::SymbolRecordIterator(const SnapshotReader& s, SymbolID id) : 
   m_stmt(build_query(s, "SELECT id, kind, parent, name, flags FROM symbol", id))
 {
   advance();
@@ -141,7 +141,7 @@ inline void SymbolRecordIterator::fill(SymbolRecord& record, sql::Statement& row
   record.flags = row.columnInt(4);
 }
 
-inline sql::Statement SymbolRecordIterator::build_query(const Snapshot& s, std::string q, const SymbolRecordFilter& f)
+inline sql::Statement SymbolRecordIterator::build_query(const SnapshotReader& s, std::string q, const SymbolRecordFilter& f)
 {
   sql::Statement stmt{ s.database() };
 
@@ -204,7 +204,7 @@ inline sql::Statement SymbolRecordIterator::build_query(const Snapshot& s, std::
   return stmt;
 }
 
-inline sql::Statement SymbolRecordIterator::build_query(const Snapshot& s, std::string q, SymbolID id)
+inline sql::Statement SymbolRecordIterator::build_query(const SnapshotReader& s, std::string q, SymbolID id)
 {
   sql::Statement stmt{ s.database() };
   q += " WHERE id = ?";
@@ -259,7 +259,7 @@ struct record_traits
 class MacroRecordIterator : public SymbolRecordIterator
 {
 public:
-  explicit MacroRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+  explicit MacroRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
     : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM symbol", filter.ofKind(SymbolKind::Macro)))
   {
 
@@ -292,7 +292,7 @@ struct record_traits<MacroRecord>
 class NamespaceAliasRecordIterator : public SymbolRecordIterator
 {
 public:
-  explicit NamespaceAliasRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+  explicit NamespaceAliasRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
     : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM symbol", filter.ofKind(SymbolKind::NamespaceAlias)))
   {
 
@@ -325,7 +325,7 @@ struct record_traits<NamespaceAliasRecord>
 class EnumConstantRecordIterator : public SymbolRecordIterator
 {
 public:
-  explicit EnumConstantRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+  explicit EnumConstantRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
     : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM symbol", filter.ofKind(SymbolKind::EnumConstant)))
   {
 
@@ -358,7 +358,7 @@ struct record_traits<EnumConstantRecord>
 class VariableRecordIterator : public SymbolRecordIterator
 {
 public:
-  explicit VariableRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+  explicit VariableRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
     : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, type, value FROM symbol", filter))
   {
 
@@ -392,7 +392,7 @@ struct record_traits<VariableRecord>
 class ParameterRecordIterator : public SymbolRecordIterator
 {
 public:
-  explicit ParameterRecordIterator(const Snapshot& s, SymbolRecordFilter filter = {})
+  explicit ParameterRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
     : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol", filter))
   {
 
@@ -425,21 +425,21 @@ struct record_traits<ParameterRecord>
 
 
 template<typename T = SymbolRecord>
-T getRecord(const Snapshot& s, SymbolID id)
+T getRecord(const SnapshotReader& s, SymbolID id)
 {
   typename record_traits<T>::record_iterator_t iterator{ s, SymbolRecordFilter().withId(id) };
   return readUniqueRow(iterator);
 }
 
 template<typename T = SymbolRecord>
-T getRecord(const Snapshot& s, const SymbolRecordFilter& filter)
+T getRecord(const SnapshotReader& s, const SymbolRecordFilter& filter)
 {
   typename record_traits<T>::record_iterator_t iterator{ s, filter };
   return readUniqueRow(iterator);
 }
 
 template<typename T = SymbolRecord>
-std::vector<T> fetchAll(const Snapshot& s, const SymbolRecordFilter& filter)
+std::vector<T> fetchAll(const SnapshotReader& s, const SymbolRecordFilter& filter)
 {
   typename record_traits<T>::record_iterator_t iterator{ s, filter };
   return readRowsAsVector(iterator);

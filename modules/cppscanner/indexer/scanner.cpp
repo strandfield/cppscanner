@@ -122,7 +122,7 @@ void Scanner::setTranslationUnitFilters(const std::vector<std::string>& filters)
  */
 void Scanner::initSnapshot(const std::filesystem::path& p)
 {
-  m_snapshot = std::make_unique<Snapshot>(Snapshot::create(p));
+  m_snapshot = std::make_unique<SnapshotWriter>(p);
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
 
@@ -132,14 +132,14 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
   m_snapshot->setProperty("cppscanner.os", "linux");
 #endif // _WIN32
 
-  m_snapshot->setProperty("project.home", Snapshot::Path(d->homeDirectory));
+  m_snapshot->setProperty("project.home", SnapshotWriter::Path(d->homeDirectory));
 
   m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
-  m_snapshot->setProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())));
+  m_snapshot->setProperty("scanner.root", SnapshotWriter::Path(d->rootDirectory.value_or(std::string())));
 }
 
-Snapshot* Scanner::snapshot() const
+SnapshotWriter* Scanner::snapshot() const
 {
   return m_snapshot.get();
 }
