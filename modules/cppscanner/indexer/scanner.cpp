@@ -425,7 +425,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
         std::vector<Include> includes = merge(m_snapshot->loadAllIncludesInFile(cur_file_id), it, end);
 
         sql::runTransacted(m_snapshot->database(), [this, cur_file_id, &includes]() {
-          m_snapshot->removeAllSymbolReferencesInFile(cur_file_id);
+          m_snapshot->removeAllIncludesInFile(cur_file_id);
           m_snapshot->insertIncludes(includes);
           });
       } else {
