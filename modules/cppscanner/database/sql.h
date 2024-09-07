@@ -72,6 +72,7 @@ public:
   void bind(int n, std::nullptr_t);
   void bind(int n, const char* text);
   void bind(int n, std::string&& text);
+  void bind(int n, const std::string& text) = delete;
   void bind(int n, std::string_view text);
   void bind(int n, int value);
   void bind(int n, uint64_t value);

@@ -5,6 +5,7 @@
 #include "snapshot.h"
 
 #include "indexersymbol.h"
+#include "symbolrecorditerator.h"
 
 #include "cppscanner/database/sql.h"
 #include "cppscanner/database/transaction.h"
@@ -145,35 +146,6 @@ const std::string& NormalizedPath(const std::string& p)
   return p;
 }
 #endif // _WIN32
-
-class EnumConstantRecordIterator
-{
-private:
-  sql::Statement m_stmt;
-  std::optional<std::string> m_name;
-  std::optional<SymbolID> m_id;
-  std::optional<SymbolID> m_parent_id;
-  std::string m_query;
-  int m_name_binding_point = 0;
-  int m_id_binding_point = 0;
-  int m_parent_binding_point = 0;
-  bool m_has_next = false;
-
-public:
-  explicit EnumConstantRecordIterator(const Snapshot& s, const std::optional<std::string>& nameFilter = {}, const std::optional<SymbolID>& parentFilter = {});
-  EnumConstantRecordIterator(const Snapshot& s, SymbolID id);
-
-  typedef EnumConstantRecord value_t;
-
-  bool hasNext() const;
-  EnumConstantRecord next();
-
-  static void fill(EnumConstantRecord& record, sql::Statement& row);
-
-protected:
-  void build_query();
-  void advance();
-};
 
 Snapshot::Snapshot(Snapshot&&) = default;
 Snapshot::~Snapshot() = default;
@@ -388,7 +360,7 @@ public:
   {
     m_stmt.bind(ParameterIndex, nullptr);
     m_stmt.bind(Type, nullptr);
-    m_stmt.bind(Value, info.definition);
+    m_stmt.bind(Value, std::string_view(info.definition));
 
     m_stmt.insert();
   }
@@ -396,7 +368,7 @@ public:
   void operator()(const FunctionInfo& info)
   {
     m_stmt.bind(ParameterIndex, nullptr);
-    m_stmt.bind(Type, info.returnType);
+    m_stmt.bind(Type, std::string_view(info.returnType));
     m_stmt.bind(Value, nullptr);
 
     m_stmt.insert();
@@ -405,10 +377,10 @@ public:
   void operator()(const ParameterInfo& info)
   {
     m_stmt.bind(ParameterIndex, info.parameterIndex);
-    m_stmt.bind(Type, info.type);
+    m_stmt.bind(Type, std::string_view(info.type));
 
     if (!info.defaultValue.empty())
-      m_stmt.bind(Value, info.defaultValue);
+      m_stmt.bind(Value, std::string_view(info.defaultValue));
     else
       m_stmt.bind(Value, nullptr);
 
@@ -421,7 +393,7 @@ public:
     m_stmt.bind(Value, nullptr);
 
     if (!info.underlyingType.empty())
-      m_stmt.bind(Type, info.underlyingType);
+      m_stmt.bind(Type, std::string_view(info.underlyingType));
     else
       m_stmt.bind(Type, nullptr);
 
@@ -434,7 +406,7 @@ public:
     m_stmt.bind(Type, nullptr);
 
     if (!info.expression.empty())
-      m_stmt.bind(Value, info.expression);
+      m_stmt.bind(Value, std::string_view(info.expression));
     else
       m_stmt.bind(Value, nullptr);
 
@@ -446,12 +418,12 @@ public:
     m_stmt.bind(ParameterIndex, nullptr);
 
     if (!info.type.empty())
-      m_stmt.bind(Type, info.type);
+      m_stmt.bind(Type, std::string_view(info.type));
     else
       m_stmt.bind(Type, nullptr);
 
     if (!info.init.empty())
-      m_stmt.bind(Value, info.init);
+      m_stmt.bind(Value, std::string_view(info.init));
     else
       m_stmt.bind(Value, nullptr);
 
@@ -464,7 +436,7 @@ public:
     m_stmt.bind(Type, nullptr);
 
     if (!info.value.empty())
-      m_stmt.bind(Value, info.value);
+      m_stmt.bind(Value, std::string_view(info.value));
     else
       m_stmt.bind(Value, nullptr);
 
@@ -570,7 +542,7 @@ void Snapshot::insertDiagnostics(const std::vector<Diagnostic>& diagnostics)
     stmt.bind(2, static_cast<int>(d.fileID));
     stmt.bind(3, d.position.line());
     stmt.bind(4, d.position.column());
-    stmt.bind(5, d.message);
+    stmt.bind(5, std::string_view(d.message));
 
     stmt.insert();
   }
@@ -796,7 +768,7 @@ std::vector<SymbolRecord> Snapshot::findSymbolsByName(const std::string& name) c
     "SELECT id, kind, parent, name, flags FROM symbol WHERE name = ?"
   };
 
-  stmt.bind(1, name);
+  stmt.bind(1, std::string_view(name));
   return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
 }
 
@@ -807,7 +779,7 @@ std::vector<SymbolRecord> Snapshot::findSymbolsByName(const sql::Like& name) con
     "SELECT id, kind, parent, name, flags FROM symbol WHERE name LIKE ?"
   };
 
-  stmt.bind(1, name.str());
+  stmt.bind(1, std::string_view(name.str()));
   return readRowsAsVector<SymbolRecord>(stmt, readSymbol);
 }
 
@@ -823,7 +795,7 @@ SymbolRecord Snapshot::getSymbolByName(const std::string& name, SymbolID parentI
       "SELECT id, kind, parent, name, flags FROM symbol WHERE name = ? and parent = ?"
     };
 
-    stmt.bind(1, name);
+    stmt.bind(1, std::string_view(name));
     stmt.bind(2, parentID.rawID());
     symbols = readRowsAsVector<SymbolRecord>(stmt, readSymbol);
   }
@@ -847,7 +819,7 @@ SymbolRecord Snapshot::getSymbolByName(const sql::Like& name, SymbolID parentID)
       "SELECT id, kind, parent, name, flags FROM symbol WHERE name LIKE ? and parent = ?"
     };
 
-    stmt.bind(1, name.str());
+    stmt.bind(1, std::string_view(name.str()));
     stmt.bind(2, parentID.rawID());
     symbols = readRowsAsVector<SymbolRecord>(stmt, readSymbol);
   }
@@ -915,7 +887,7 @@ MacroRecord Snapshot::getMacroRecord(const std::string& name) const
     "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 4 and name = ?"
   };
 
-  stmt.bind(1, name);
+  stmt.bind(1, std::string_view(name));
 
   return readUniqueRow<MacroRecord>(stmt, readMacroRecord);
 }
@@ -929,7 +901,7 @@ std::vector<MacroRecord> Snapshot::getMacroRecords(const std::string& name) cons
     "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 4 and name = ?"
   };
 
-  stmt.bind(1, name);
+  stmt.bind(1, std::string_view(name));
 
   return readRowsAsVector<MacroRecord>(stmt, readMacroRecord);
 }
@@ -955,20 +927,30 @@ NamespaceAliasRecord Snapshot::getNamespaceAliasRecord(const std::string& name) 
     "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 3 and name = ?"
   };
 
-  stmt.bind(1, name);
+  stmt.bind(1, std::string_view(name));
 
   return readUniqueRow<NamespaceAliasRecord>(stmt, readNamespaceAliasRecord);
 }
 
 EnumConstantRecord Snapshot::getEnumConstantRecord(SymbolID enumID, const std::string& name) const
 {
-  EnumConstantRecordIterator iterator{ *this, name, enumID };
+  EnumConstantRecordIterator iterator{ 
+    *this, 
+    SymbolRecordFilter()
+    .ofKind(SymbolKind::EnumConstant)
+    .withName(name)
+    .withParent(enumID)
+  };
   return readUniqueRow(iterator);
 }
 
 std::vector<EnumConstantRecord> Snapshot::getEnumConstantsForEnum(SymbolID enumID) const
 {
-  EnumConstantRecordIterator iterator{ *this, {}, enumID };
+  EnumConstantRecordIterator iterator{ 
+    *this, 
+    SymbolRecordFilter()
+    .withParent(enumID)
+  };
   return readRowsAsVector(iterator);
 }
 
@@ -1038,7 +1020,7 @@ VariableRecord Snapshot::getField(SymbolID classId, const std::string& name) con
   };
 
   stmt.bind(1, classId.rawID());
-  stmt.bind(2, name);
+  stmt.bind(2, std::string_view(name));
   return readUniqueRow<VariableRecord>(stmt, readVariableRecord);
 }
 
@@ -1122,95 +1104,6 @@ std::vector<SymbolReference> Snapshot::findReferences(SymbolID symbolID)
   stmt.bind(1, symbolID.rawID());
 
   return readRowsAsVector<SymbolReference>(stmt, readSymbolReference);
-}
-
-EnumConstantRecordIterator::EnumConstantRecordIterator(const Snapshot& s, const std::optional<std::string>& nameFilter, const std::optional<SymbolID>& parentFilter) : 
-  m_stmt(s.database()),
-  m_name(nameFilter),
-  m_parent_id(parentFilter)
-{
-  build_query();
-  advance();
-}
-
-EnumConstantRecordIterator::EnumConstantRecordIterator(const Snapshot& s, SymbolID id) : 
-  m_stmt(s.database()),
-  m_id(id)
-{
-  build_query();
-  advance();
-}
-
-bool EnumConstantRecordIterator::hasNext() const
-{
-  return m_has_next;
-}
-
-EnumConstantRecord EnumConstantRecordIterator::next()
-{
-  EnumConstantRecord r;
-  fill(r, m_stmt);
-  advance();
-  return r;
-}
-
-void EnumConstantRecordIterator::fill(EnumConstantRecord& record, sql::Statement& row)
-{
-  record.id = SymbolID::fromRawID(row.columnInt64(0));
-  record.kind = static_cast<SymbolKind>(row.columnInt(1));
-  record.parentId = SymbolID::fromRawID(row.columnInt64(2));
-  record.name = row.column(3);
-  record.flags = row.columnInt(4);
-  record.expression = row.column(5);
-}
-
-void EnumConstantRecordIterator::build_query()
-{
-  static_assert((int)SymbolKind::EnumConstant == 14);
-
-  m_query = "SELECT id, kind, parent, name, flags, value FROM symbol WHERE kind = 14";
-
-  int binding_point = 0;
-
-  if (m_parent_id.has_value())
-  {
-    m_query += " AND parent = ?";
-    m_parent_binding_point = ++binding_point;
-  }
-
-  if (m_name.has_value())
-  {
-    m_query += " AND name = ?";
-    m_name_binding_point = ++binding_point;
-  }
-
-  if (m_id.has_value())
-  {
-    m_query += " AND id = ?";
-    m_id_binding_point = ++binding_point;
-  }
-
-  m_stmt.prepare(m_query.c_str());
-
-  if (m_parent_binding_point)
-  {
-    m_stmt.bind(m_parent_binding_point, m_parent_id.value().rawID());
-  }
-
-  if (m_name_binding_point)
-  {
-    m_stmt.bind(m_name_binding_point, m_name.value());
-  }
-
-  if (m_id)
-  {
-    m_stmt.bind(m_id_binding_point, m_id.value().rawID());
-  }
-}
-
-void EnumConstantRecordIterator::advance()
-{
-  m_has_next = m_stmt.fetchNextRow();
 }
 
 namespace snapshot
