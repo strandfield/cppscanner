@@ -304,12 +304,13 @@ IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const
     fillSymbol(symbol, name, macroInfo);
   }
 
-  // TODO: we may have to delay the call to isUsedForHeaderGuard() if 
-  // we want to have its correct value as it appears to not be set the
-  // first time handleMacroOccurrence() is called.
-  if (macroInfo->isUsedForHeaderGuard()) {
-    symbol.setFlag(MacroInfo::MacroUsedAsHeaderGuard);
-  }
+  // note: it seems we have to delay the call to isUsedForHeaderGuard()
+  // as its value isn't set the first time handleMacroOccurrence() is called;
+  // which is not completely illogical as there is no way to know yet if
+  // the macro is really a header guard.
+  // PreprocessingRecordIndexer takes care of reading the value after the 
+  // translation unit has been processed.
+  (void)macroInfo->isUsedForHeaderGuard();
 
   symbol.setFlag(MacroInfo::FunctionLike, macroInfo->isFunctionLike());
 
@@ -998,8 +999,7 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
   symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0;
 
   if (roles & (int)clang::index::SymbolRole::Reference) {
-    // TODO: record the result of expanding the macro ?
-
+    // note about recording the result of expanding the macro:
     // Looking at Preprocessor::HandleMacroExpandedIdentifier(), it appears the macro 
     // is actually expanded after this function is called ; meaning we have no way
     // to easily get information about the expansion from clang at this point.

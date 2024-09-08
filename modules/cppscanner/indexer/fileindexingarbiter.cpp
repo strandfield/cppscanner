@@ -26,7 +26,13 @@ public:
     FileIndexingArbiter(arbiters.front()->fileIdentificator()),
     m_arbiters(std::move(arbiters))
   {
-
+    FileIdentificator* fid = &fileIdentificator();
+    bool ok = std::all_of(m_arbiters.begin(), m_arbiters.end(), [fid](const ArbiterPtr& arbiter) {
+      return &arbiter->fileIdentificator() == fid;
+      });
+    if (!ok) {
+      throw std::runtime_error("not all arbiters use the same fileidentificator");
+    }
   }
 
   bool shouldIndex(FileID file, void* idxr) final
@@ -82,7 +88,6 @@ bool FileIndexingArbiter::shouldIndex(FileID /* file */, void* /* context */)
 std::unique_ptr<FileIndexingArbiter> FileIndexingArbiter::createCompositeArbiter(std::vector<std::unique_ptr<FileIndexingArbiter>> arbiters)
 {
   assert(!arbiters.empty());
-  // TODO: verify that all arbiters use the same file ids
 
   if (arbiters.size() == 1) {
     return std::unique_ptr<FileIndexingArbiter>(arbiters.front().release());
