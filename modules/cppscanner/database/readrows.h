@@ -15,14 +15,14 @@ namespace sql
 template<typename T, typename F>
 T readUniqueRow(sql::Statement& stmt, F&& func)
 {
-  if (!stmt.step())
+  if (!stmt.fetchNextRow())
   {
     throw std::runtime_error("no rows");
   }
 
   T value{ func(stmt) };
 
-  if (stmt.step())
+  if (stmt.fetchNextRow())
   {
     throw std::runtime_error("no unique row");
   }
@@ -36,7 +36,7 @@ std::vector<T> readRowsAsVector(sql::Statement& stmt, F&& func)
 {
   std::vector<T> r;
 
-  while (stmt.step())
+  while (stmt.fetchNextRow())
   {
     r.push_back(func(stmt));
   }

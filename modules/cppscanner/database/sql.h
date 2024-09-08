@@ -59,7 +59,7 @@ public:
   Database& database() const;
 
   bool prepare(const char* query);
-  bool step(); // TODO: change return type to int
+  int step();
   void reset();
   void finalize();
 
@@ -120,10 +120,9 @@ inline bool Statement::prepare(const char* query)
   return r == SQLITE_OK;
 }
 
-inline bool Statement::step()
+inline int Statement::step()
 {
-  int r = sqlite3_step(m_statement);
-  return r == SQLITE_ROW;
+  return sqlite3_step(m_statement);
 }
 
 inline void Statement::reset()
@@ -139,7 +138,7 @@ inline void Statement::finalize()
 
 inline bool Statement::fetchNextRow()
 {
-  int r = sqlite3_step(m_statement);
+  int r = step();
   return r == SQLITE_ROW;
 }
 
