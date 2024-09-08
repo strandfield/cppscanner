@@ -422,8 +422,13 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   break;
   case clang::Decl::Kind::Enum:
   {
-    bool scoped = llvm::dyn_cast<clang::EnumDecl>(decl)->isScoped();
-    symbol.setFlag(EnumInfo::IsScoped, scoped);
+    const auto* enum_decl = llvm::dyn_cast<clang::EnumDecl>(decl);
+    symbol.setFlag(EnumInfo::IsScoped,  enum_decl->isScoped());
+    
+    if (enum_decl->getIntegerTypeSourceInfo()) {
+      const clang::QualType underlying_type = enum_decl->getIntegerType();
+      symbol.getExtraInfo<EnumInfo>().underlyingType = prettyPrint(underlying_type, m_indexer);
+    }
   }
   break;
   case clang::Decl::Kind::EnumConstant:

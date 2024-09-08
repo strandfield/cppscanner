@@ -322,6 +322,39 @@ struct record_traits<NamespaceAliasRecord>
 };
 
 
+class EnumRecordIterator : public SymbolRecordIterator
+{
+public:
+  explicit EnumRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, integerType FROM enumRecord", filter))
+  {
+
+  }
+
+  typedef EnumRecord value_t;
+
+  EnumRecord next()
+  {
+    EnumRecord r;
+    fill(r, stmt());
+    advance();
+    return r;
+  }
+
+  static void fill(EnumRecord& record, sql::Statement& row)
+  {
+    SymbolRecordIterator::fill(record, row);
+    record.underlyingType = row.column(5);
+  }
+};
+
+template<>
+struct record_traits<EnumRecord>
+{
+  typedef EnumRecordIterator record_iterator_t;
+};
+
+
 class EnumConstantRecordIterator : public SymbolRecordIterator
 {
 public:
