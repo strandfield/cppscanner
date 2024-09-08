@@ -56,7 +56,6 @@ CREATE TABLE "symbol" (
   "parent"            INTEGER,
   "name"              TEXT NOT NULL,
   "flags"             INTEGER NOT NULL DEFAULT 0,
-  "parameterIndex"    INTEGER,
   "type"              TEXT,
   "value"             TEXT,
   isLocal             INT GENERATED ALWAYS AS ((flags & 1) = 1) VIRTUAL,
@@ -329,9 +328,8 @@ class SymbolExtraInfoInserter
 {
 private:
   sql::Statement m_stmt;
-  constexpr static int ParameterIndex = 1;
-  constexpr static int Type = 2;
-  constexpr static int Value = 3;
+  constexpr static int Type = 1;
+  constexpr static int Value = 2;
   sql::Statement m_macroInfo;
   sql::Statement m_namespaceAliasInfo;
   sql::Statement m_parameterInfo;
@@ -340,7 +338,7 @@ private:
 public:
   explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db), m_namespaceAliasInfo(db), m_parameterInfo(db)
   {
-    m_stmt.prepare("UPDATE symbol SET parameterIndex = ?, type = ?, value = ? WHERE id = ?");
+    m_stmt.prepare("UPDATE symbol SET type = ?, value = ? WHERE id = ?");
     m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
     m_namespaceAliasInfo.prepare("INSERT OR REPLACE INTO namespaceAliasInfo(id, value) VALUES(?,?)");
     m_parameterInfo.prepare("INSERT OR REPLACE INTO parameterInfo(id, parameterIndex, type, defaultValue) VALUES(?,?,?,?)");
@@ -351,7 +349,7 @@ public:
     for (auto sptr : symbols)
     {
       m_currentSymbol = sptr;
-      m_stmt.bind(4, m_currentSymbol->id.rawID());
+      m_stmt.bind(3, m_currentSymbol->id.rawID());
       std::visit(*this, m_currentSymbol->extraInfo);
     }
   }
@@ -371,7 +369,6 @@ public:
 
   void operator()(const FunctionInfo& info)
   {
-    m_stmt.bind(ParameterIndex, nullptr);
     m_stmt.bind(Type, std::string_view(info.returnType));
     m_stmt.bind(Value, nullptr);
 
@@ -394,7 +391,6 @@ public:
 
   void operator()(const EnumInfo& info)
   {
-    m_stmt.bind(ParameterIndex, nullptr);
     m_stmt.bind(Value, nullptr);
 
     if (!info.underlyingType.empty())
@@ -407,7 +403,6 @@ public:
 
   void operator()(const EnumConstantInfo& info)
   {
-    m_stmt.bind(ParameterIndex, nullptr);
     m_stmt.bind(Type, nullptr);
 
     if (!info.expression.empty())
@@ -420,8 +415,6 @@ public:
 
   void operator()(const VariableInfo& info)
   {
-    m_stmt.bind(ParameterIndex, nullptr);
-
     if (!info.type.empty())
       m_stmt.bind(Type, std::string_view(info.type));
     else

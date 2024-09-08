@@ -26,7 +26,7 @@ TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
     REQUIRE(inv.errors().empty());
   }
 
-  TemporarySnapshot s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   SymbolRecord intpair = s.getChildSymbolByName("IntPair");
   SymbolRecord spaceship = s.getChildSymbolByName("operator<=>(const IntPair&) const", intpair.id);
@@ -53,7 +53,7 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
     REQUIRE(inv.errors().empty());
   }
 
-  TemporarySnapshot s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   SymbolRecord myaggregate = s.getChildSymbolByName("MyAggregate");
   VariableRecord flag = s.getField(myaggregate.id, "flag");
