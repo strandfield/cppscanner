@@ -359,7 +359,7 @@ class VariableRecordIterator : public SymbolRecordIterator
 {
 public:
   explicit VariableRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
-    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, type, value FROM symbol", filter))
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, type, init FROM variableRecord", filter))
   {
 
   }

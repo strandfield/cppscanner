@@ -125,6 +125,26 @@ CREATE VIEW parameterRecord (id, parent, kind, parameterIndex, type, name, defau
   LEFT JOIN parameterInfo ON symbol.id = parameterInfo.id
   WHERE (symbol.kind = 22 OR symbol.kind = 24 OR symbol.kind = 25 OR symbol.kind = 26);
 
+CREATE TABLE variableInfo (
+  id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
+  type            TEXT,
+  init            TEXT,
+  FOREIGN KEY(id) REFERENCES symbol(id)
+);
+
+CREATE VIEW variableRecord (
+  id, parent, kind, type, name, init, flags,
+  isConst, isConstexpr, isStatic, isMutable,
+  isThreadLocal, isInline
+  ) AS
+  SELECT 
+    symbol.id, symbol.parent, symbol.kind, variableInfo.type, symbol.name, variableInfo.init, symbol.flags,
+    (symbol.flags & 32 != 0), (symbol.flags & 64 != 0), (symbol.flags & 128 != 0), (symbol.flags & 256 != 0), 
+    (symbol.flags & 512 != 0), (symbol.flags & 1024 != 0)
+  FROM symbol
+  LEFT JOIN variableInfo ON symbol.id = variableInfo.id
+  WHERE (symbol.kind = 12 OR symbol.kind = 13 OR symbol.kind = 18);
+
 CREATE TABLE "symbolReferenceFlag" (
   "name"   TEXT NOT NULL,
   "value"  INTEGER NOT NULL
@@ -357,16 +377,24 @@ private:
   sql::Statement m_namespaceAliasInfo;
   sql::Statement m_functionInfo;
   sql::Statement m_parameterInfo;
+  sql::Statement m_variableInfo;
   const IndexerSymbol* m_currentSymbol = nullptr;
 
 public:
-  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db), m_namespaceAliasInfo(db), m_functionInfo(db), m_parameterInfo(db)
+  explicit SymbolExtraInfoInserter(Database& db) : 
+    m_stmt(db), 
+    m_macroInfo(db), 
+    m_namespaceAliasInfo(db), 
+    m_functionInfo(db), 
+    m_parameterInfo(db), 
+    m_variableInfo(db)
   {
     m_stmt.prepare("UPDATE symbol SET type = ?, value = ? WHERE id = ?");
     m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
     m_namespaceAliasInfo.prepare("INSERT OR REPLACE INTO namespaceAliasInfo(id, value) VALUES(?,?)");
     m_functionInfo.prepare("INSERT OR REPLACE INTO functionInfo(id, returnType) VALUES(?,?)");
     m_parameterInfo.prepare("INSERT OR REPLACE INTO parameterInfo(id, parameterIndex, type, defaultValue) VALUES(?,?,?,?)");
+    m_variableInfo.prepare("INSERT OR REPLACE INTO variableInfo(id, type, init) VALUES(?,?,?)");
   }
 
   void process(const std::vector<const IndexerSymbol*>& symbols)
@@ -440,17 +468,15 @@ public:
 
   void operator()(const VariableInfo& info)
   {
-    if (!info.type.empty())
-      m_stmt.bind(Type, std::string_view(info.type));
-    else
-      m_stmt.bind(Type, nullptr);
+    m_variableInfo.bind(1, m_currentSymbol->id.rawID());
+    m_variableInfo.bind(2, std::string_view(info.type));
 
     if (!info.init.empty())
-      m_stmt.bind(Value, std::string_view(info.init));
+      m_variableInfo.bind(3, std::string_view(info.init));
     else
-      m_stmt.bind(Value, nullptr);
+      m_variableInfo.bind(3, nullptr);
 
-    m_stmt.insert();
+    m_variableInfo.insert();
   }
 
   void operator()(const NamespaceAliasInfo& info)
