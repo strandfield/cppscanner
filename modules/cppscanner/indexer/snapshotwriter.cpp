@@ -77,6 +77,17 @@ CREATE VIEW macroRecord (id, name, flags, definition, isUsedAsHeaderGuard, isFun
   LEFT JOIN macroInfo ON symbol.id = macroInfo.id
   WHERE symbol.kind = 4;
 
+CREATE TABLE namespaceAliasInfo (
+  id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
+  value           TEXT,
+  FOREIGN KEY(id) REFERENCES symbol(id)
+);
+
+CREATE VIEW namespaceAliasRecord (id, name, parent, flags, value, kind) AS
+  SELECT symbol.id, symbol.name, symbol.parent, symbol.flags, namespaceAliasInfo.value, 3
+  FROM symbol
+  LEFT JOIN namespaceAliasInfo ON symbol.id = namespaceAliasInfo.id
+  WHERE symbol.kind = 3;
 
 CREATE TABLE "symbolReferenceFlag" (
   "name"   TEXT NOT NULL,
@@ -308,13 +319,15 @@ private:
   constexpr static int Type = 2;
   constexpr static int Value = 3;
   sql::Statement m_macroInfo;
+  sql::Statement m_namespaceAliasInfo;
   const IndexerSymbol* m_currentSymbol = nullptr;
 
 public:
-  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db)
+  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db), m_namespaceAliasInfo(db)
   {
     m_stmt.prepare("UPDATE symbol SET parameterIndex = ?, type = ?, value = ? WHERE id = ?");
     m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
+    m_namespaceAliasInfo.prepare("INSERT OR REPLACE INTO namespaceAliasInfo(id, value) VALUES(?,?)");
   }
 
   void process(const std::vector<const IndexerSymbol*>& symbols)
@@ -407,15 +420,10 @@ public:
 
   void operator()(const NamespaceAliasInfo& info)
   {
-    m_stmt.bind(ParameterIndex, nullptr);
-    m_stmt.bind(Type, nullptr);
+    m_namespaceAliasInfo.bind(1, m_currentSymbol->id.rawID());
+    m_namespaceAliasInfo.bind(2, std::string_view(info.value));
 
-    if (!info.value.empty())
-      m_stmt.bind(Value, std::string_view(info.value));
-    else
-      m_stmt.bind(Value, nullptr);
-
-    m_stmt.insert();
+    m_namespaceAliasInfo.insert();
   }
 };
 
