@@ -10,7 +10,6 @@
 #include "cppscanner/database/readrows.h"
 #include "cppscanner/database/transaction.h"
 
-#include "cppscanner/index/relation.h"
 #include "cppscanner/index/symbol.h"
 
 #include <algorithm>
@@ -78,11 +77,6 @@ CREATE TABLE "symbolReference" (
   FOREIGN KEY("symbol_id")        REFERENCES "symbol"("id"),
   FOREIGN KEY("file_id")          REFERENCES "file"("id"),
   FOREIGN KEY("parent_symbol_id") REFERENCES "symbol"("id")
-);
-
-CREATE TABLE "relationPredicate" (
-  "id"   INTEGER NOT NULL PRIMARY KEY UNIQUE,
-  "name" TEXT NOT NULL
 );
 
 CREATE TABLE "baseOf" (
@@ -181,17 +175,6 @@ static void insert_enum_values(Database& db)
 
     stmt.finalize();
   }
-
-  /*stmt.prepare("INSERT INTO relationPredicate (id, name) VALUES(?, ?)");
-
-  enumerateRelationKind([&stmt](RelationKind k) {
-  stmt.bind(1, static_cast<int>(k));
-  stmt.bind(2, getRelationKindString(k));
-  stmt.step();
-  stmt.reset();
-  });
-
-  stmt.finalize();*/
 
   {
     stmt.prepare("INSERT INTO symbolReferenceFlag (name, value) VALUES(?, ?)");
