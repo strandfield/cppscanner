@@ -326,7 +326,7 @@ class EnumConstantRecordIterator : public SymbolRecordIterator
 {
 public:
   explicit EnumConstantRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
-    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM symbol", filter.ofKind(SymbolKind::EnumConstant)))
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM enumConstantRecord", filter))
   {
 
   }

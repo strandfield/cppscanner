@@ -88,6 +88,19 @@ CREATE VIEW namespaceAliasRecord (id, name, parent, flags, value, kind) AS
   LEFT JOIN namespaceAliasInfo ON symbol.id = namespaceAliasInfo.id
   WHERE symbol.kind = 3;
 
+CREATE TABLE enumConstantInfo (
+  id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
+  value           INTEGER,
+  expression      TEXT,
+  FOREIGN KEY(id) REFERENCES symbol(id)
+);
+
+CREATE VIEW enumConstantRecord (id, parent, name, value, expression, kind, flags) AS
+  SELECT symbol.id, symbol.parent, symbol.name, enumConstantInfo.value, enumConstantInfo.expression, 14, symbol.flags
+  FROM symbol
+  LEFT JOIN enumConstantInfo ON symbol.id = enumConstantInfo.id
+  WHERE symbol.kind = 14;
+
 CREATE TABLE functionInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
   returnType      TEXT,
@@ -375,6 +388,7 @@ private:
   constexpr static int Value = 2;
   sql::Statement m_macroInfo;
   sql::Statement m_namespaceAliasInfo;
+  sql::Statement m_enumConstantInfo;
   sql::Statement m_functionInfo;
   sql::Statement m_parameterInfo;
   sql::Statement m_variableInfo;
@@ -385,6 +399,7 @@ public:
     m_stmt(db), 
     m_macroInfo(db), 
     m_namespaceAliasInfo(db), 
+    m_enumConstantInfo(db), 
     m_functionInfo(db), 
     m_parameterInfo(db), 
     m_variableInfo(db)
@@ -392,6 +407,7 @@ public:
     m_stmt.prepare("UPDATE symbol SET type = ?, value = ? WHERE id = ?");
     m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
     m_namespaceAliasInfo.prepare("INSERT OR REPLACE INTO namespaceAliasInfo(id, value) VALUES(?,?)");
+    m_enumConstantInfo.prepare("INSERT OR REPLACE INTO enumConstantInfo(id, value, expression) VALUES(?,?,?)");
     m_functionInfo.prepare("INSERT OR REPLACE INTO functionInfo(id, returnType) VALUES(?,?)");
     m_parameterInfo.prepare("INSERT OR REPLACE INTO parameterInfo(id, parameterIndex, type, defaultValue) VALUES(?,?,?,?)");
     m_variableInfo.prepare("INSERT OR REPLACE INTO variableInfo(id, type, init) VALUES(?,?,?)");
@@ -456,14 +472,16 @@ public:
 
   void operator()(const EnumConstantInfo& info)
   {
-    m_stmt.bind(Type, nullptr);
+    m_enumConstantInfo.bind(1, m_currentSymbol->id.rawID());
+    m_enumConstantInfo.bind(2, info.value);
 
-    if (!info.expression.empty())
-      m_stmt.bind(Value, std::string_view(info.expression));
-    else
-      m_stmt.bind(Value, nullptr);
+    if (!info.expression.empty()) {
+      m_enumConstantInfo.bind(3, std::string_view(info.expression));
+    } else {
+      m_enumConstantInfo.bind(3, nullptr);
+    }
 
-    m_stmt.insert();
+    m_enumConstantInfo.insert();
   }
 
   void operator()(const VariableInfo& info)

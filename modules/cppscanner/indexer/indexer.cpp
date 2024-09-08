@@ -429,9 +429,11 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::EnumConstant:
   {
     const auto* cst = llvm::dyn_cast<clang::EnumConstantDecl>(decl);
+
+    symbol.getExtraInfo<EnumConstantInfo>().value = cst->getInitVal().getExtValue();
+
     if (cst->getInitExpr()) {
       symbol.getExtraInfo<EnumConstantInfo>().expression = prettyPrint(cst->getInitExpr(), m_indexer);
-      symbol.getExtraInfo<EnumConstantInfo>().value = cst->getInitVal().getExtValue();
     }
   }
   break;
