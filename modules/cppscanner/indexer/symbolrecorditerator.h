@@ -393,7 +393,7 @@ class ParameterRecordIterator : public SymbolRecordIterator
 {
 public:
   explicit ParameterRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
-    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, parameterIndex, type, value FROM symbol", filter))
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, parameterIndex, type, defaultValue FROM parameterRecord", filter))
   {
 
   }

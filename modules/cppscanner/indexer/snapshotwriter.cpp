@@ -89,6 +89,20 @@ CREATE VIEW namespaceAliasRecord (id, name, parent, flags, value, kind) AS
   LEFT JOIN namespaceAliasInfo ON symbol.id = namespaceAliasInfo.id
   WHERE symbol.kind = 3;
 
+CREATE TABLE parameterInfo (
+  id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
+  parameterIndex  INTEGER,
+  type            TEXT,
+  defaultValue    TEXT,
+  FOREIGN KEY(id) REFERENCES symbol(id)
+);
+
+CREATE VIEW parameterRecord (id, parent, kind, parameterIndex, type, name, defaultValue, flags) AS
+  SELECT symbol.id, symbol.parent, symbol.kind, parameterInfo.parameterIndex, parameterInfo.type, symbol.name, parameterInfo.defaultValue, symbol.flags
+  FROM symbol
+  LEFT JOIN parameterInfo ON symbol.id = parameterInfo.id
+  WHERE (symbol.kind = 22 OR symbol.kind = 24 OR symbol.kind = 25 OR symbol.kind = 26);
+
 CREATE TABLE "symbolReferenceFlag" (
   "name"   TEXT NOT NULL,
   "value"  INTEGER NOT NULL
@@ -320,14 +334,16 @@ private:
   constexpr static int Value = 3;
   sql::Statement m_macroInfo;
   sql::Statement m_namespaceAliasInfo;
+  sql::Statement m_parameterInfo;
   const IndexerSymbol* m_currentSymbol = nullptr;
 
 public:
-  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db), m_namespaceAliasInfo(db)
+  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db), m_namespaceAliasInfo(db), m_parameterInfo(db)
   {
     m_stmt.prepare("UPDATE symbol SET parameterIndex = ?, type = ?, value = ? WHERE id = ?");
     m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
     m_namespaceAliasInfo.prepare("INSERT OR REPLACE INTO namespaceAliasInfo(id, value) VALUES(?,?)");
+    m_parameterInfo.prepare("INSERT OR REPLACE INTO parameterInfo(id, parameterIndex, type, defaultValue) VALUES(?,?,?,?)");
   }
 
   void process(const std::vector<const IndexerSymbol*>& symbols)
@@ -364,15 +380,16 @@ public:
 
   void operator()(const ParameterInfo& info)
   {
-    m_stmt.bind(ParameterIndex, info.parameterIndex);
-    m_stmt.bind(Type, std::string_view(info.type));
+    m_parameterInfo.bind(1, m_currentSymbol->id.rawID());
+    m_parameterInfo.bind(2, info.parameterIndex);
+    m_parameterInfo.bind(3, std::string_view(info.type));
 
     if (!info.defaultValue.empty())
-      m_stmt.bind(Value, std::string_view(info.defaultValue));
+      m_parameterInfo.bind(4, std::string_view(info.defaultValue));
     else
-      m_stmt.bind(Value, nullptr);
+      m_parameterInfo.bind(4, nullptr);
 
-    m_stmt.insert();
+    m_parameterInfo.insert();
   }
 
   void operator()(const EnumInfo& info)
