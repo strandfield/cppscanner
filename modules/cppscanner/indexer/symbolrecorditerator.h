@@ -389,6 +389,39 @@ struct record_traits<VariableRecord>
 };
 
 
+class FunctionRecordIterator : public SymbolRecordIterator
+{
+public:
+  explicit FunctionRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, returnType FROM functionRecord", filter))
+  {
+
+  }
+
+  typedef FunctionRecord value_t;
+
+  FunctionRecord next()
+  {
+    FunctionRecord r;
+    fill(r, stmt());
+    advance();
+    return r;
+  }
+
+  static void fill(FunctionRecord& record, sql::Statement& row)
+  {
+    SymbolRecordIterator::fill(record, row);
+    record.returnType = row.column(5);
+  }
+};
+
+template<>
+struct record_traits<FunctionRecord>
+{
+  typedef FunctionRecordIterator record_iterator_t;
+};
+
+
 class ParameterRecordIterator : public SymbolRecordIterator
 {
 public:

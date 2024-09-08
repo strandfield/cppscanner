@@ -130,7 +130,7 @@ struct FunctionInfo
   static_assert(Inline == SymbolFlag::MinCustomFlag);
 
   std::string returnType;
-  std::string declaration;
+  //std::string declaration;
 };
 
 struct FunctionRecord : SymbolRecord, FunctionInfo { };

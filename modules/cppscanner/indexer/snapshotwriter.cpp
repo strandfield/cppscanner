@@ -88,6 +88,29 @@ CREATE VIEW namespaceAliasRecord (id, name, parent, flags, value, kind) AS
   LEFT JOIN namespaceAliasInfo ON symbol.id = namespaceAliasInfo.id
   WHERE symbol.kind = 3;
 
+CREATE TABLE functionInfo (
+  id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
+  returnType      TEXT,
+  FOREIGN KEY(id) REFERENCES symbol(id)
+);
+
+CREATE VIEW functionRecord (
+  id, parent, kind, name, returnType, flags, 
+  isInline, isStatic, isConstexpr, isConsteval, 
+  isNoexcept, isDefault, isDelete, isConst, 
+  isVirtual, isPure, isOverride, isFinal, 
+  isExplicit
+  ) AS
+  SELECT 
+    symbol.id, symbol.parent, symbol.kind, symbol.name, functionInfo.returnType, symbol.flags,
+    (symbol.flags & 32 != 0), (symbol.flags & 64 != 0), (symbol.flags & 128 != 0), (symbol.flags & 256 != 0), 
+    (symbol.flags & 512 != 0), (symbol.flags & 1024 != 0), (symbol.flags & 2048 != 0), (symbol.flags & 4096 != 0),
+    (symbol.flags & 8192 != 0), (symbol.flags & 16384 != 0), (symbol.flags & 32768 != 0), (symbol.flags & 65536 != 0),
+    (symbol.flags & 131072 != 0)
+  FROM symbol
+  LEFT JOIN functionInfo ON symbol.id = functionInfo.id
+  WHERE (symbol.kind = 11 OR symbol.kind = 15 OR symbol.kind = 17 OR symbol.kind = 19 OR symbol.kind = 20 OR symbol.kind = 21);
+
 CREATE TABLE parameterInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
   parameterIndex  INTEGER,
@@ -332,15 +355,17 @@ private:
   constexpr static int Value = 2;
   sql::Statement m_macroInfo;
   sql::Statement m_namespaceAliasInfo;
+  sql::Statement m_functionInfo;
   sql::Statement m_parameterInfo;
   const IndexerSymbol* m_currentSymbol = nullptr;
 
 public:
-  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db), m_namespaceAliasInfo(db), m_parameterInfo(db)
+  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db), m_namespaceAliasInfo(db), m_functionInfo(db), m_parameterInfo(db)
   {
     m_stmt.prepare("UPDATE symbol SET type = ?, value = ? WHERE id = ?");
     m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
     m_namespaceAliasInfo.prepare("INSERT OR REPLACE INTO namespaceAliasInfo(id, value) VALUES(?,?)");
+    m_functionInfo.prepare("INSERT OR REPLACE INTO functionInfo(id, returnType) VALUES(?,?)");
     m_parameterInfo.prepare("INSERT OR REPLACE INTO parameterInfo(id, parameterIndex, type, defaultValue) VALUES(?,?,?,?)");
   }
 
@@ -369,10 +394,10 @@ public:
 
   void operator()(const FunctionInfo& info)
   {
-    m_stmt.bind(Type, std::string_view(info.returnType));
-    m_stmt.bind(Value, nullptr);
+    m_functionInfo.bind(1, m_currentSymbol->id.rawID());
+    m_functionInfo.bind(2, std::string_view(info.returnType));
 
-    m_stmt.insert();
+    m_functionInfo.insert();
   }
 
   void operator()(const ParameterInfo& info)

@@ -439,6 +439,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   {
     auto* fdecl = llvm::dyn_cast<clang::FunctionDecl>(decl);
     read_fdecl_flags(*fdecl);
+
+    symbol.getExtraInfo<FunctionInfo>().returnType = prettyPrint(fdecl->getReturnType(), m_indexer);
   }
   break;
   case clang::Decl::Kind::Field:
@@ -477,6 +479,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::CXXMethod:
   case clang::Decl::Kind::CXXConstructor:
   case clang::Decl::Kind::CXXDestructor:
+  case clang::Decl::Kind::CXXConversion:
   {
     // TODO: read access specifier!!
 
@@ -491,6 +494,9 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     symbol.setFlag(FunctionInfo::Final, attr_final);
     symbol.setFlag(FunctionInfo::Override, attr_override);
 
+    if (symbol.kind == SymbolKind::InstanceMethod || symbol.kind == SymbolKind::StaticMethod) {
+      symbol.getExtraInfo<FunctionInfo>().returnType = prettyPrint(mdecl->getReturnType(), m_indexer);
+    }
   }
   break;
   case clang::Decl::Kind::ParmVar:

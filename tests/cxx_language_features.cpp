@@ -71,8 +71,9 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // function template with non-type parameter
   {
-    SymbolRecord incr = getRecord(s, SymbolRecordFilter().withNameLike("incr(%)"));
+    FunctionRecord incr = getRecord<FunctionRecord>(s, SymbolRecordFilter().withNameLike("incr(%)"));
     REQUIRE(incr.kind == SymbolKind::Function);
+    REQUIRE(incr.returnType == "int");
     std::vector<ParameterRecord> ntps = s.getFunctionParameters(incr.id, SymbolKind::NonTypeTemplateParameter);
     REQUIRE(ntps.size() == 1);
     ParameterRecord N = ntps.front();
