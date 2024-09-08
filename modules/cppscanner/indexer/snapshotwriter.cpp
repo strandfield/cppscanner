@@ -168,11 +168,6 @@ CREATE VIEW variableRecord (
   LEFT JOIN variableInfo ON symbol.id = variableInfo.id
   WHERE (symbol.kind = 12 OR symbol.kind = 13 OR symbol.kind = 18);
 
-CREATE TABLE "symbolReferenceFlag" (
-  "name"   TEXT NOT NULL,
-  "value"  INTEGER NOT NULL
-);
-
 CREATE TABLE "symbolReference" (
   "symbol_id"                     INTEGER NOT NULL,
   "file_id"                       INTEGER NOT NULL,
@@ -180,6 +175,11 @@ CREATE TABLE "symbolReference" (
   "col"                           INTEGER NOT NULL,
   "parent_symbol_id"              INTEGER,
   "flags"                         INTEGER NOT NULL DEFAULT 0,
+  isDeclaration                   INT GENERATED ALWAYS AS ((flags & 1) != 0) VIRTUAL,
+  isDefinition                    INT GENERATED ALWAYS AS ((flags & 2) != 0) VIRTUAL,
+  isRead                          INT GENERATED ALWAYS AS ((flags & 8) != 0) VIRTUAL,
+  isWrite                         INT GENERATED ALWAYS AS ((flags & 16) != 0) VIRTUAL,
+  isCall                          INT GENERATED ALWAYS AS ((flags & 32) != 0) VIRTUAL,
   FOREIGN KEY("symbol_id")        REFERENCES "symbol"("id"),
   FOREIGN KEY("file_id")          REFERENCES "file"("id"),
   FOREIGN KEY("parent_symbol_id") REFERENCES "symbol"("id")
@@ -218,7 +218,7 @@ CREATE TABLE "diagnostic" (
 
 CREATE VIEW symbolDefinition (symbol_id, file_id, line, col, flags) AS
   SELECT symbol_id, file_id, line, col, flags
-  FROM symbolReference WHERE flags & 2;
+  FROM symbolReference WHERE isDefinition = 1;
 
 COMMIT;
 )";
@@ -276,18 +276,6 @@ static void insert_enum_values(Database& db)
     enumerateDiagnosticLevel([&stmt](DiagnosticLevel lvl) {
       stmt.bind(1, static_cast<int>(lvl));
       stmt.bind(2, getDiagnosticLevelString(lvl));
-      stmt.insert();
-      });
-
-    stmt.finalize();
-  }
-
-  {
-    stmt.prepare("INSERT INTO symbolReferenceFlag (name, value) VALUES(?, ?)");
-
-    enumerateSymbolReferenceFlag([&stmt](SymbolReference::Flag f) {
-      stmt.bind(1, getSymbolReferenceFlagString(f));
-      stmt.bind(2, static_cast<int>(f));
       stmt.insert();
       });
 
