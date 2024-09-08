@@ -59,6 +59,9 @@ CREATE TABLE "symbol" (
   "parameterIndex"    INTEGER,
   "type"              TEXT,
   "value"             TEXT,
+  isLocal             INT GENERATED ALWAYS AS ((flags & 1) = 1) VIRTUAL,
+  isProtected         INT GENERATED ALWAYS AS ((flags & 2) = 2) VIRTUAL,
+  isPrivate           INT GENERATED ALWAYS AS ((flags & 4) = 4) VIRTUAL,
   FOREIGN KEY("kind") REFERENCES "symbolKind"("id")
 );
 
