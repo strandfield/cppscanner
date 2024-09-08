@@ -52,7 +52,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   // enum
   {
     SymbolRecord enumclass = s.getSymbolByName({ "cxx", "EnumClass" });
-    REQUIRE(testFlag(enumclass, EnumInfo::IsScoped));
+    REQUIRE(enumclass.kind == SymbolKind::EnumClass);
 
     EnumConstantRecord enumclass_z = getEnumConstantRecord(s, enumclass.id, "Z");
     REQUIRE(enumclass_z.expression == "25");
@@ -207,5 +207,5 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
   REQUIRE(nsB.value == "nsA::namespaceB");
 
   SymbolRecord inlNs = s.getChildSymbolByName("inlineNamespace");
-  REQUIRE(testFlag(inlNs, NamespaceInfo::Inline));
+  REQUIRE(inlNs.kind == SymbolKind::InlineNamespace);
 }

@@ -86,8 +86,7 @@ SymbolKind tr(const clang::index::SymbolKind k)
   case clang::index::SymbolKind::Variable: return SymbolKind::Variable;
   case clang::index::SymbolKind::Field: return SymbolKind::Field;
   case clang::index::SymbolKind::EnumConstant: return SymbolKind::EnumConstant;
-  case clang::index::SymbolKind::InstanceMethod: return SymbolKind::InstanceMethod;
-  case clang::index::SymbolKind::ClassMethod: return SymbolKind::ClassMethod;
+  case clang::index::SymbolKind::InstanceMethod: return SymbolKind::Method;
   case clang::index::SymbolKind::StaticMethod: return SymbolKind::StaticMethod;
   case clang::index::SymbolKind::StaticProperty: return SymbolKind::StaticProperty;
   case clang::index::SymbolKind::Constructor: return SymbolKind::Constructor;
@@ -101,6 +100,7 @@ SymbolKind tr(const clang::index::SymbolKind k)
   case clang::index::SymbolKind::Concept: return SymbolKind::Concept;
   case clang::index::SymbolKind::Extension: [[fallthrough]]; // Obj-C
   case clang::index::SymbolKind::InstanceProperty: [[fallthrough]]; // MS C++ property (https://learn.microsoft.com/en-us/cpp/cpp/property-cpp?view=msvc-170)
+  case clang::index::SymbolKind::ClassMethod: [[fallthrough]]; // Objective-C class method
   case clang::index::SymbolKind::ClassProperty: [[fallthrough]]; // AFAIK, unused
   default: return SymbolKind::Unknown;
   }
@@ -142,12 +142,13 @@ std::string prettyPrint(const clang::Expr* expr, const Indexer& idxr)
   return os.str().str();
 }
 
-std::string prettyPrint(const clang::Decl* decl, const Indexer& idxr)
+// note: would also work with a clang::Decl
+std::string prettyPrint(const clang::FunctionDecl& decl, const Indexer& idxr)
 {
   llvm::SmallString<64> str;
   llvm::raw_svector_ostream os{ str };
 
-  decl->print(os, getPrettyPrintPrintingPolicy(idxr));
+  decl.print(os, getPrettyPrintPrintingPolicy(idxr));
   
   return os.str().str();
 }
@@ -398,6 +399,14 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     symbol.setFlag(FunctionInfo::Noexcept, clang::isNoexceptExceptionSpec(fdecl.getExceptionSpecType()));
     };
 
+  auto check_is_overloaded_operator = [&symbol](const clang::FunctionDecl& fdecl) {
+    clang::OverloadedOperatorKind ook = fdecl.getOverloadedOperator();
+
+    if (ook == clang::OverloadedOperatorKind::OO_None) return;
+
+    symbol.kind = SymbolKind::Operator;
+  };
+
   switch (decl->getKind())
   {
   case clang::Decl::Kind::CXXRecord:
@@ -412,8 +421,9 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     
     if (rdecl->isLambda()) {
       // clang currently does not define a specific "symbol kind" for 
-      // lambdas and uses "class" instead ; but the distinction seems
-      // useful so we overwrite any previously set value.
+      // lambdas and uses "class" instead* ; but the distinction seems
+      // useful (at user level) so we overwrite any previously set value.
+      // *indeed, a lambda is just syntactic sugar for a class. 
       symbol.kind = SymbolKind::Lambda;
     }
     
@@ -433,8 +443,11 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     read_access();
 
     const auto* enum_decl = llvm::dyn_cast<clang::EnumDecl>(decl);
-    symbol.setFlag(EnumInfo::IsScoped,  enum_decl->isScoped());
-    
+
+    if (enum_decl->isScoped()) {
+      symbol.kind = SymbolKind::EnumClass;
+    }
+
     if (enum_decl->getIntegerTypeSourceInfo()) {
       const clang::QualType underlying_type = enum_decl->getIntegerType();
       symbol.getExtraInfo<EnumInfo>().underlyingType = prettyPrint(underlying_type, m_indexer);
@@ -456,8 +469,10 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   {
     auto* fdecl = llvm::dyn_cast<clang::FunctionDecl>(decl);
     read_fdecl_flags(*fdecl);
+    check_is_overloaded_operator(*fdecl);
 
     symbol.getExtraInfo<FunctionInfo>().returnType = prettyPrint(fdecl->getReturnType(), m_indexer);
+    symbol.getExtraInfo<FunctionInfo>().declaration = prettyPrint(*fdecl, m_indexer);
   }
   break;
   case clang::Decl::Kind::Field:
@@ -504,6 +519,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
 
     auto* mdecl = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
     read_fdecl_flags(*mdecl);
+    check_is_overloaded_operator(*mdecl);
+
     symbol.setFlag(FunctionInfo::Default, mdecl->isDefaulted());
     symbol.setFlag(FunctionInfo::Const, mdecl->isConst()); // TODO: or attr_const ?
     symbol.setFlag(FunctionInfo::Virtual, mdecl->isVirtual());
@@ -513,7 +530,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     symbol.setFlag(FunctionInfo::Final, attr_final);
     symbol.setFlag(FunctionInfo::Override, attr_override);
 
-    if (symbol.kind == SymbolKind::InstanceMethod || symbol.kind == SymbolKind::StaticMethod) {
+    if (symbol.kind == SymbolKind::Method || symbol.kind == SymbolKind::StaticMethod || symbol.kind == SymbolKind::Operator) {
       symbol.getExtraInfo<FunctionInfo>().returnType = prettyPrint(mdecl->getReturnType(), m_indexer);
     }
   }
@@ -564,8 +581,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   {
     auto* nsdecl = llvm::dyn_cast<clang::NamespaceDecl>(decl);
     if (nsdecl->isInline()) {
-      // TODO: use another symbol kind for inline namespaces ?
-      symbol.setFlag(NamespaceInfo::Inline);
+      symbol.kind = SymbolKind::InlineNamespace;
     }
   }
   break;

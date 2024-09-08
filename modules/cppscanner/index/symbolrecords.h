@@ -62,16 +62,6 @@ struct MacroInfo
 
 struct MacroRecord : SymbolRecord, MacroInfo { };
 
-struct NamespaceInfo
-{
-  enum Flag
-  {
-    Inline = 0x0020,
-  };
-
-  static_assert(Inline == SymbolFlag::MinCustomFlag);
-};
-
 struct NamespaceAliasInfo
 {
   std::string value;
@@ -130,21 +120,13 @@ struct FunctionInfo
   static_assert(Inline == SymbolFlag::MinCustomFlag);
 
   std::string returnType;
-  //std::string declaration;
+  std::string declaration;
 };
 
 struct FunctionRecord : SymbolRecord, FunctionInfo { };
 
 struct EnumInfo
 {
-  enum Flag
-  {
-    IsScoped    = 0x00020,
-  };
-
-  static_assert(IsScoped == SymbolFlag::MinCustomFlag);
-
-
   std::string underlyingType;
 };
 

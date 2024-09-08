@@ -17,6 +17,63 @@
 namespace cppscanner
 {
 
+static_assert(SymbolFlag::Local == 1);
+static_assert(SymbolFlag::Protected == 2);
+static_assert(SymbolFlag::Private == 4);
+
+static_assert(MacroInfo::MacroUsedAsHeaderGuard == 32);
+static_assert(MacroInfo::FunctionLike == 64);
+
+static_assert(static_cast<int>(SymbolKind::Macro) == 5);
+static_assert(static_cast<int>(SymbolKind::NamespaceAlias) == 4);
+static_assert(static_cast<int>(SymbolKind::Enum) == 6);
+static_assert(static_cast<int>(SymbolKind::EnumClass) == 7);
+static_assert(static_cast<int>(SymbolKind::EnumConstant) == 13);
+
+static_assert(FunctionInfo::Inline == 32);
+static_assert(FunctionInfo::Static == 64);
+static_assert(FunctionInfo::Constexpr == 128);
+static_assert(FunctionInfo::Consteval == 256);
+static_assert(FunctionInfo::Noexcept == 512);
+static_assert(FunctionInfo::Default == 1024);
+static_assert(FunctionInfo::Delete == 2048);
+static_assert(FunctionInfo::Const == 4096);
+static_assert(FunctionInfo::Virtual == 8192);
+static_assert(FunctionInfo::Pure == 16384);
+static_assert(FunctionInfo::Override == 32768);
+static_assert(FunctionInfo::Final == 65536);
+static_assert(FunctionInfo::Explicit == 131072);
+
+static_assert(static_cast<int>(SymbolKind::Function) == 17);
+static_assert(static_cast<int>(SymbolKind::Method) == 18);
+static_assert(static_cast<int>(SymbolKind::StaticMethod) == 19);
+static_assert(static_cast<int>(SymbolKind::Constructor) == 20);
+static_assert(static_cast<int>(SymbolKind::Destructor) == 21);
+static_assert(static_cast<int>(SymbolKind::Operator) == 22);
+static_assert(static_cast<int>(SymbolKind::ConversionFunction) == 23);
+
+static_assert(static_cast<int>(SymbolKind::Parameter) == 25);
+static_assert(static_cast<int>(SymbolKind::TemplateTypeParameter) == 26);
+static_assert(static_cast<int>(SymbolKind::TemplateTemplateParameter) == 27);
+static_assert(static_cast<int>(SymbolKind::NonTypeTemplateParameter) == 28);
+
+static_assert(VariableInfo::Const == 32);
+static_assert(VariableInfo::Constexpr == 64);
+static_assert(VariableInfo::Static == 128);
+static_assert(VariableInfo::Mutable == 256);
+static_assert(VariableInfo::ThreadLocal == 512);
+static_assert(VariableInfo::Inline == 1024);
+
+static_assert(static_cast<int>(SymbolKind::Variable) == 14);
+static_assert(static_cast<int>(SymbolKind::Field) == 15);
+static_assert(static_cast<int>(SymbolKind::StaticProperty) == 16);
+
+static_assert(SymbolReference::Declaration == 1);
+static_assert(SymbolReference::Definition == 2);
+static_assert(SymbolReference::Read == 8);
+static_assert(SymbolReference::Write == 16);
+static_assert(SymbolReference::Call == 32);
+
 static const char* SQL_CREATE_STATEMENTS = R"(
 BEGIN TRANSACTION;
 
@@ -69,10 +126,10 @@ CREATE TABLE macroInfo (
 );
 
 CREATE VIEW macroRecord (id, name, flags, definition, isUsedAsHeaderGuard, isFunctionLike, kind, parent) AS
-  SELECT symbol.id, symbol.name, symbol.flags, macroInfo.definition, ((flags & 32) = 32), ((flags & 64) = 64), 4, NULL
+  SELECT symbol.id, symbol.name, symbol.flags, macroInfo.definition, ((flags & 32) = 32), ((flags & 64) = 64), 5, NULL
   FROM symbol
   LEFT JOIN macroInfo ON symbol.id = macroInfo.id
-  WHERE symbol.kind = 4;
+  WHERE symbol.kind = 5;
 
 CREATE TABLE namespaceAliasInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
@@ -81,10 +138,10 @@ CREATE TABLE namespaceAliasInfo (
 );
 
 CREATE VIEW namespaceAliasRecord (id, name, parent, flags, value, kind) AS
-  SELECT symbol.id, symbol.name, symbol.parent, symbol.flags, namespaceAliasInfo.value, 3
+  SELECT symbol.id, symbol.name, symbol.parent, symbol.flags, namespaceAliasInfo.value, 4
   FROM symbol
   LEFT JOIN namespaceAliasInfo ON symbol.id = namespaceAliasInfo.id
-  WHERE symbol.kind = 3;
+  WHERE symbol.kind = 4;
 
 CREATE TABLE enumInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
@@ -93,10 +150,10 @@ CREATE TABLE enumInfo (
 );
 
 CREATE VIEW enumRecord (id, parent, name, integerType, kind, flags) AS
-  SELECT symbol.id, symbol.parent, symbol.name, enumInfo.integerType, 5, symbol.flags
+  SELECT symbol.id, symbol.parent, symbol.name, enumInfo.integerType, symbol.kind, symbol.flags
   FROM symbol
   LEFT JOIN enumInfo ON symbol.id = enumInfo.id
-  WHERE symbol.kind = 5;
+  WHERE (symbol.kind = 6 OR symbol.kind = 7);
 
 CREATE TABLE enumConstantInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
@@ -106,10 +163,10 @@ CREATE TABLE enumConstantInfo (
 );
 
 CREATE VIEW enumConstantRecord (id, parent, name, value, expression, kind, flags) AS
-  SELECT symbol.id, symbol.parent, symbol.name, enumConstantInfo.value, enumConstantInfo.expression, 14, symbol.flags
+  SELECT symbol.id, symbol.parent, symbol.name, enumConstantInfo.value, enumConstantInfo.expression, 13, symbol.flags
   FROM symbol
   LEFT JOIN enumConstantInfo ON symbol.id = enumConstantInfo.id
-  WHERE symbol.kind = 14;
+  WHERE symbol.kind = 13;
 
 CREATE TABLE functionInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
@@ -132,7 +189,7 @@ CREATE VIEW functionRecord (
     (symbol.flags & 131072 != 0)
   FROM symbol
   LEFT JOIN functionInfo ON symbol.id = functionInfo.id
-  WHERE (symbol.kind = 11 OR symbol.kind = 15 OR symbol.kind = 17 OR symbol.kind = 19 OR symbol.kind = 20 OR symbol.kind = 21);
+  WHERE (symbol.kind >= 17 AND symbol.kind <= 23);
 
 CREATE TABLE parameterInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
@@ -146,7 +203,7 @@ CREATE VIEW parameterRecord (id, parent, kind, parameterIndex, type, name, defau
   SELECT symbol.id, symbol.parent, symbol.kind, parameterInfo.parameterIndex, parameterInfo.type, symbol.name, parameterInfo.defaultValue, symbol.flags
   FROM symbol
   LEFT JOIN parameterInfo ON symbol.id = parameterInfo.id
-  WHERE (symbol.kind = 22 OR symbol.kind = 24 OR symbol.kind = 25 OR symbol.kind = 26);
+  WHERE (symbol.kind >= 25 AND symbol.kind <= 28);
 
 CREATE TABLE variableInfo (
   id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
@@ -166,7 +223,7 @@ CREATE VIEW variableRecord (
     (symbol.flags & 512 != 0), (symbol.flags & 1024 != 0)
   FROM symbol
   LEFT JOIN variableInfo ON symbol.id = variableInfo.id
-  WHERE (symbol.kind = 12 OR symbol.kind = 13 OR symbol.kind = 18);
+  WHERE (symbol.kind = 14 OR symbol.kind = 15 OR symbol.kind = 16);
 
 CREATE TABLE "symbolReference" (
   "symbol_id"                     INTEGER NOT NULL,

@@ -64,7 +64,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
     REQUIRE(bases.front().baseClassID == idxdtcon.id);
 
     SymbolRecord handle_decl_occurrence_derived = getRecord(s, SymbolRecordFilter().withNameLike("handleDeclOccurrence(%)").withParent(indexer.id));
-    REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::InstanceMethod);
+    REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::Method);
     REQUIRE(testFlag(handle_decl_occurrence_derived, FunctionInfo::Final));
 
     SymbolRecord handle_decl_occurrence_base = getRecord(s, SymbolRecordFilter().withNameLike("handleDeclOccurrence(%)").withParent(idxdtcon.id));
