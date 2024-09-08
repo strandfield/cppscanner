@@ -260,7 +260,7 @@ class MacroRecordIterator : public SymbolRecordIterator
 {
 public:
   explicit MacroRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
-    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, value FROM symbol", filter.ofKind(SymbolKind::Macro)))
+    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, definition FROM macroRecord", filter.ofKind(SymbolKind::Macro)))
   {
 
   }

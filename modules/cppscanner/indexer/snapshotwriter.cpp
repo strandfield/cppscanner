@@ -65,6 +65,19 @@ CREATE TABLE "symbol" (
   FOREIGN KEY("kind") REFERENCES "symbolKind"("id")
 );
 
+CREATE TABLE macroInfo (
+  id              INTEGER NOT NULL PRIMARY KEY UNIQUE,
+  definition      TEXT,
+  FOREIGN KEY(id) REFERENCES symbol(id)
+);
+
+CREATE VIEW macroRecord (id, name, flags, definition, isUsedAsHeaderGuard, isFunctionLike, kind, parent) AS
+  SELECT symbol.id, symbol.name, symbol.flags, macroInfo.definition, ((flags & 32) = 32), ((flags & 64) = 64), 4, NULL
+  FROM symbol
+  LEFT JOIN macroInfo ON symbol.id = macroInfo.id
+  WHERE symbol.kind = 4;
+
+
 CREATE TABLE "symbolReferenceFlag" (
   "name"   TEXT NOT NULL,
   "value"  INTEGER NOT NULL
@@ -294,20 +307,23 @@ private:
   constexpr static int ParameterIndex = 1;
   constexpr static int Type = 2;
   constexpr static int Value = 3;
+  sql::Statement m_macroInfo;
+  const IndexerSymbol* m_currentSymbol = nullptr;
 
 public:
-  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db)
+  explicit SymbolExtraInfoInserter(Database& db) : m_stmt(db), m_macroInfo(db)
   {
     m_stmt.prepare("UPDATE symbol SET parameterIndex = ?, type = ?, value = ? WHERE id = ?");
+    m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
   }
 
   void process(const std::vector<const IndexerSymbol*>& symbols)
   {
     for (auto sptr : symbols)
     {
-      const IndexerSymbol& sym = *sptr;
-      m_stmt.bind(4, sym.id.rawID());
-      std::visit(*this, sym.extraInfo);
+      m_currentSymbol = sptr;
+      m_stmt.bind(4, m_currentSymbol->id.rawID());
+      std::visit(*this, m_currentSymbol->extraInfo);
     }
   }
 
@@ -318,11 +334,10 @@ public:
 
   void operator()(const MacroInfo& info)
   {
-    m_stmt.bind(ParameterIndex, nullptr);
-    m_stmt.bind(Type, nullptr);
-    m_stmt.bind(Value, std::string_view(info.definition));
+    m_macroInfo.bind(1, m_currentSymbol->id.rawID());
+    m_macroInfo.bind(2, std::string_view(info.definition));
 
-    m_stmt.insert();
+    m_macroInfo.insert();
   }
 
   void operator()(const FunctionInfo& info)
