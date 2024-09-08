@@ -83,6 +83,7 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
     REQUIRE(testFlag(base_method, FunctionInfo::Virtual));
     REQUIRE(testFlag(base_method, FunctionInfo::Pure));
     REQUIRE(testFlag(derived_method, FunctionInfo::Override));
+    REQUIRE(testFlag(derived_method, SymbolFlag::Protected));
     std::vector<Override> overrides = s.getOverridesOf(base_method.id);
     REQUIRE(overrides.size() == 1);
     REQUIRE(overrides.front().overrideMethodID == derived_method.id);

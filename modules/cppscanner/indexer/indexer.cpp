@@ -384,6 +384,12 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     }
   }
 
+  auto read_access = [&symbol, decl]() {
+    clang::AccessSpecifier access = decl->getAccess();
+    symbol.setFlag(SymbolFlag::Protected, (access == clang::AccessSpecifier::AS_protected));
+    symbol.setFlag(SymbolFlag::Private, (access == clang::AccessSpecifier::AS_private));
+  };
+
   auto read_fdecl_flags = [&symbol](const clang::FunctionDecl& fdecl) {
     symbol.setFlag(FunctionInfo::Delete, fdecl.isDeleted());
     symbol.setFlag(FunctionInfo::Static, fdecl.isStatic());
@@ -396,6 +402,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   {
   case clang::Decl::Kind::CXXRecord:
   {
+    read_access();
+
     auto* rdecl = llvm::dyn_cast<clang::RecordDecl>(decl);
 
     if (attr_final) {
@@ -422,6 +430,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   break;
   case clang::Decl::Kind::Enum:
   {
+    read_access();
+
     const auto* enum_decl = llvm::dyn_cast<clang::EnumDecl>(decl);
     symbol.setFlag(EnumInfo::IsScoped,  enum_decl->isScoped());
     
@@ -452,6 +462,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   break;
   case clang::Decl::Kind::Field:
   {
+    read_access();
+
     auto* fdecl = llvm::dyn_cast<clang::FieldDecl>(decl);
     symbol.setFlag(VariableInfo::Const, fdecl->getTypeSourceInfo()->getType().isConstQualified());
 
@@ -488,7 +500,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::CXXDestructor:
   case clang::Decl::Kind::CXXConversion:
   {
-    // TODO: read access specifier!!
+    read_access();
 
     auto* mdecl = llvm::dyn_cast<clang::CXXMethodDecl>(decl);
     read_fdecl_flags(*mdecl);
