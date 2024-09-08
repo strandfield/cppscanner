@@ -56,8 +56,6 @@ CREATE TABLE "symbol" (
   "parent"            INTEGER,
   "name"              TEXT NOT NULL,
   "flags"             INTEGER NOT NULL DEFAULT 0,
-  "type"              TEXT,
-  "value"             TEXT,
   isLocal             INT GENERATED ALWAYS AS ((flags & 1) = 1) VIRTUAL,
   isProtected         INT GENERATED ALWAYS AS ((flags & 2) = 2) VIRTUAL,
   isPrivate           INT GENERATED ALWAYS AS ((flags & 4) = 4) VIRTUAL,
@@ -395,9 +393,6 @@ void SnapshotWriter::insertIncludes(const std::vector<Include>& includes)
 class SymbolExtraInfoInserter
 {
 private:
-  sql::Statement m_stmt;
-  constexpr static int Type = 1;
-  constexpr static int Value = 2;
   sql::Statement m_macroInfo;
   sql::Statement m_namespaceAliasInfo;
   sql::Statement m_enumInfo;
@@ -409,7 +404,6 @@ private:
 
 public:
   explicit SymbolExtraInfoInserter(Database& db) : 
-    m_stmt(db), 
     m_macroInfo(db), 
     m_namespaceAliasInfo(db), 
     m_enumInfo(db), 
@@ -418,7 +412,6 @@ public:
     m_parameterInfo(db), 
     m_variableInfo(db)
   {
-    m_stmt.prepare("UPDATE symbol SET type = ?, value = ? WHERE id = ?");
     m_macroInfo.prepare("INSERT OR REPLACE INTO macroInfo(id, definition) VALUES(?,?)");
     m_namespaceAliasInfo.prepare("INSERT OR REPLACE INTO namespaceAliasInfo(id, value) VALUES(?,?)");
     m_enumInfo.prepare("INSERT OR REPLACE INTO enumInfo(id, integerType) VALUES(?,?)");
@@ -433,7 +426,6 @@ public:
     for (auto sptr : symbols)
     {
       m_currentSymbol = sptr;
-      m_stmt.bind(3, m_currentSymbol->id.rawID());
       std::visit(*this, m_currentSymbol->extraInfo);
     }
   }
