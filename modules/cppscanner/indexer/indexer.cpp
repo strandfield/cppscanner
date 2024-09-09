@@ -360,6 +360,14 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     symbol.setLocal();
   }
 
+  if (symbol.kind == SymbolKind::TemplateTypeParameter || symbol.kind == SymbolKind::NonTypeTemplateParameter) {
+    // TODO: clang does not seem to consider a class template parameter as being local.
+    // is it the same for function template ? doesn't appear to be...
+    // --> investigate and decide if we should mark it local nonetheless.
+    // symbol.setLocal();
+  }
+
+
   // j'imagine qu'au moment de récupérer le parent on peut savoir si le symbol est exporté
   // en regardant si l'un des parents est un ExportDecl.
   IndexerSymbol* parent_symbol = getParentSymbol(symbol, decl); 
@@ -487,6 +495,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     varinfo.type = prettyPrint(fdecl->getTypeSourceInfo()->getType(), m_indexer);
 
     if (fdecl->getInClassInitializer()) {
+      // TODO: do no write init unless variable is const ?
       varinfo.init = prettyPrint(fdecl->getInClassInitializer(), m_indexer);
     }
   }
@@ -501,6 +510,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
       symbol.setFlag(VariableInfo::Static);
 
       if (vardecl->getInit()) {
+        // TODO: do no write init unless variable is const ?
         varinfo.init = prettyPrint(vardecl->getInit(), m_indexer);
       }
     }
