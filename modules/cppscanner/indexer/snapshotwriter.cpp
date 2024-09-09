@@ -354,6 +354,7 @@ SnapshotWriter::SnapshotWriter(const std::filesystem::path& databasePath) :
 
   sql::runTransacted(database(), [this]() {
     insert_enum_values(database());
+    setProperty("database.schema.version", "0");
     });
 }
 
