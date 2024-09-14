@@ -32,6 +32,7 @@ enum class SymbolKind
   Union,
   Lambda,
 
+  Typedef,
   TypeAlias,
 
   EnumConstant,
@@ -86,6 +87,7 @@ inline std::string_view getSymbolKindString(SymbolKind w)
   case SymbolKind::Class:                     return "class";
   case SymbolKind::Union:                     return "union";
   case SymbolKind::Lambda:                    return "lambda";
+  case SymbolKind::Typedef:                   return "typedef";
   case SymbolKind::TypeAlias:                 return "type-alias";
   case SymbolKind::EnumConstant:              return "enum-constant";
   case SymbolKind::Variable:                  return "variable";
@@ -128,6 +130,7 @@ void enumerateSymbolKind(F&& fn)
   fn(SymbolKind::Union);
   fn(SymbolKind::Lambda);
 
+  fn(SymbolKind::Typedef);
   fn(SymbolKind::TypeAlias);
 
   fn(SymbolKind::EnumConstant);

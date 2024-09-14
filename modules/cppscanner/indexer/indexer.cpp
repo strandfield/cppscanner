@@ -610,6 +610,15 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     // not just the string representation of it.
   }
   break;
+  case clang::Decl::Kind::Typedef:
+  {
+    auto* tpd_decl = llvm::dyn_cast<clang::TypedefDecl>(decl);
+    // it seems clang uses the "typealias" kind for typedefs.
+    // we use a dedicated kind instead.
+    assert(symbol.kind == SymbolKind::TypeAlias);
+    symbol.kind = SymbolKind::Typedef;
+  }
+  break;
   case clang::Decl::Kind::Import:
   {
     auto* imp = llvm::dyn_cast<clang::ImportDecl>(decl);

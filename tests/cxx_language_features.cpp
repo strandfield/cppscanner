@@ -131,17 +131,13 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     REQUIRE(tparams.size() == 1);
 
     std::vector<SymbolRecord> typealiases =  s.getChildSymbols(container_class_template.id, SymbolKind::TypeAlias);
-    REQUIRE(typealiases.size() == 2);
-    if (typealiases.front().name == "value_type_t") {
-      std::swap(typealiases.front(), typealiases.back());
-    }
     const SymbolRecord& typealias = typealiases.front();
     REQUIRE(typealias.name == "value_type");
     REQUIRE(!testFlag(typealias, SymbolFlag::Local));
 
-    //std::vector<SymbolRecord> typedefs =  s.getChildSymbols(container_class_template.id, SymbolKind::Type);
-    //REQUIRE(typedefs.size() == 1);
-    const SymbolRecord& thetypedef = typealiases.back();
+    std::vector<SymbolRecord> typedefs =  s.getChildSymbols(container_class_template.id, SymbolKind::Typedef);
+    REQUIRE(typedefs.size() == 1);
+    const SymbolRecord& thetypedef = typedefs.front();
     REQUIRE(thetypedef.name == "value_type_t");
     REQUIRE(!testFlag(thetypedef, SymbolFlag::Local));
   }
