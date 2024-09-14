@@ -144,7 +144,7 @@ struct ClassInfo
 {
   enum Flag
   {
-    Final = SymbolFlag::MinCustomFlag
+    Final = 0x00020
   };
 
   static_assert(Final == SymbolFlag::MinCustomFlag);

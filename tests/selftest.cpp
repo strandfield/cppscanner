@@ -39,7 +39,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
   std::cout << "Self parse succeeded in " << duration.count() << "ms." << std::endl;
 
-  TemporarySnapshot s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   // verify the presence of some classes
   {

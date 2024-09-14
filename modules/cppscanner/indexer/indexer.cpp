@@ -360,11 +360,16 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     symbol.setLocal();
   }
 
-  if (symbol.kind == SymbolKind::TemplateTypeParameter || symbol.kind == SymbolKind::NonTypeTemplateParameter) {
-    // TODO: clang does not seem to consider a class template parameter as being local.
-    // is it the same for function template ? doesn't appear to be...
-    // --> investigate and decide if we should mark it local nonetheless.
-    // symbol.setLocal();
+  if (symbol.kind == SymbolKind::TemplateTypeParameter 
+    || symbol.kind == SymbolKind::NonTypeTemplateParameter 
+    || symbol.kind == SymbolKind::TemplateTemplateParameter) {
+    // note: clang's handling of the 'local' flag for template parameters does not seem to 
+    // be very consistent.
+    // it seems to be set for TemplateTypeParameter for function template but not class template,
+    // and to not be set for NonTypeTemplateParameter.
+    // there may very well be a valid reason for that, but for now we will just consider
+    // all template parameters to be local symbols.
+    symbol.setLocal();
   }
 
 
@@ -494,8 +499,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
 
     varinfo.type = prettyPrint(fdecl->getTypeSourceInfo()->getType(), m_indexer);
 
-    if (fdecl->getInClassInitializer()) {
-      // TODO: do no write init unless variable is const ?
+    if (fdecl->getInClassInitializer() && (symbol.flags & (VariableInfo::Const | VariableInfo::Constexpr))) {
       varinfo.init = prettyPrint(fdecl->getInClassInitializer(), m_indexer);
     }
   }
@@ -505,19 +509,15 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     auto* vardecl = llvm::dyn_cast<clang::VarDecl>(decl);
 
     auto& varinfo = symbol.getExtraInfo<VariableInfo>();
-    
-    if (vardecl->isStaticDataMember()) {
-      symbol.setFlag(VariableInfo::Static);
-
-      if (vardecl->getInit()) {
-        // TODO: do no write init unless variable is const ?
-        varinfo.init = prettyPrint(vardecl->getInit(), m_indexer);
-      }
-    }
 
     symbol.setFlag(VariableInfo::Const, vardecl->getTypeSourceInfo()->getType().isConstQualified());
-
     varinfo.type = prettyPrint(vardecl->getTypeSourceInfo()->getType(), m_indexer);
+    
+    symbol.setFlag(VariableInfo::Static, vardecl->isStaticDataMember());
+
+    if (vardecl->getInit() && (symbol.flags & (VariableInfo::Const | VariableInfo::Constexpr))) {
+      varinfo.init = prettyPrint(vardecl->getInit(), m_indexer);
+    }
   }
   break;
   case clang::Decl::Kind::CXXMethod:

@@ -33,3 +33,16 @@ struct is_same<T, T>
 {
   static constexpr bool value = true;
 };
+
+template<typename ElemType>
+class Container
+{
+public:
+  using value_type = ElemType;
+  typedef ElemType value_type_t;
+};
+
+void testNameTemplateParam()
+{
+  typename Container<int>::value_type n = 5;
+}

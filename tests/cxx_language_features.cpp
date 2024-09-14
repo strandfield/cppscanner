@@ -67,6 +67,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     ParameterRecord T = ttps.front();
     REQUIRE(T.name == "T");
     REQUIRE(T.parameterIndex == 0);
+    REQUIRE(testFlag(T, SymbolFlag::Local));
   }
 
   // function template with non-type parameter
@@ -80,6 +81,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     REQUIRE(N.name == "N");
     REQUIRE(N.parameterIndex == 0);
     REQUIRE(N.type == "int");
+    REQUIRE(testFlag(N, SymbolFlag::Local));
   }
 
   // class template with a specialization
@@ -102,6 +104,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
       REQUIRE(properties.size() == 1);
       VariableRecord value = properties.front();
       REQUIRE(value.name == "value");
+      REQUIRE(testFlag(value, VariableInfo::Const));
       REQUIRE(value.type == "const bool");
       REQUIRE(value.init == "false");
     }
@@ -109,6 +112,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     symbols = s.getChildSymbols(spec.id, SymbolKind::TemplateTypeParameter);
     REQUIRE(symbols.size() == 1);
     REQUIRE(symbols.front().name == "T");
+    REQUIRE(testFlag(symbols.front(), SymbolFlag::Local));
     {
       std::vector<VariableRecord> properties = s.getStaticProperties(spec.id);
       REQUIRE(properties.size() == 1);
@@ -117,6 +121,29 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
       REQUIRE(value.type == "const bool");
       REQUIRE(value.init == "true");
     }
+  }
+
+  // class template with a type-alias to the template parameter
+  {
+    SymbolRecord container_class_template = s.getSymbolByName({"Container"});
+    REQUIRE(container_class_template.kind == SymbolKind::Class);
+    std::vector<SymbolRecord> tparams =  s.getChildSymbols(container_class_template.id, SymbolKind::TemplateTypeParameter);
+    REQUIRE(tparams.size() == 1);
+
+    std::vector<SymbolRecord> typealiases =  s.getChildSymbols(container_class_template.id, SymbolKind::TypeAlias);
+    REQUIRE(typealiases.size() == 2);
+    if (typealiases.front().name == "value_type_t") {
+      std::swap(typealiases.front(), typealiases.back());
+    }
+    const SymbolRecord& typealias = typealiases.front();
+    REQUIRE(typealias.name == "value_type");
+    REQUIRE(!testFlag(typealias, SymbolFlag::Local));
+
+    //std::vector<SymbolRecord> typedefs =  s.getChildSymbols(container_class_template.id, SymbolKind::Type);
+    //REQUIRE(typedefs.size() == 1);
+    const SymbolRecord& thetypedef = typealiases.back();
+    REQUIRE(thetypedef.name == "value_type_t");
+    REQUIRE(!testFlag(thetypedef, SymbolFlag::Local));
   }
 }
 
