@@ -219,12 +219,15 @@ std::string computeName(const clang::FunctionDecl& decl, const Indexer& idxr)
   return ret;
 }
 
-void fillEmptyRecordName(IndexerSymbol& symbol, const clang::RecordDecl& decl)
+void fillEmptyName(IndexerSymbol& symbol, const clang::Decl& decl)
 {
   (void)decl; // we are not going to use 'decl' for now
 
   switch (symbol.kind)
   {
+  case SymbolKind::Namespace:
+    symbol.name = "__anonymous_namespace_" + symbol.id.toHex();
+    break;
   case SymbolKind::Lambda:
     symbol.name = "__lambda_" + symbol.id.toHex();
     break;
@@ -240,6 +243,10 @@ void fillEmptyRecordName(IndexerSymbol& symbol, const clang::RecordDecl& decl)
   default:
     break;
   }
+}
+void fillEmptyRecordName(IndexerSymbol& symbol, const clang::RecordDecl& decl)
+{
+  fillEmptyName(symbol, decl);
 }
 
 SymbolCollector::SymbolCollector(Indexer& idxr) : 
@@ -592,6 +599,10 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     auto* nsdecl = llvm::dyn_cast<clang::NamespaceDecl>(decl);
     if (nsdecl->isInline()) {
       symbol.kind = SymbolKind::InlineNamespace;
+    }
+
+    if (symbol.name.empty()) {
+      fillEmptyName(symbol, *nsdecl);
     }
   }
   break;
