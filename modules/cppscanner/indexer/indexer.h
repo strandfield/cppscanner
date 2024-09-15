@@ -46,7 +46,7 @@ public:
   void reset();
 
   IndexerSymbol* process(const clang::Decl* decl);
-  IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc);
+  IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
 
   SymbolID getSymbolId(const clang::Decl* decl) const;
   SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;

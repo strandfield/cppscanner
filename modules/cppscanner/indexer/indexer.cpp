@@ -54,11 +54,11 @@ std::string getUSR(const clang::Decl* decl)
   return std::string(chars.data(), chars.size());
 }
 
-std::string getUSR(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, const clang::SourceLocation& loc, const clang::SourceManager& sourceManager)
+std::string getUSR(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, const clang::SourceManager& sourceManager)
 {
   llvm::SmallVector<char> chars;
 
-  bool ignore = clang::index::generateUSRForMacro(name->getName(), loc, sourceManager, chars);
+  bool ignore = clang::index::generateUSRForMacro(name->getName(), macroInfo->getDefinitionLoc(), sourceManager, chars);
 
   if (ignore) {
     throw std::runtime_error("could not generate usr");
@@ -292,13 +292,14 @@ IndexerSymbol* SymbolCollector::process(const clang::Decl* decl)
   return &symbol;
 }
 
-IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc)
+IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo)
 {
   auto [it, inserted] = m_symbolIdCache.try_emplace(macroInfo, SymbolID());
 
   if (inserted) {
     try {
-      it->second = computeSymbolIdFromUsr(getUSR(name, macroInfo, loc, m_indexer.getAstContext()->getSourceManager()));
+      std::string usr = getUSR(name, macroInfo, m_indexer.getAstContext()->getSourceManager());
+      it->second = computeSymbolIdFromUsr(usr);
     } catch (const std::exception&) {
       return nullptr;
     }
@@ -1042,7 +1043,7 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
     return true;
   }
 
-  IndexerSymbol* symbol = m_symbolCollector.process(name, macroInfo, loc);
+  IndexerSymbol* symbol = m_symbolCollector.process(name, macroInfo);
 
   if (!symbol)
     return true;
