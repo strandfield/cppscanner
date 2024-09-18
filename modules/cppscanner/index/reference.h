@@ -45,13 +45,12 @@ struct SymbolReference
   {
     Declaration = 1 << 0,
     Definition = 1 << 1,
-    Reference = 1 << 2,
-    Read = 1 << 3,
-    Write = 1 << 4,
-    Call = 1 << 5,
-    Dynamic = 1 << 6,
-    AddressOf = 1 << 7,
-    Implicit = 1 << 8
+    Read = 1 << 2,
+    Write = 1 << 3,
+    Call = 1 << 4,
+    Dynamic = 1 << 5, // TODO: what is this?
+    AddressOf = 1 << 6,
+    Implicit = 1 << 7
   };
 };
 
@@ -74,7 +73,6 @@ inline std::string_view getSymbolReferenceFlagString(SymbolReference::Flag flag)
   switch (flag) {
   case SymbolReference::Declaration: return "declaration";
   case SymbolReference::Definition: return "definition";
-  case SymbolReference::Reference: return "reference";
   case SymbolReference::Read: return "read";
   case SymbolReference::Write: return "write";
   case SymbolReference::Call: return "call";
@@ -90,7 +88,6 @@ void enumerateSymbolReferenceFlag(F&& fn)
 {
   fn(SymbolReference::Declaration);
   fn(SymbolReference::Definition);
-  fn(SymbolReference::Reference);
   fn(SymbolReference::Read);
   fn(SymbolReference::Write);
   fn(SymbolReference::Call);

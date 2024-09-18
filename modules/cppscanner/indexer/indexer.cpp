@@ -1017,10 +1017,12 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
     }
   }
 
+  // note: clang defines a Reference role, but it is set when none of Declaration
+  // or Definition is set, making it redundant.
+  // see IndexingContext::handleDeclOccurrence() for the details.
   symref.flags = 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Definition) ? SymbolReference::Definition : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Declaration) ? SymbolReference::Declaration : 0;
-  symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0; // useful ?
   symref.flags |= (roles & (int)clang::index::SymbolRole::Implicit) ? SymbolReference::Implicit : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Read) ? SymbolReference::Read : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Write) ? SymbolReference::Write : 0;
@@ -1074,7 +1076,6 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
   symref.flags = 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Definition) ? SymbolReference::Definition : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Declaration) ? SymbolReference::Declaration : 0;
-  symref.flags |= (roles & (int)clang::index::SymbolRole::Reference) ? SymbolReference::Reference : 0;
 
   if (roles & (int)clang::index::SymbolRole::Reference) {
     // note about recording the result of expanding the macro:

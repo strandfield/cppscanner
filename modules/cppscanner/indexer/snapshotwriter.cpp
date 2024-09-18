@@ -71,10 +71,9 @@ static_assert(static_cast<int>(SymbolKind::StaticProperty) == 17);
 
 static_assert(SymbolReference::Declaration == 1);
 static_assert(SymbolReference::Definition == 2);
-static_assert(SymbolReference::Reference == 4);
-static_assert(SymbolReference::Read == 8);
-static_assert(SymbolReference::Write == 16);
-static_assert(SymbolReference::Call == 32);
+static_assert(SymbolReference::Read == 4);
+static_assert(SymbolReference::Write == 8);
+static_assert(SymbolReference::Call == 16);
 
 static const char* SQL_CREATE_STATEMENTS = R"(
 BEGIN TRANSACTION;
@@ -237,10 +236,10 @@ CREATE TABLE "symbolReference" (
   "flags"                         INTEGER NOT NULL DEFAULT 0,
   isDeclaration                   INT GENERATED ALWAYS AS ((flags & 1) != 0) VIRTUAL,
   isDefinition                    INT GENERATED ALWAYS AS ((flags & 2) != 0) VIRTUAL,
-  isReference                     INT GENERATED ALWAYS AS ((flags & 4) != 0) VIRTUAL,
-  isRead                          INT GENERATED ALWAYS AS ((flags & 8) != 0) VIRTUAL,
-  isWrite                         INT GENERATED ALWAYS AS ((flags & 16) != 0) VIRTUAL,
-  isCall                          INT GENERATED ALWAYS AS ((flags & 32) != 0) VIRTUAL,
+  isReference                     INT GENERATED ALWAYS AS ((flags & 3) = 0) VIRTUAL,
+  isRead                          INT GENERATED ALWAYS AS ((flags & 4) != 0) VIRTUAL,
+  isWrite                         INT GENERATED ALWAYS AS ((flags & 8) != 0) VIRTUAL,
+  isCall                          INT GENERATED ALWAYS AS ((flags & 16) != 0) VIRTUAL,
   FOREIGN KEY("symbol_id")        REFERENCES "symbol"("id"),
   FOREIGN KEY("file_id")          REFERENCES "file"("id"),
   FOREIGN KEY("parent_symbol_id") REFERENCES "symbol"("id")
