@@ -19,10 +19,10 @@ struct SymbolFlag
   enum Value
   {
     Local         = 0x0001,
-    Protected     = 0x0002,
-    Private       = 0x0004,
-    Reserved1     = 0x0008,
-    Reserved2     = 0x0010,
+    FromProject   = 0x0002, // TODO: change name ?
+    Protected     = 0x0004,
+    Private       = 0x0008,
+    Reserved1     = 0x0010,
     MinCustomFlag = 0x0020
   };
 };

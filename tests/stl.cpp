@@ -35,6 +35,8 @@ TEST_CASE("string.cpp", "[scanner][stl]")
 
   SymbolRecord init = s.getChildSymbolByName("init()");
   REQUIRE(init.kind == SymbolKind::Function);
+
+  // TODO: tester que std::string n'a pas le flag FromProject
 }
 
 TEST_CASE("vector.cpp", "[scanner][stl]")

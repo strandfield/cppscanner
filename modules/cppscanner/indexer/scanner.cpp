@@ -438,22 +438,33 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     }
   }
 
-  // TODO: insert new symbols, update the others that need it
+  // insert new new symbols, update the others that need it
   {
-    std::vector<const IndexerSymbol*> symbols;
+    std::vector<const IndexerSymbol*> symbols_to_insert;
+    std::vector<const IndexerSymbol*> symbols_with_flags_to_update;
 
     for (auto& p : tuIndex.symbols) {
-      if (d->symbols.find(p.first) == d->symbols.end()) {
+      auto it = d->symbols.find(p.first);
+      if (it == d->symbols.end()) {
         IndexerSymbol& newsymbol = d->symbols[p.first];
         newsymbol = std::move(p.second);
-        symbols.push_back(&newsymbol);
+        symbols_to_insert.push_back(&newsymbol);
       } else {
-        // TODO: check if the symbol needs to be updated
+        IndexerSymbol& existing_symbol = it->second;
+
+        if (existing_symbol.flags != p.second.flags) {
+          // TODO: this may not be the right way to update the flags
+          existing_symbol.flags |= p.second.flags;
+          symbols_with_flags_to_update.push_back(&existing_symbol);
+        }
+
+        // TODO: there may be other things to update...
       }
     }
 
-    sql::runTransacted(m_snapshot->database(), [this, &symbols]() {
-      m_snapshot->insertSymbols(symbols);
+    sql::runTransacted(m_snapshot->database(), [this, &symbols_to_insert, &symbols_with_flags_to_update]() {
+      m_snapshot->insertSymbols(symbols_to_insert);
+      m_snapshot->updateSymbolsFlags(symbols_with_flags_to_update);
       });
   }
 

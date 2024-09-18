@@ -141,6 +141,34 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     REQUIRE(thetypedef.name == "value_type_t");
     REQUIRE(!testFlag(thetypedef, SymbolFlag::Local));
   }
+
+  // test if declaration of variable is definition
+  {
+    SymbolRecord sym = s.getSymbolByName({"IncompleteType"});
+    REQUIRE(testFlag(sym, SymbolFlag::FromProject));
+    std::vector<SymbolReference> refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(!bool(refs.front().flags & SymbolReference::Definition));
+    REQUIRE(bool(refs.front().flags & SymbolReference::Declaration));
+
+    sym = s.getSymbolByName({"uninitializedGlobalVariable"});
+    refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(bool(refs.front().flags & SymbolReference::Definition));
+
+    sym = s.getSymbolByName({"uninitializedStaticGlobalVariable"});
+    refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(bool(refs.front().flags & SymbolReference::Definition));
+
+    sym = s.getSymbolByName({"uninitializedExternGlobalVariable"});
+    refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(!bool(refs.front().flags & SymbolReference::Definition));
+    REQUIRE(bool(refs.front().flags & SymbolReference::Declaration));
+  }
+
+  // TODO: tester que l'ouverture d'un namespace ajoute le flag FromProject
 }
 
 static MacroRecord getMacroRecordByName(const SnapshotReader& s, const std::string& name)

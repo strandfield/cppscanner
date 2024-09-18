@@ -58,6 +58,7 @@ public:
   void insertFilePaths(const std::vector<File>& files);
   void insertIncludes(const std::vector<Include>& includes);
   void insertSymbols(const std::vector<const IndexerSymbol*>& symbols);
+  void updateSymbolsFlags(const std::vector<const IndexerSymbol*>& symbols);
   void insertBaseOfs(const std::vector<BaseOf>& bofs);
   void insertOverrides(const std::vector<Override>& overrides);
   void insertDiagnostics(const std::vector<Diagnostic>& diagnostics);

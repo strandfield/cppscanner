@@ -1028,6 +1028,12 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
   symref.flags |= (roles & (int)clang::index::SymbolRole::Dynamic) ? SymbolReference::Dynamic : 0; // what is it?
   symref.flags |= (roles & (int)clang::index::SymbolRole::AddressOf) ? SymbolReference::AddressOf : 0;
 
+  if (symref.flags & (SymbolReference::Declaration | SymbolReference::Definition)) {
+    if (!symbol->testFlag(SymbolFlag::FromProject)) {
+      symbol->setFlag(SymbolFlag::FromProject);
+    }
+  }
+
   getCurrentIndex()->add(symref);
 
   processRelations(std::pair(decl, symbol), loc, relations);
@@ -1077,6 +1083,12 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
     // to easily get information about the expansion from clang at this point.
     // The Woboq codebrowser expands the macro manually in PreprocessorCallback::MacroExpands()
     // by creating its own clang::Lexer which is honestly too much of a pain.
+  }
+
+  if (symref.flags & (SymbolReference::Declaration | SymbolReference::Definition)) {
+    if (!symbol->testFlag(SymbolFlag::FromProject)) {
+      symbol->setFlag(SymbolFlag::FromProject);
+    }
   }
 
   getCurrentIndex()->add(symref);

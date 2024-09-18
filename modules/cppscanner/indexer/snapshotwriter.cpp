@@ -18,8 +18,9 @@ namespace cppscanner
 {
 
 static_assert(SymbolFlag::Local == 1);
-static_assert(SymbolFlag::Protected == 2);
-static_assert(SymbolFlag::Private == 4);
+static_assert(SymbolFlag::FromProject == 2);
+static_assert(SymbolFlag::Protected == 4);
+static_assert(SymbolFlag::Private == 8);
 
 static_assert(MacroInfo::MacroUsedAsHeaderGuard == 32);
 static_assert(MacroInfo::FunctionLike == 64);
@@ -70,6 +71,7 @@ static_assert(static_cast<int>(SymbolKind::StaticProperty) == 17);
 
 static_assert(SymbolReference::Declaration == 1);
 static_assert(SymbolReference::Definition == 2);
+static_assert(SymbolReference::Reference == 4);
 static_assert(SymbolReference::Read == 8);
 static_assert(SymbolReference::Write == 16);
 static_assert(SymbolReference::Call == 32);
@@ -114,8 +116,9 @@ CREATE TABLE "symbol" (
   "name"              TEXT NOT NULL,
   "flags"             INTEGER NOT NULL DEFAULT 0,
   isLocal             INT GENERATED ALWAYS AS ((flags & 1) = 1) VIRTUAL,
-  isProtected         INT GENERATED ALWAYS AS ((flags & 2) = 2) VIRTUAL,
-  isPrivate           INT GENERATED ALWAYS AS ((flags & 4) = 4) VIRTUAL,
+  isFromProject       INT GENERATED ALWAYS AS ((flags & 2) != 0) VIRTUAL,
+  isProtected         INT GENERATED ALWAYS AS ((flags & 4) = 4) VIRTUAL,
+  isPrivate           INT GENERATED ALWAYS AS ((flags & 8) = 8) VIRTUAL,
   FOREIGN KEY("kind") REFERENCES "symbolKind"("id")
 );
 
@@ -234,6 +237,7 @@ CREATE TABLE "symbolReference" (
   "flags"                         INTEGER NOT NULL DEFAULT 0,
   isDeclaration                   INT GENERATED ALWAYS AS ((flags & 1) != 0) VIRTUAL,
   isDefinition                    INT GENERATED ALWAYS AS ((flags & 2) != 0) VIRTUAL,
+  isReference                     INT GENERATED ALWAYS AS ((flags & 4) != 0) VIRTUAL,
   isRead                          INT GENERATED ALWAYS AS ((flags & 8) != 0) VIRTUAL,
   isWrite                         INT GENERATED ALWAYS AS ((flags & 16) != 0) VIRTUAL,
   isCall                          INT GENERATED ALWAYS AS ((flags & 32) != 0) VIRTUAL,
@@ -588,6 +592,31 @@ void SnapshotWriter::insertSymbols(const std::vector<const IndexerSymbol*>& symb
     stmt.bind(5, sym.flags);
 
     stmt.insert();
+  }
+
+  stmt.finalize();
+
+  insert_symbols_extra_info(database(), symbols);
+}
+
+void SnapshotWriter::updateSymbolsFlags(const std::vector<const IndexerSymbol*>& symbols)
+{
+  if (symbols.empty()) {
+    return;
+  }
+
+  sql::Statement stmt{ 
+    database(),
+    "UPDATE symbol SET flags = ? WHERE id = ?" };
+
+  for (auto sptr : symbols)
+  {
+    const IndexerSymbol& sym = *sptr;
+
+    stmt.bind(1, sym.flags);
+    stmt.bind(2, sym.id.rawID());
+
+    stmt.update();
   }
 
   stmt.finalize();

@@ -65,6 +65,7 @@ public:
 
   bool fetchNextRow();
   void insert();
+  void update();
 
   std::string errormsg() const;
   int rowid() const;
@@ -144,6 +145,12 @@ inline bool Statement::fetchNextRow()
 }
 
 inline void Statement::insert()
+{
+  step();
+  reset();
+}
+
+inline void Statement::update()
 {
   step();
   reset();
