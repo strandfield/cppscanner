@@ -48,7 +48,7 @@ struct SymbolReference
     Read = 1 << 2,
     Write = 1 << 3,
     Call = 1 << 4,
-    Dynamic = 1 << 5, // TODO: what is this?
+    Dynamic = 1 << 5, // declaration or call of virtual function
     AddressOf = 1 << 6,
     Implicit = 1 << 7
   };

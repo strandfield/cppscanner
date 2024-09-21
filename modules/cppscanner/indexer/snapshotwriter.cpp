@@ -74,6 +74,7 @@ static_assert(SymbolReference::Definition == 2);
 static_assert(SymbolReference::Read == 4);
 static_assert(SymbolReference::Write == 8);
 static_assert(SymbolReference::Call == 16);
+static_assert(SymbolReference::Dynamic == 32);
 
 static const char* SQL_CREATE_STATEMENTS = R"(
 BEGIN TRANSACTION;
@@ -240,6 +241,7 @@ CREATE TABLE "symbolReference" (
   isRead                          INT GENERATED ALWAYS AS ((flags & 4) != 0) VIRTUAL,
   isWrite                         INT GENERATED ALWAYS AS ((flags & 8) != 0) VIRTUAL,
   isCall                          INT GENERATED ALWAYS AS ((flags & 16) != 0) VIRTUAL,
+  isDynamic                       INT GENERATED ALWAYS AS ((flags & 32) != 0) VIRTUAL,
   FOREIGN KEY("symbol_id")        REFERENCES "symbol"("id"),
   FOREIGN KEY("file_id")          REFERENCES "file"("id"),
   FOREIGN KEY("parent_symbol_id") REFERENCES "symbol"("id")
