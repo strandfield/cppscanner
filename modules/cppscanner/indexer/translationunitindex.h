@@ -91,6 +91,8 @@ inline IndexerSymbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
   return it != this->symbols.end() ? &(it->second) : nullptr;
 }
 
+void sortAndRemoveDuplicates(std::vector<SymbolReference>& refs);
+
 } // namespace cppscanner
 
 #endif // CPPSCANNER_TRANSLATIONUNITINDEX_H

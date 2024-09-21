@@ -332,11 +332,6 @@ std::vector<T> merge(
   return existingElements;
 }
 
-int nbMissingFields(const SymbolReference& symref)
-{
-  return symref.referencedBySymbolID.isValid() ? 0 : 1;
-}
-
 } // namespace
 
 void Scanner::assimilate(TranslationUnitIndex tuIndex)
@@ -472,24 +467,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
   {
     // TODO: sorting and removing duplicates could be done in the parsing thread.
     // handle that with a flag indicating whether the vector is sorted.
-    std::sort(
-      tuIndex.symReferences.begin(), 
-      tuIndex.symReferences.end(), 
-      [](const SymbolReference& a, const SymbolReference& b) -> bool {
-        return std::forward_as_tuple(a.fileID, a.position, a.symbolID, nbMissingFields(a)) < 
-          std::forward_as_tuple(b.fileID, b.position, b.symbolID, nbMissingFields(b));
-      }
-    );
-
-    // remove duplicates
-    {
-      auto equiv = [](const SymbolReference& a, const SymbolReference& b) -> bool {
-        return std::forward_as_tuple(a.fileID, a.position, a.symbolID) == std::forward_as_tuple(b.fileID, b.position, b.symbolID);
-        };
-
-      auto it = std::unique(tuIndex.symReferences.begin(), tuIndex.symReferences.end(), equiv);
-      tuIndex.symReferences.erase(it, tuIndex.symReferences.end());
-    }
+    sortAndRemoveDuplicates(tuIndex.symReferences);
 
     auto it = tuIndex.symReferences.begin();
 
