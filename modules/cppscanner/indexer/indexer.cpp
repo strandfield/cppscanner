@@ -360,6 +360,12 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   
   symbol.kind = tr(info.Kind);
 
+  if (symbol.kind == SymbolKind::Unknown) {
+    if (llvm::dyn_cast<const clang::LabelDecl>(decl)) {
+      symbol.kind = SymbolKind::GotoLabel;
+    }
+  }
+
   if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 
   {
     symbol.name = computeName(*fun, m_indexer);

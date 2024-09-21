@@ -69,6 +69,8 @@ enum class SymbolKind
   NonTypeTemplateParameter,
 
   Concept,
+
+  GotoLabel,
 };
 
 inline std::string_view getSymbolKindString(SymbolKind w)
@@ -106,6 +108,7 @@ inline std::string_view getSymbolKindString(SymbolKind w)
   case SymbolKind::TemplateTemplateParameter: return "template-template-parameter";
   case SymbolKind::NonTypeTemplateParameter:  return "non-type-template-parameter";
   case SymbolKind::Concept:                   return "concept";
+  case SymbolKind::GotoLabel:                 return "label";
   default:                                    return "<unknown>";
   }
 }
@@ -156,6 +159,8 @@ void enumerateSymbolKind(F&& fn)
   fn(SymbolKind::NonTypeTemplateParameter);
 
   fn(SymbolKind::Concept);
+
+  fn(SymbolKind::GotoLabel);
 }
 
 } // namespace cppscanner
