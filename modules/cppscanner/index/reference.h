@@ -96,6 +96,21 @@ void enumerateSymbolReferenceFlag(F&& fn)
   fn(SymbolReference::Implicit);
 }
 
+inline bool testFlag(const SymbolReference& ref, SymbolReference::Flag f)
+{
+  return ref.flags & f;
+}
+
+inline bool symbolReference_isDecl(const SymbolReference& ref)
+{
+  return testFlag(ref, SymbolReference::Declaration);
+}
+
+inline bool symbolReference_isDef(const SymbolReference& ref)
+{
+  return testFlag(ref, SymbolReference::Definition);
+}
+
 } // namespace cppscanner
 
 #endif // CPPSCANNER_REFERENCE_H

@@ -1152,8 +1152,21 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
   // How can such situation arise?
   // - when declaring a partial class template specialization, the name 
   //   of the primary template is referenced when defining the specifialization
-  //   (both the specialization and primary template have the same name)
+  //   (both the specialization and primary template have the same name);
+  // - when a constructor is explicitly called, the name of the class is 
+  //   also referenced;
   // - other cases ?
+
+  // filter references that are already implicit
+  end = std::remove_if(begin, end, [](const SymbolReference& ref) {
+    return testFlag(ref, SymbolReference::Implicit);
+    });
+
+  size_t n = std::distance(begin, end);
+
+  if (n <= 1) {
+    return;
+  }
 
   size_t ndef = std::count_if(begin, end, [](const SymbolReference& ref) -> bool {
     return ref.flags & SymbolReference::Definition;
@@ -1190,7 +1203,33 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
     }
   }
 
-  std::cout << std::distance(begin, end) << " symrefs with same loc " << index.getSymbolById(begin->symbolID)->name << " @" << index.fileIdentificator->getFile(begin->fileID)
+  if (n == 2)
+  {
+    size_t nctor = std::count_if(begin, end, [&index](const SymbolReference& ref) -> bool {
+      return index.getSymbolById(ref.symbolID)->kind == SymbolKind::Constructor;
+      });
+
+    size_t nclasses = std::count_if(begin, end, [&index](const SymbolReference& ref) -> bool {
+      return (index.getSymbolById(ref.symbolID)->kind == SymbolKind::Class) 
+        || (index.getSymbolById(ref.symbolID)->kind == SymbolKind::Struct);
+      });
+
+    if (nctor == 1 && nclasses == 1)
+    {
+      // a constructor and its class name are referenced at the same location.
+      // make the class ref implicit.
+
+      std::for_each(begin, end, [&index](SymbolReference& ref) {
+        if (index.getSymbolById(ref.symbolID)->kind != SymbolKind::Constructor) {
+          ref.flags |= SymbolReference::Implicit;
+        }
+      });
+
+      return;
+    }
+  }
+
+  std::cout << n << " (non-implicit) symrefs with same loc " << index.getSymbolById(begin->symbolID)->name << " @" << index.fileIdentificator->getFile(begin->fileID)
     << ":" << begin->position.line() << ":" << begin->position.column() << std::endl;
 }
 

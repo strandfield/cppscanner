@@ -221,4 +221,11 @@ std::vector<SymbolReference> SnapshotReader::findReferences(SymbolID symbolID)
   return sql::readRowsAsVector<SymbolReference>(stmt, readSymbolReference);
 }
 
+void sort(std::vector<SymbolReference>& refs)
+{
+  std::sort(refs.begin(), refs.end(), [](const SymbolReference& a, const SymbolReference& b) {
+    return std::forward_as_tuple(a.fileID, a.position) < std::forward_as_tuple(b.fileID, b.position);
+    });
+}
+
 } // namespace cppscanner

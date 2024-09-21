@@ -32,7 +32,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
-  REQUIRE(files.size() == 9);
+  REQUIRE(files.size() == 10);
   File maincpp = getFile(files, std::regex("main\\.cpp"));
   File lambdacpp = getFile(files, std::regex("lambda\\.cpp"));
 
@@ -290,4 +290,52 @@ TEST_CASE("goto", "[scanner][cxx_language_features]")
 
   REQUIRE(labelA.kind == labelB.kind);
   REQUIRE(labelA.kind == SymbolKind::GotoLabel);
+}
+
+TEST_CASE("converting constructor", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-converting-ctor.db";
+
+  ScannerInvocation inv{
+    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "-f:tu", "converting-constructor.cpp",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  SnapshotReader s{ snapshot_name };
+
+  SymbolRecord theclass = s.getSymbolByName({ "ClassWithConvertingConstructor" });
+  SymbolRecord ctor = s.getChildSymbolByName("ClassWithConvertingConstructor(int)", theclass.id);
+  REQUIRE(ctor.kind == SymbolKind::Constructor);
+
+  std::vector<SymbolReference> refs = s.findReferences(ctor.id);
+  REQUIRE(refs.size() == 4);
+  sort(refs);
+
+  // decl
+  REQUIRE(symbolReference_isDef(refs[0]));
+  // fConvertingCtor(1);
+  REQUIRE(testFlag(refs[1], SymbolReference::Implicit));
+  REQUIRE(testFlag(refs[1], SymbolReference::Call));
+  // fConvertingCtor({2});
+  REQUIRE(testFlag(refs[2], SymbolReference::Implicit));
+  REQUIRE(testFlag(refs[2], SymbolReference::Call));
+  //fConvertingCtor(ClassWithConvertingConstructor(3));
+  REQUIRE(!testFlag(refs[3], SymbolReference::Implicit));
+  REQUIRE(testFlag(refs[3], SymbolReference::Call));
+
+  // the class is referenced at the same location as the constructor
+  std::vector<SymbolReference> classrefs = s.findReferences(theclass.id);
+  sort(classrefs);
+  REQUIRE(classrefs.size() > 0);
+  REQUIRE(classrefs.back().position == refs[3].position);
+  REQUIRE(testFlag(classrefs.back(), SymbolReference::Implicit));
 }

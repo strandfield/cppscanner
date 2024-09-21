@@ -61,6 +61,8 @@ private:
   std::unique_ptr<Database> m_database; // TODO: why use a unique_ptr here ?
 };
 
+void sort(std::vector<SymbolReference>& refs);
+
 } // namespace cppscanner
 
 #endif // CPPSCANNER_SNAPSHOTREADER_H
