@@ -15,6 +15,7 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclTemplate.h>
+#include <clang/AST/ExprCXX.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/SourceManager.h>
@@ -1033,6 +1034,37 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
   if (symref.flags & (SymbolReference::Declaration | SymbolReference::Definition)) {
     if (!symbol->testFlag(SymbolFlag::FromProject)) {
       symbol->setFlag(SymbolFlag::FromProject);
+    }
+
+    if (decl->isImplicit()) {
+      symref.flags |= SymbolReference::Implicit;
+    }
+  }
+
+  if (astNode.OrigE) {
+    // std::cout << astNode.OrigE->getStmtClassName() << " of " << symbol->name << " @" << line << ":" << col << std::endl;
+
+    if (auto* declrefexpr = llvm::dyn_cast<clang::DeclRefExpr>(astNode.OrigE)) {
+      // can we do something here ?
+    } else if (auto* memexpr = llvm::dyn_cast<clang::MemberExpr>(astNode.OrigE)) {
+      if (memexpr->getMemberLoc().isInvalid()) {
+        // the name of the referenced member isn't written.
+        // should always happen with conversion function
+        symref.flags |= SymbolReference::Implicit;
+      }
+    } else if (auto* ctorexpr = llvm::dyn_cast<clang::CXXConstructExpr>(astNode.OrigE)) {
+      if (ctorexpr->getParenOrBraceRange().getBegin() == ctorexpr->getSourceRange().getBegin()) {
+        // the name of the constructor isn't written
+        symref.flags |= SymbolReference::Implicit;
+
+        (void)ctorexpr->isListInitialization(); // if we ever want to distinguish {} from ()
+      }
+
+      if (ctorexpr->getParenOrBraceRange().getBegin().isInvalid()) {
+        // there are no parentheses (or braces), meaning that we are implicitly using
+        // a conversion constructor.
+        symref.flags |= SymbolReference::Implicit;
+      }
     }
   }
 
