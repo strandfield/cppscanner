@@ -465,10 +465,6 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
 
   // Process symbol references
   {
-    // TODO: sorting and removing duplicates could be done in the parsing thread.
-    // handle that with a flag indicating whether the vector is sorted.
-    sortAndRemoveDuplicates(tuIndex.symReferences);
-
     auto it = tuIndex.symReferences.begin();
 
     while (it != tuIndex.symReferences.end()) {

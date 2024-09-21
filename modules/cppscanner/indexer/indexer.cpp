@@ -1143,6 +1143,79 @@ bool Indexer::handleModuleOccurrence(const clang::ImportDecl *ImportD,
   return true;
 }
 
+static void markImplicitReferences(TranslationUnitIndex& index, std::vector<SymbolReference>::iterator begin, std::vector<SymbolReference>::iterator end)
+{
+  // We have multiple symbol references at the same location.
+  // We want to mark all of them as "implicit" except one that will be the "primary" 
+  // symbol reference at the location.
+  // 
+  // How can such situation arise?
+  // - when declaring a partial class template specialization, the name 
+  //   of the primary template is referenced when defining the specifialization
+  //   (both the specialization and primary template have the same name)
+  // - other cases ?
+
+  size_t ndef = std::count_if(begin, end, [](const SymbolReference& ref) -> bool {
+    return ref.flags & SymbolReference::Definition;
+    });
+
+  if (ndef == 1) 
+  {
+    // multiple symbols are referenced at the same location but only one 
+    // of the reference is a definition.
+    // we make it take precedence over the others.
+    std::for_each(begin, end, [](SymbolReference& ref) {
+      if (!(ref.flags & SymbolReference::Definition)) {
+        ref.flags |= SymbolReference::Implicit;
+      }
+      });
+
+    return;
+  } 
+  else if (ndef == 0)
+  {
+    size_t ndecl = std::count_if(begin, end, [](const SymbolReference& ref) -> bool {
+      return ref.flags & SymbolReference::Declaration;
+      });
+
+    if (ndecl == 1) 
+    {
+      std::for_each(begin, end, [](SymbolReference& ref) {
+        if (!(ref.flags & SymbolReference::Declaration)) {
+          ref.flags |= SymbolReference::Implicit;
+        }
+        });
+
+      return;
+    }
+  }
+
+  std::cout << std::distance(begin, end) << " symrefs with same loc " << index.getSymbolById(begin->symbolID)->name << " @" << index.fileIdentificator->getFile(begin->fileID)
+    << ":" << begin->position.line() << ":" << begin->position.column() << std::endl;
+}
+
+static void markImplicitReferences(TranslationUnitIndex& index)
+{
+  std::vector<SymbolReference>& refs = index.symReferences;
+
+  auto same_loc = [](const SymbolReference& a, const SymbolReference& b) {
+    return a.fileID == b.fileID && a.position == b.position;
+    };
+
+  auto it = std::adjacent_find(refs.begin(), refs.end(), same_loc);
+
+  while (it != refs.end())
+  {
+    auto end = std::find_if(it, refs.end(), [&it, &same_loc](const SymbolReference& other) {
+      return !same_loc(*it, other);
+      });
+
+    markImplicitReferences(index, it, end);
+
+    it = std::adjacent_find(end, refs.end(), same_loc);
+  }
+}
+
 void Indexer::finish()
 {
   if (m_pp && m_pp->getPreprocessingRecord()) {
@@ -1153,6 +1226,9 @@ void Indexer::finish()
   clang::DiagnosticsEngine& de = mAstContext->getDiagnostics();
   clang::DiagnosticConsumer* dc = de.getClient();
   (void)dc;
+
+  sortAndRemoveDuplicates(m_index->symReferences);
+  markImplicitReferences(*m_index);
 
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();
