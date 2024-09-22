@@ -2,6 +2,7 @@
 #include "helpers.h"
 
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
+#include "cppscanner/indexer/version.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/database/sql.h"
 
@@ -23,6 +24,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
     { "--compile-commands", SELFTEST_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", PROJECT_SOURCE_DIR,
     "--project-name", "cppscanner",
+    "--project-version", cppscanner::versioncstr(),
     "--overwrite",
     "-o", snapshot_name }
   };

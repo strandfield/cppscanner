@@ -1155,6 +1155,9 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
   //   (both the specialization and primary template have the same name);
   // - when a constructor is explicitly called, the name of the class is 
   //   also referenced;
+  // - when an object member is initialized in the member-init-list of a constructor,
+  //   the constructor of that member may be referenced at the same loc as 
+  //   the field;
   // - other cases ?
 
   // filter references that are already implicit
@@ -1214,6 +1217,10 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
         || (index.getSymbolById(ref.symbolID)->kind == SymbolKind::Struct);
       });
 
+    size_t nfields = std::count_if(begin, end, [&index](const SymbolReference& ref) -> bool {
+      return index.getSymbolById(ref.symbolID)->kind == SymbolKind::Field;
+      });
+
     if (nctor == 1 && nclasses == 1)
     {
       // a constructor and its class name are referenced at the same location.
@@ -1227,9 +1234,26 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
 
       return;
     }
+
+    if (nctor == 1 && nfields == 1)
+    {
+      // TODO: write a test for me!
+      // the constructor used to initialize a field is referenced at the same loc
+      // as the field. make the ctor ref implicit.
+
+      std::for_each(begin, end, [&index](SymbolReference& ref) {
+        if (index.getSymbolById(ref.symbolID)->kind == SymbolKind::Constructor) {
+          ref.flags |= SymbolReference::Implicit;
+        }
+        });
+
+      return;
+    }
   }
 
-  std::cout << n << " (non-implicit) symrefs with same loc " << index.getSymbolById(begin->symbolID)->name << " @" << index.fileIdentificator->getFile(begin->fileID)
+  // TODO: look at the token and assign the non-implicit ref to the matching symbol name
+
+  std::cout << n << " (non-implicit) symrefs with same loc @" << index.fileIdentificator->getFile(begin->fileID)
     << ":" << begin->position.line() << ":" << begin->position.column() << std::endl;
 }
 
