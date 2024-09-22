@@ -54,6 +54,11 @@ void write_symbolKindFunctions(std::ofstream& stream)
   stream << "}" << std::endl;
   module_exports.push_back("getSymbolKindByName");
 
+  stream << "function getSymbolKindValue(nameOrValue) {" << std::endl;
+  stream << "  return Number.isInteger(nameOrValue) ? nameOrValue : getSymbolKindByName(nameOrValue);" << std::endl;
+  stream << "}" << std::endl;
+  module_exports.push_back("getSymbolKindValue");
+
   const std::string fetchKindAsInteger = "  let k = Number.isInteger(sym.kind) ? sym.kind : symbolKinds.values[sym.kind];";
 
   auto write_func = [&stream, &fetchKindAsInteger](const std::string& name, cppscanner::SymbolKind k) {
@@ -180,17 +185,6 @@ void write_symbolreferenceFlagFunctions(std::ofstream& stream)
   module_exports.push_back("symbolReference_isRef");
 }
 
-void write_sqlQueries(std::ofstream& stream)
-{
-  stream << "const selectNamespaceQuery = \"SELECT id, parent, name FROM symbol WHERE kind = "
-    << static_cast<int>(cppscanner::SymbolKind::Namespace)
-    << " OR kind = "
-    << static_cast<int>(cppscanner::SymbolKind::InlineNamespace)
-    << "\";" << std::endl;
-
-  module_exports.push_back("selectNamespaceQuery");
-}
-
 int main(int argc, char* argv[])
 {
   std::ofstream stream{ "cppscanner.cjs", std::ios::out | std::ios::trunc };
@@ -208,8 +202,6 @@ int main(int argc, char* argv[])
   write_extendedsymbolFlagFunctions(stream);
   stream << std::endl;
   write_symbolreferenceFlagFunctions(stream);
-  stream << std::endl;
-  write_sqlQueries(stream);
 
   // write module.exports
   stream << std::endl;
