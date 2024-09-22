@@ -106,7 +106,7 @@ struct FunctionInfo
     Static    = 0x00040,
     Constexpr = 0x00080,
     Consteval = 0x00100,
-    Noexcept  = 0x00200,   
+    Noexcept  = 0x00200,
     Default   = 0x00400,
     Delete    = 0x00800,
     Const     = 0x01000,
