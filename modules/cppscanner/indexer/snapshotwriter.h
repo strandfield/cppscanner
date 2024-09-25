@@ -39,6 +39,8 @@ public:
 
   Database& database() const;
 
+  static constexpr int DatabaseSchemaVersion = 0;
+
   class Path
   {
   private:
@@ -52,6 +54,7 @@ public:
 
   void setProperty(const std::string& key, const std::string& value);
   void setProperty(const std::string& key, bool value);
+  void setProperty(const std::string& key, int value);
   void setProperty(const std::string& key, const char* value);
   void setProperty(const std::string& key, const Path& path);
 

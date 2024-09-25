@@ -361,7 +361,7 @@ SnapshotWriter::SnapshotWriter(const std::filesystem::path& databasePath) :
 
   sql::runTransacted(database(), [this]() {
     insert_enum_values(database());
-    setProperty("database.schema.version", "0");
+    setProperty("database.schema.version", DatabaseSchemaVersion);
     });
 }
 
@@ -395,6 +395,11 @@ void SnapshotWriter::setProperty(const std::string& key, const std::string& valu
 void SnapshotWriter::setProperty(const std::string& key, bool value)
 {
   setProperty(key, value ? "true" : "false");
+}
+
+void SnapshotWriter::setProperty(const std::string& key, int value)
+{
+  setProperty(key, std::to_string(value));
 }
 
 void SnapshotWriter::setProperty(const std::string& key, const char* value)
