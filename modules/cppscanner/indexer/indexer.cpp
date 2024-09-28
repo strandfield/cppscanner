@@ -1046,7 +1046,7 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
   symref.flags |= (roles & (int)clang::index::SymbolRole::Read) ? SymbolReference::Read : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Write) ? SymbolReference::Write : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::Call) ? SymbolReference::Call : 0;
-  symref.flags |= (roles & (int)clang::index::SymbolRole::Dynamic) ? SymbolReference::Dynamic : 0; // what is it?
+  symref.flags |= (roles & (int)clang::index::SymbolRole::Dynamic) ? SymbolReference::Dynamic : 0;
   symref.flags |= (roles & (int)clang::index::SymbolRole::AddressOf) ? SymbolReference::AddressOf : 0;
 
   if (symref.flags & (SymbolReference::Declaration | SymbolReference::Definition)) {
@@ -1173,8 +1173,8 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
   // - other cases ?
 
   // filter references that are already implicit
-  end = std::remove_if(begin, end, [](const SymbolReference& ref) {
-    return testFlag(ref, SymbolReference::Implicit);
+  end = std::partition(begin, end, [](const SymbolReference& ref) {
+    return !testFlag(ref, SymbolReference::Implicit);
     });
 
   size_t n = std::distance(begin, end);

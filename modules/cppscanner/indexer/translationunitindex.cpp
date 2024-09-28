@@ -16,8 +16,6 @@ int nbMissingFields(const SymbolReference& symref)
 
 void sortAndRemoveDuplicates(std::vector<SymbolReference>& refs)
 {
-  // TODO: sorting and removing duplicates could be done in the parsing thread.
-  // handle that with a flag indicating whether the vector is sorted.
   std::sort(
     refs.begin(), 
     refs.end(), 
