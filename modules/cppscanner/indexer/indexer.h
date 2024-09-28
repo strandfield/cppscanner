@@ -131,6 +131,7 @@ public:
   bool shouldIndexFile(clang::FileID fileId);
   bool ShouldTraverseDecl(const clang::Decl* decl);
   cppscanner::FileID getFileID(clang::FileID clangFileId);
+  clang::FileID getClangFileID(const cppscanner::FileID id);
   clang::ASTContext* getAstContext() const;
   clang::Preprocessor* getPreprocessor() const;
   bool initialized() const;

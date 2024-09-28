@@ -955,6 +955,18 @@ cppscanner::FileID Indexer::getFileID(clang::FileID clangFileId)
   return fid;
 }
 
+clang::FileID Indexer::getClangFileID(const cppscanner::FileID id)
+{
+  for (const auto& p : m_FileIdCache)
+  {
+    if (p.second == id) {
+      return p.first;
+    }
+  }
+
+  return {};
+}
+
 clang::ASTContext* Indexer::getAstContext() const
 {
   return mAstContext;
@@ -1143,7 +1155,7 @@ bool Indexer::handleModuleOccurrence(const clang::ImportDecl *ImportD,
   return true;
 }
 
-static void markImplicitReferences(TranslationUnitIndex& index, std::vector<SymbolReference>::iterator begin, std::vector<SymbolReference>::iterator end)
+static void markImplicitReferences(TranslationUnitIndex& index, std::vector<SymbolReference>::iterator begin, std::vector<SymbolReference>::iterator end, Indexer& indexer)
 {
   // We have multiple symbol references at the same location.
   // We want to mark all of them as "implicit" except one that will be the "primary" 
@@ -1251,13 +1263,49 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
     }
   }
 
-  // TODO: look at the token and assign the non-implicit ref to the matching symbol name
+  // Things get a little tricky here.
+  // Here is what we will try to do:
+  // - get the token at the specified location
+  // - compare the token's text to the name of the referenced symbol
+  // - if only one symbol name matches, we mark all other references
+  //   as implicit.
 
-  std::cout << n << " (non-implicit) symrefs with same loc @" << index.fileIdentificator->getFile(begin->fileID)
-    << ":" << begin->position.line() << ":" << begin->position.column() << std::endl;
+  std::string file = index.fileIdentificator->getFile(begin->fileID);
+  int line = begin->position.line();
+  int col = begin->position.column();
+
+  clang::FileID clang_file_id = indexer.getClangFileID(begin->fileID);
+  clang::SourceLocation loc = indexer.getAstContext()->getSourceManager().translateLineCol(clang_file_id, line, col);
+
+  if (loc.isValid())
+  {
+    clang::Token tok;
+    if (!clang::Lexer::getRawToken(loc, tok, indexer.getAstContext()->getSourceManager(), indexer.getAstContext()->getLangOpts()))
+    {
+      std::string spelling = clang::Lexer::getSpelling(tok, indexer.getAstContext()->getSourceManager(), indexer.getAstContext()->getLangOpts());
+
+      size_t ntokmatch = std::count_if(begin, end, [&index, &spelling](const SymbolReference& ref) -> bool {
+        return index.getSymbolById(ref.symbolID)->name == spelling;
+        });
+
+      if (ntokmatch == 1) {
+        std::for_each(begin, end, [&index, &spelling](SymbolReference& ref) {
+          if (index.getSymbolById(ref.symbolID)->name != spelling) {
+            ref.flags |= SymbolReference::Implicit;
+          }
+        });
+
+        return;
+      }
+
+    }
+  }
+
+  std::cout << n << " (non-implicit) symrefs with same loc @" << file
+    << ":" << line << ":" << col << std::endl;
 }
 
-static void markImplicitReferences(TranslationUnitIndex& index)
+static void markImplicitReferences(TranslationUnitIndex& index, Indexer& indexer)
 {
   std::vector<SymbolReference>& refs = index.symReferences;
 
@@ -1273,7 +1321,7 @@ static void markImplicitReferences(TranslationUnitIndex& index)
       return !same_loc(*it, other);
       });
 
-    markImplicitReferences(index, it, end);
+    markImplicitReferences(index, it, end, indexer);
 
     it = std::adjacent_find(end, refs.end(), same_loc);
   }
@@ -1291,7 +1339,7 @@ void Indexer::finish()
   (void)dc;
 
   sortAndRemoveDuplicates(m_index->symReferences);
-  markImplicitReferences(*m_index);
+  markImplicitReferences(*m_index, *this);
 
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();
