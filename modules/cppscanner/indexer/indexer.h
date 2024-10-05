@@ -45,17 +45,17 @@ public:
 
   void reset();
 
-  Symbol* process(const clang::Decl* decl);
-  Symbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo, clang::SourceLocation loc);
+  IndexerSymbol* process(const clang::Decl* decl);
+  IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
 
   SymbolID getSymbolId(const clang::Decl* decl) const;
   SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
 
 protected:
   std::string getDeclSpelling(const clang::Decl* decl);
-  void fillSymbol(Symbol& symbol, const clang::Decl* decl);
-  void fillSymbol(Symbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
-  Symbol* getParentSymbol(const Symbol& symbol, const clang::Decl* decl);
+  void fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl);
+  void fillSymbol(IndexerSymbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
+  IndexerSymbol* getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl);
 };
 
 /**
@@ -131,6 +131,7 @@ public:
   bool shouldIndexFile(clang::FileID fileId);
   bool ShouldTraverseDecl(const clang::Decl* decl);
   cppscanner::FileID getFileID(clang::FileID clangFileId);
+  clang::FileID getClangFileID(const cppscanner::FileID id);
   clang::ASTContext* getAstContext() const;
   clang::Preprocessor* getPreprocessor() const;
   bool initialized() const;
@@ -153,7 +154,7 @@ protected:
   clang::SourceManager& getSourceManager() const;
 
 protected:
-  void processRelations(std::pair<const clang::Decl*, Symbol*> declAndSymbol, clang::SourceLocation refLocation, llvm::ArrayRef<clang::index::SymbolRelation> relations);
+  void processRelations(std::pair<const clang::Decl*, IndexerSymbol*> declAndSymbol, clang::SourceLocation refLocation, llvm::ArrayRef<clang::index::SymbolRelation> relations);
   void indexPreprocessingRecord(clang::Preprocessor& pp);
 };
 

@@ -56,10 +56,16 @@ public:
   Statement(Statement&& other);
   ~Statement();
 
+  Database& database() const;
+
   bool prepare(const char* query);
-  bool step();
+  int step();
   void reset();
   void finalize();
+
+  bool fetchNextRow();
+  void insert();
+  void update();
 
   std::string errormsg() const;
   int rowid() const;
@@ -67,9 +73,11 @@ public:
   void bind(int n, std::nullptr_t);
   void bind(int n, const char* text);
   void bind(int n, std::string&& text);
+  void bind(int n, const std::string& text) = delete;
   void bind(int n, std::string_view text);
   void bind(int n, int value);
   void bind(int n, uint64_t value);
+  void bind(int n, int64_t value);
   void bind(int n, Blob blob);
   [[deprecated]] void bindBlob(int n, const std::string& bytes);
 
@@ -103,16 +111,20 @@ inline Statement::~Statement()
   finalize();
 }
 
+inline Database& Statement::database() const
+{
+  return m_database;
+}
+
 inline bool Statement::prepare(const char* query)
 {
   int r = sqlite3_prepare_v2(m_database.sqliteHandle(), query, -1, &m_statement, nullptr);
   return r == SQLITE_OK;
 }
 
-inline bool Statement::step()
+inline int Statement::step()
 {
-  int r = sqlite3_step(m_statement);
-  return r == SQLITE_ROW;
+  return sqlite3_step(m_statement);
 }
 
 inline void Statement::reset()
@@ -124,6 +136,24 @@ inline void Statement::finalize()
 {
   sqlite3_finalize(m_statement);
   m_statement = nullptr;
+}
+
+inline bool Statement::fetchNextRow()
+{
+  int r = step();
+  return r == SQLITE_ROW;
+}
+
+inline void Statement::insert()
+{
+  step();
+  reset();
+}
+
+inline void Statement::update()
+{
+  step();
+  reset();
 }
 
 inline std::string Statement::errormsg() const
@@ -163,7 +193,12 @@ inline void Statement::bind(int n, int value)
 
 inline void Statement::bind(int n, uint64_t value)
 {
-  sqlite3_bind_int64(m_statement, n, static_cast<int64_t>(value));
+  bind(n, static_cast<int64_t>(value));
+}
+
+inline void Statement::bind(int n, int64_t value)
+{
+  sqlite3_bind_int64(m_statement, n, value);
 }
 
 inline void Statement::bind(int n, Blob blob)

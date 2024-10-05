@@ -39,7 +39,7 @@ struct ScannerData
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
-  std::map<SymbolID, Symbol> symbols;
+  std::map<SymbolID, IndexerSymbol> symbols;
 };
 
 void set_flag(std::vector<bool>& flags, size_t i)
@@ -122,7 +122,7 @@ void Scanner::setTranslationUnitFilters(const std::vector<std::string>& filters)
  */
 void Scanner::initSnapshot(const std::filesystem::path& p)
 {
-  m_snapshot = std::make_unique<Snapshot>(Snapshot::create(p));
+  m_snapshot = std::make_unique<SnapshotWriter>(p);
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
 
@@ -132,14 +132,14 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
   m_snapshot->setProperty("cppscanner.os", "linux");
 #endif // _WIN32
 
-  m_snapshot->setProperty("project.home", Snapshot::Path(d->homeDirectory));
+  m_snapshot->setProperty("project.home", SnapshotWriter::Path(d->homeDirectory));
 
   m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
-  m_snapshot->setProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())));
+  m_snapshot->setProperty("scanner.root", SnapshotWriter::Path(d->rootDirectory.value_or(std::string())));
 }
 
-Snapshot* Scanner::snapshot() const
+SnapshotWriter* Scanner::snapshot() const
 {
   return m_snapshot.get();
 }
@@ -332,11 +332,6 @@ std::vector<T> merge(
   return existingElements;
 }
 
-int nbMissingFields(const SymbolReference& symref)
-{
-  return symref.referencedBySymbolID.isValid() ? 0 : 1;
-}
-
 } // namespace
 
 void Scanner::assimilate(TranslationUnitIndex tuIndex)
@@ -425,7 +420,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
         std::vector<Include> includes = merge(m_snapshot->loadAllIncludesInFile(cur_file_id), it, end);
 
         sql::runTransacted(m_snapshot->database(), [this, cur_file_id, &includes]() {
-          m_snapshot->removeAllSymbolReferencesInFile(cur_file_id);
+          m_snapshot->removeAllIncludesInFile(cur_file_id);
           m_snapshot->insertIncludes(includes);
           });
       } else {
@@ -438,48 +433,38 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     }
   }
 
-  // TODO: insert new symbols, update the others that need it
+  // insert new new symbols, update the others that need it
   {
-    std::vector<const Symbol*> symbols;
+    std::vector<const IndexerSymbol*> symbols_to_insert;
+    std::vector<const IndexerSymbol*> symbols_with_flags_to_update;
 
     for (auto& p : tuIndex.symbols) {
-      if (d->symbols.find(p.first) == d->symbols.end()) {
-        Symbol& newsymbol = d->symbols[p.first];
+      auto it = d->symbols.find(p.first);
+      if (it == d->symbols.end()) {
+        IndexerSymbol& newsymbol = d->symbols[p.first];
         newsymbol = std::move(p.second);
-        symbols.push_back(&newsymbol);
+        symbols_to_insert.push_back(&newsymbol);
       } else {
-        // TODO: check if the symbol needs to be updated
+        IndexerSymbol& existing_symbol = it->second;
+
+        if (existing_symbol.flags != p.second.flags) {
+          // TODO: this may not be the right way to update the flags
+          existing_symbol.flags |= p.second.flags;
+          symbols_with_flags_to_update.push_back(&existing_symbol);
+        }
+
+        // TODO: there may be other things to update...
       }
     }
 
-    sql::runTransacted(m_snapshot->database(), [this, &symbols]() {
-      m_snapshot->insertSymbols(symbols);
+    sql::runTransacted(m_snapshot->database(), [this, &symbols_to_insert, &symbols_with_flags_to_update]() {
+      m_snapshot->insertSymbols(symbols_to_insert);
+      m_snapshot->updateSymbolsFlags(symbols_with_flags_to_update);
       });
   }
 
   // Process symbol references
   {
-    // TODO: sorting and removing duplicates could be done in the parsing thread.
-    // handle that with a flag indicating whether the vector is sorted.
-    std::sort(
-      tuIndex.symReferences.begin(), 
-      tuIndex.symReferences.end(), 
-      [](const SymbolReference& a, const SymbolReference& b) -> bool {
-        return std::forward_as_tuple(a.fileID, a.position, a.symbolID, nbMissingFields(a)) < 
-          std::forward_as_tuple(b.fileID, b.position, b.symbolID, nbMissingFields(b));
-      }
-    );
-
-    // remove duplicates
-    {
-      auto equiv = [](const SymbolReference& a, const SymbolReference& b) -> bool {
-        return std::forward_as_tuple(a.fileID, a.position, a.symbolID) == std::forward_as_tuple(b.fileID, b.position, b.symbolID);
-        };
-
-      auto it = std::unique(tuIndex.symReferences.begin(), tuIndex.symReferences.end(), equiv);
-      tuIndex.symReferences.erase(it, tuIndex.symReferences.end());
-    }
-
     auto it = tuIndex.symReferences.begin();
 
     while (it != tuIndex.symReferences.end()) {

@@ -2,6 +2,7 @@
 #include "helpers.h"
 
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
+#include "cppscanner/indexer/version.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/database/sql.h"
 
@@ -23,6 +24,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
     { "--compile-commands", SELFTEST_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", PROJECT_SOURCE_DIR,
     "--project-name", "cppscanner",
+    "--project-version", cppscanner::versioncstr(),
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -39,35 +41,35 @@ TEST_CASE("Self parsing test", "[scanner][self]")
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
   std::cout << "Self parse succeeded in " << duration.count() << "ms." << std::endl;
 
-  TemporarySnapshot s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   // verify the presence of some classes
   {
-    Symbol ns = s.getSymbolByName("cppscanner");
+    SymbolRecord ns = s.getChildSymbolByName("cppscanner");
     REQUIRE(ns.kind == SymbolKind::Namespace);
-    Symbol indexer = s.getSymbolByName("Indexer", ns.id);
+    SymbolRecord indexer = s.getChildSymbolByName("Indexer", ns.id);
     REQUIRE(indexer.kind == SymbolKind::Class);
-    Symbol scanner = s.getSymbolByName("Scanner", ns.id);
+    SymbolRecord scanner = s.getChildSymbolByName("Scanner", ns.id);
     REQUIRE(scanner.kind == SymbolKind::Class);
   }
 
   // Indexer derives from clang
   {
-    Symbol indexer = s.getSymbol({ "cppscanner", "Indexer" });
+    SymbolRecord indexer = s.getSymbolByName({ "cppscanner", "Indexer" });
     REQUIRE(indexer.kind == SymbolKind::Class);
     
     std::vector<BaseOf> bases = s.getBasesOf(indexer.id);
     REQUIRE(bases.size() == 1);
 
-    Symbol idxdtcon = s.getSymbol({ "clang", "index", "IndexDataConsumer" });
+    SymbolRecord idxdtcon = s.getSymbolByName({ "clang", "index", "IndexDataConsumer" });
     REQUIRE(indexer.kind == SymbolKind::Class);
     REQUIRE(bases.front().baseClassID == idxdtcon.id);
 
-    Symbol handle_decl_occurrence_derived = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), indexer.id);
-    REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::InstanceMethod);
-    REQUIRE(handle_decl_occurrence_derived.testFlag(Symbol::Final));
+    SymbolRecord handle_decl_occurrence_derived = getRecord(s, SymbolRecordFilter().withNameLike("handleDeclOccurrence(%)").withParent(indexer.id));
+    REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::Method);
+    REQUIRE(testFlag(handle_decl_occurrence_derived, FunctionInfo::Final));
 
-    Symbol handle_decl_occurrence_base = s.getSymbolByName(sql::Like("handleDeclOccurrence(%)"), idxdtcon.id);
+    SymbolRecord handle_decl_occurrence_base = getRecord(s, SymbolRecordFilter().withNameLike("handleDeclOccurrence(%)").withParent(idxdtcon.id));
     std::vector<Override> overrides = s.getOverridesOf(handle_decl_occurrence_base.id);
     REQUIRE(!overrides.empty());
     REQUIRE(overrides.size() == 1);

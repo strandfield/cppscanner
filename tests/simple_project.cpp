@@ -8,6 +8,13 @@
 
 using namespace cppscanner;
 
+
+static std::vector<EnumConstantRecord> getEnumConstantsForEnum(const SnapshotReader& s, SymbolID enumId)
+{
+  return cppscanner::fetchAll<EnumConstantRecord>(s, SymbolRecordFilter().withParent(enumId));
+}
+
+
 TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_project]")
 {
   const std::string snapshot_name = "simple_project.db";
@@ -22,7 +29,7 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
     REQUIRE(inv.errors().empty());
   }
 
-  auto s = Snapshot::open(snapshot_name);
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() == 2);
@@ -39,27 +46,27 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // enum are indexed correcly
   {
-    std::vector<Symbol> symbols = s.findSymbolsByName("ColorChannel");
+    std::vector<SymbolRecord> symbols = s.getSymbolsByName("ColorChannel");
     REQUIRE(symbols.size() == 1);
-    symbols = s.getEnumConstantsForEnum(symbols.front().id);
-    REQUIRE(symbols.size() == 3);
+    std::vector<EnumConstantRecord> values = getEnumConstantsForEnum(s, symbols.front().id);
+    REQUIRE(values.size() == 3);
   }
 
-  Symbol structFoo = s.getSymbolByName("Foo");
+  SymbolRecord structFoo = s.getChildSymbolByName("Foo");
   REQUIRE(structFoo.kind == SymbolKind::Struct);
 
   // data members are indexed correcly
   {
-    Symbol a = s.getSymbolByName("a", structFoo.id);
+    SymbolRecord a = s.getChildSymbolByName("a", structFoo.id);
     REQUIRE(a.kind == SymbolKind::Field);
-    Symbol b = s.getSymbolByName("b", structFoo.id);
+    SymbolRecord b = s.getChildSymbolByName("b", structFoo.id);
     REQUIRE(b.kind == SymbolKind::StaticProperty);
-    REQUIRE(b.testFlag(Symbol::Static));
-    REQUIRE(b.testFlag(Symbol::Const));
+    REQUIRE(testFlag(b, VariableInfo::Static));
+    REQUIRE(testFlag(b, VariableInfo::Const));
   }
 
-  Symbol classBase = s.getSymbolByName("Base");
-  Symbol classDerived = s.getSymbolByName("Derived");
+  SymbolRecord classBase = s.getChildSymbolByName("Base");
+  SymbolRecord classDerived = s.getChildSymbolByName("Derived");
 
   // derived classes are indexed correcly
   {
@@ -71,11 +78,12 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // method overrides are indexed correcly
   {
-    Symbol base_method = s.getSymbolByName("vmethod()", classBase.id);
-    Symbol derived_method = s.getSymbolByName("vmethod()", classDerived.id);
-    REQUIRE(base_method.testFlag(Symbol::Virtual));
-    REQUIRE(base_method.testFlag(Symbol::Pure));
-    REQUIRE(derived_method.testFlag(Symbol::Override));
+    SymbolRecord base_method = s.getChildSymbolByName("vmethod()", classBase.id);
+    SymbolRecord derived_method = s.getChildSymbolByName("vmethod()", classDerived.id);
+    REQUIRE(testFlag(base_method, FunctionInfo::Virtual));
+    REQUIRE(testFlag(base_method, FunctionInfo::Pure));
+    REQUIRE(testFlag(derived_method, FunctionInfo::Override));
+    REQUIRE(testFlag(derived_method, SymbolFlag::Protected));
     std::vector<Override> overrides = s.getOverridesOf(base_method.id);
     REQUIRE(overrides.size() == 1);
     REQUIRE(overrides.front().overrideMethodID == derived_method.id);
@@ -83,8 +91,8 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // symbol references are indexed correcly
   {
-    Symbol a = s.getSymbolByName("a");
-    Symbol b = s.getSymbolByName("b");
+    SymbolRecord a = s.getChildSymbolByName("a");
+    SymbolRecord b = s.getChildSymbolByName("b");
 
     std::vector<SymbolReference> refs = s.findReferences(a.id);
     REQUIRE(!refs.empty());
@@ -100,20 +108,20 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // global variables are indexed correcly
   {
-    REQUIRE_NOTHROW(s.getSymbolByName("gBoolean"));
+    REQUIRE_NOTHROW(s.getChildSymbolByName("gBoolean"));
   }
 
   // function local symbols are ignored
   {
-    REQUIRE_THROWS(s.getSymbolByName("myfoo"));
+    REQUIRE_THROWS(s.getChildSymbolByName("myfoo"));
   }
 
   // a function inside a namespace is indexed
   {
-    Symbol foobar = s.getSymbolByName("foobar");
+    SymbolRecord foobar = s.getChildSymbolByName("foobar");
     REQUIRE(foobar.kind == SymbolKind::Namespace);
-    Symbol qux = s.getSymbolByName("qux()");
+    SymbolRecord qux = s.getChildSymbolByName("qux()");
     REQUIRE(qux.kind == SymbolKind::Function);
-    REQUIRE(qux.parent_id == foobar.id);
+    REQUIRE(qux.parentId == foobar.id);
   }
 }

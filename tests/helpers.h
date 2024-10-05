@@ -5,7 +5,8 @@
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/index/reference.h"
 
-#include "cppscanner/indexer/snapshot.h"
+#include "cppscanner/indexer/snapshotreader.h"
+#include "cppscanner/indexer/symbolrecorditerator.h"
 
 #include <vector>
 #include <optional>
@@ -30,7 +31,7 @@ public:
   std::optional<int> line;
 
 public:
-  explicit SymbolRefPattern(const cppscanner::Symbol& s) : symbolID(s.id) { }
+  explicit SymbolRefPattern(const cppscanner::SymbolRecord& s) : symbolID(s.id) { }
 
   SymbolRefPattern& inFile(const cppscanner::File& f) {
     this->fileID = f.id;
@@ -71,7 +72,7 @@ inline void filterRefs(std::vector<cppscanner::SymbolReference>& refs, const Sym
   refs.erase(it, refs.end());
 }
 
-class TemporarySnapshot : public cppscanner::Snapshot
+class TemporarySnapshot : public cppscanner::SnapshotReader
 {
 private:
   std::filesystem::path m_db_path;
@@ -80,7 +81,7 @@ public:
 
 public:
   explicit TemporarySnapshot(const std::filesystem::path& p)
-    : Snapshot(Snapshot::open(p)),
+    : SnapshotReader(p),
     m_db_path(p)
   {
 
