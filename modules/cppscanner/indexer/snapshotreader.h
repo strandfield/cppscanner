@@ -12,6 +12,7 @@
 #include "cppscanner/index/file.h"
 #include "cppscanner/index/include.h"
 #include "cppscanner/index/override.h"
+#include "cppscanner/index/refarg.h"
 #include "cppscanner/index/reference.h"
 #include "cppscanner/index/symbolrecords.h"
 
@@ -40,6 +41,7 @@ public:
 
   std::vector<File> getFiles() const;
   std::vector<Include> getIncludedFiles(FileID fid) const;
+  std::vector<ArgumentPassedByReference> getArgumentsPassedByReference(FileID file) const;
 
   std::vector<SymbolRecord> getSymbolsByName(const std::string& name) const;
   SymbolRecord getChildSymbolByName(const std::string& name, SymbolID parentID = {}) const;

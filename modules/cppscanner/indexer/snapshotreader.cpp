@@ -77,6 +77,26 @@ std::vector<Include> SnapshotReader::getIncludedFiles(FileID fid) const
   return sql::readRowsAsVector<Include>(stmt, readInclude);
 }
 
+inline static ArgumentPassedByReference readArgumentPassedByReference(sql::Statement& row)
+{
+  ArgumentPassedByReference ret;
+  ret.fileID = row.columnInt(0);
+  ret.position = FilePosition(row.columnInt(1), row.columnInt(2));
+  return ret;
+}
+
+std::vector<ArgumentPassedByReference> SnapshotReader::getArgumentsPassedByReference(FileID file) const
+{
+  sql::Statement stmt { 
+    database(),
+    "SELECT file_id, line, column FROM argumentPassedByReference WHERE file_id = ?"
+  };
+
+  stmt.bind(1, (int)file);
+
+  return sql::readRowsAsVector<ArgumentPassedByReference>(stmt, readArgumentPassedByReference);
+}
+
 std::vector<SymbolRecord> SnapshotReader::getSymbolsByName(const std::string& name) const
 {
   return fetchAll(*this, SymbolRecordFilter().withName(name));

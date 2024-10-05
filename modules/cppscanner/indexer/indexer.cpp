@@ -6,6 +6,7 @@
 
 #include "fileidentificator.h"
 
+#include "cppscanner/indexer/astvisitor.h"
 #include "cppscanner/indexer/fileindexingarbiter.h"
 #include "cppscanner/indexer/indexingresultqueue.h"
 #include "cppscanner/index/symbolid.h"
@@ -955,6 +956,22 @@ cppscanner::FileID Indexer::getFileID(clang::FileID clangFileId)
   return fid;
 }
 
+std::pair<FileID, FilePosition> Indexer::convert(const clang::SourceLocation& loc)
+{
+  FileID f = getFileID(getSourceManager().getFileID(loc));
+  int line = getSourceManager().getSpellingLineNumber(loc);
+  int col = getSourceManager().getSpellingColumnNumber(loc);
+  return std::pair(f, FilePosition(line, col));
+}
+
+std::pair<FileID, FilePosition> Indexer::convert(clang::FileID fileId, const clang::SourceLocation& loc)
+{
+  FileID f = getFileID(fileId);
+  int line = getSourceManager().getSpellingLineNumber(loc);
+  int col = getSourceManager().getSpellingColumnNumber(loc);
+  return std::pair(f, FilePosition(line, col));
+}
+
 clang::FileID Indexer::getClangFileID(const cppscanner::FileID id)
 {
   for (const auto& p : m_FileIdCache)
@@ -1019,13 +1036,9 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
   if (!symbol)
     return true;
 
-  int line = getSourceManager().getSpellingLineNumber(loc);
-  int col = getSourceManager().getSpellingColumnNumber(loc);
-
   SymbolReference symref;
-  symref.fileID = getFileID(getSourceManager().getFileID(loc));
+  std::tie(symref.fileID, symref.position) = convert(loc);
   symref.symbolID = symbol->id;
-  symref.position = FilePosition(line, col);
 
   if (astNode.Parent) {
     if (auto* fndecl = llvm::dyn_cast<clang::FunctionDecl>(astNode.Parent)) {
@@ -1335,6 +1348,13 @@ void Indexer::finish()
 {
   if (m_pp && m_pp->getPreprocessingRecord()) {
     indexPreprocessingRecord(*m_pp);
+  }
+
+  // collect ref args
+  {
+    ClangAstVisitor visitor{ *this };
+    visitor.TraverseDecl(getAstContext()->getTranslationUnitDecl());
+    sortAndRemoveDuplicates(m_index->fileAnnotations.refargs);
   }
 
   // if we want to post-process diagnostics, we may use:

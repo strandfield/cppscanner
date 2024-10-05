@@ -36,4 +36,15 @@ void sortAndRemoveDuplicates(std::vector<SymbolReference>& refs)
   }
 }
 
+void sortAndRemoveDuplicates(std::vector<ArgumentPassedByReference>& refargs)
+{
+  std::sort(refargs.begin(), refargs.end());
+
+  // remove duplicates
+  {
+    auto it = std::unique(refargs.begin(), refargs.end());
+    refargs.erase(it, refargs.end());
+  }
+}
+
 } // namespace cppscanner

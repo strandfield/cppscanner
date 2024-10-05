@@ -32,7 +32,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
-  REQUIRE(files.size() == 10);
+  REQUIRE(files.size() == 11);
   File maincpp = getFile(files, std::regex("main\\.cpp"));
   File lambdacpp = getFile(files, std::regex("lambda\\.cpp"));
 
@@ -338,4 +338,33 @@ TEST_CASE("converting constructor", "[scanner][cxx_language_features]")
   REQUIRE(classrefs.size() > 0);
   REQUIRE(classrefs.back().position == refs[3].position);
   REQUIRE(testFlag(classrefs.back(), SymbolReference::Implicit));
+}
+
+TEST_CASE("arguments passed by reference", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-converting-refargs.db";
+
+  ScannerInvocation inv{
+    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "-f:tu", "pass-by-reference.cpp",
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  SnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  File srcfile = getFile(files, std::regex("pass-by-reference\\.cpp"));
+
+  std::vector<ArgumentPassedByReference> refargs = s.getArgumentsPassedByReference(srcfile.id);
+  REQUIRE(refargs.size() == 1);
+  REQUIRE(refargs.front().position == FilePosition(10, 27));
 }

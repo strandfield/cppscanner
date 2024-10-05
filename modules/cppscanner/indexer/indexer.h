@@ -14,6 +14,7 @@
 
 #include <map>
 #include <memory>
+#include <utility>
 
 namespace clang
 {
@@ -131,6 +132,8 @@ public:
   bool shouldIndexFile(clang::FileID fileId);
   bool ShouldTraverseDecl(const clang::Decl* decl);
   cppscanner::FileID getFileID(clang::FileID clangFileId);
+  std::pair<FileID, FilePosition> convert(const clang::SourceLocation& loc);
+  std::pair<FileID, FilePosition> convert(clang::FileID fileId, const clang::SourceLocation& loc);
   clang::FileID getClangFileID(const cppscanner::FileID id);
   clang::ASTContext* getAstContext() const;
   clang::Preprocessor* getPreprocessor() const;

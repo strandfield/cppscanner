@@ -12,6 +12,7 @@
 #include "cppscanner/index/file.h"
 #include "cppscanner/index/include.h"
 #include "cppscanner/index/override.h"
+#include "cppscanner/index/refarg.h"
 #include "cppscanner/index/reference.h"
 #include "cppscanner/index/symbol.h"
 
@@ -65,6 +66,7 @@ public:
   void insertBaseOfs(const std::vector<BaseOf>& bofs);
   void insertOverrides(const std::vector<Override>& overrides);
   void insertDiagnostics(const std::vector<Diagnostic>& diagnostics);
+  void insert(const std::vector<ArgumentPassedByReference>& refargs);
 
   std::vector<Include> loadAllIncludesInFile(FileID fid);
   void removeAllIncludesInFile(FileID fid);

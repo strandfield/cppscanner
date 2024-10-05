@@ -86,7 +86,7 @@ TEST_CASE("tuple.cpp", "[scanner][stl]")
     REQUIRE(inv.errors().empty());
   }
 
-  TemporarySnapshot s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() > 0);

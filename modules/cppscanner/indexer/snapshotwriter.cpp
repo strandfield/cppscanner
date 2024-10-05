@@ -249,6 +249,10 @@ CREATE TABLE "symbolReference" (
   FOREIGN KEY("parent_symbol_id") REFERENCES "symbol"("id")
 );
 
+CREATE VIEW symbolDefinition (symbol_id, file_id, line, col, flags) AS
+  SELECT symbol_id, file_id, line, col, flags
+  FROM symbolReference WHERE isDefinition = 1;
+
 CREATE TABLE "baseOf" (
   "baseClassID"                  INTEGER NOT NULL,
   "derivedClassID"               INTEGER NOT NULL,
@@ -280,9 +284,12 @@ CREATE TABLE "diagnostic" (
   FOREIGN KEY("fileID")  REFERENCES "file"("id")
 );
 
-CREATE VIEW symbolDefinition (symbol_id, file_id, line, col, flags) AS
-  SELECT symbol_id, file_id, line, col, flags
-  FROM symbolReference WHERE isDefinition = 1;
+CREATE TABLE "argumentPassedByReference" (
+  "file_id"               INTEGER NOT NULL,
+  "line"                  INTEGER NOT NULL,
+  "column"                INTEGER NOT NULL,
+  FOREIGN KEY("file_id")  REFERENCES "file"("id")
+);
 
 COMMIT;
 )";
@@ -691,6 +698,27 @@ void SnapshotWriter::insertDiagnostics(const std::vector<Diagnostic>& diagnostic
     stmt.bind(3, d.position.line());
     stmt.bind(4, d.position.column());
     stmt.bind(5, std::string_view(d.message));
+
+    stmt.insert();
+  }
+}
+
+void SnapshotWriter::insert(const std::vector<ArgumentPassedByReference>& refargs)
+{
+  if (refargs.empty()) {
+    return;
+  }
+
+  sql::Statement stmt{ 
+    database(),
+    "INSERT OR IGNORE INTO argumentPassedByReference(file_id, line, column) VALUES(?,?,?)" 
+  };
+
+  for (const ArgumentPassedByReference& refarg : refargs)
+  {
+    stmt.bind(1, static_cast<int>(refarg.fileID));
+    stmt.bind(2, refarg.position.line());
+    stmt.bind(3, refarg.position.column());
 
     stmt.insert();
   }

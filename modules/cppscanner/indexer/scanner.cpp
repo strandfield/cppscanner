@@ -524,6 +524,12 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     }
   }
 
+  // Process refargs
+  {
+    sql::Transaction transaction{ m_snapshot->database() };
+    m_snapshot->insert(tuIndex.fileAnnotations.refargs);
+  }
+
   // Update list of already indexed files
   for (const File& f : newfiles) {
     setFileIndexed(f.id);

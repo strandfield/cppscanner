@@ -11,6 +11,7 @@
 #include "cppscanner/index/diagnostic.h"
 #include "cppscanner/index/include.h"
 #include "cppscanner/index/override.h"
+#include "cppscanner/index/refarg.h"
 #include "cppscanner/index/reference.h"
 
 #include <map>
@@ -49,12 +50,20 @@ public:
 
   std::vector<Diagnostic> diagnostics;
 
+  struct FileAnnotations
+  {
+    std::vector<ArgumentPassedByReference> refargs;
+  };
+
+  FileAnnotations fileAnnotations;
+
 public:
   void add(const Include& incl);
   void add(const SymbolReference& symRef);
   void add(const BaseOf& baseOf);
   void add(const Override& fnOverride);
   void add(Diagnostic d);
+  void add(ArgumentPassedByReference refarg);
 
   IndexerSymbol* getSymbolById(const SymbolID& id);
 };
@@ -85,6 +94,11 @@ inline void TranslationUnitIndex::add(Diagnostic d)
   diagnostics.push_back(std::move(d));
 }
 
+inline void TranslationUnitIndex::add(ArgumentPassedByReference refarg)
+{
+  fileAnnotations.refargs.push_back(refarg);
+}
+
 inline IndexerSymbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
 {
   auto it = this->symbols.find(id);
@@ -92,6 +106,7 @@ inline IndexerSymbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
 }
 
 void sortAndRemoveDuplicates(std::vector<SymbolReference>& refs);
+void sortAndRemoveDuplicates(std::vector<ArgumentPassedByReference>& refargs);
 
 } // namespace cppscanner
 
