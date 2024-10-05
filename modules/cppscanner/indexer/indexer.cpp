@@ -1202,6 +1202,10 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
   } 
   else if (ndef == 0)
   {
+    // note: the following does not work that well with a using declaration.
+    // because the decl is the "using" and is in a way implicit,
+    // but the referenced constructor is not referenced implicitly
+
     size_t ndecl = std::count_if(begin, end, [](const SymbolReference& ref) -> bool {
       return ref.flags & SymbolReference::Declaration;
       });
