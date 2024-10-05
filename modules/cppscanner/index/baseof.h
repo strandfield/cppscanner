@@ -6,7 +6,6 @@
 #define CPPSCANNER_BASEOF_H
 
 #include "access.h"
-#include "relation.h"
 #include "symbolid.h"
 
 namespace cppscanner
@@ -15,21 +14,12 @@ namespace cppscanner
 /**
  * \brief represents a "base of" relation between two classes
  */
-class BaseOf
+struct BaseOf
 {
-public:
   SymbolID baseClassID; //< the id of the base class
   SymbolID derivedClassID; //< the id of the derived class
   AccessSpecifier accessSpecifier; //< whether public, protected or private inheritance is used
-
-public:
-  Relation toRelation() const;
 };
-
-inline Relation BaseOf::toRelation() const
-{
-  return Relation(baseClassID, RelationKind::BaseOf, derivedClassID);
-}
 
 } // namespace cppscanner
 

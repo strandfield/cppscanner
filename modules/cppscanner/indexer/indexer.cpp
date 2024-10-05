@@ -1354,6 +1354,11 @@ void Indexer::finish()
 namespace
 {
 
+enum class RelationKind : uint8_t {
+  BaseOf = 1,
+  OverriddenBy = 2,
+};
+
 std::optional<RelationKind> getIndexableRelation(clang::index::SymbolRoleSet srs)
 {
   if (srs & (int)clang::index::SymbolRole::RelationBaseOf) {
