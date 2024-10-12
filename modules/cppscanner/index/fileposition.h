@@ -35,6 +35,8 @@ public:
   void setColumn(int c);
 
   bool overflows() const;
+
+  uint32_t bits() const;
 };
 
 inline FilePosition::FilePosition(int l, int c)
@@ -81,6 +83,11 @@ inline void FilePosition::setColumn(int c)
 inline bool FilePosition::overflows() const
 {
   return line() == MaxLine || column() == MaxColumn;
+}
+
+inline uint32_t FilePosition::bits() const
+{
+  return m_pack;
 }
 
 inline bool operator==(const FilePosition& lhs, const FilePosition& rhs) {

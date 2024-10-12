@@ -159,6 +159,7 @@ protected:
 protected:
   void processRelations(std::pair<const clang::Decl*, IndexerSymbol*> declAndSymbol, clang::SourceLocation refLocation, llvm::ArrayRef<clang::index::SymbolRelation> relations);
   void indexPreprocessingRecord(clang::Preprocessor& pp);
+  void recordSymbolDeclaration(const IndexerSymbol& symbol, const clang::Decl& declaration, bool isDef);
 };
 
 } // namespace cppscanner

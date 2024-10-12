@@ -1023,6 +1023,52 @@ void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
   }*/
 }
 
+void Indexer::recordSymbolDeclaration(const IndexerSymbol& symbol, const clang::Decl& declaration, bool isDef)
+{
+  auto should_index_decl = [isDef](const IndexerSymbol& sym) {
+    if (sym.testFlag(SymbolFlag::Local)) {
+      return false;
+    }
+
+    switch (sym.kind) {
+    case SymbolKind::Enum:               [[fallthrough]];
+    case SymbolKind::EnumClass:          [[fallthrough]];
+    case SymbolKind::Struct:             [[fallthrough]];
+    case SymbolKind::Class:              [[fallthrough]];
+    case SymbolKind::Union:              [[fallthrough]];
+    case SymbolKind::Typedef:            [[fallthrough]];
+    case SymbolKind::TypeAlias:          [[fallthrough]];
+    case SymbolKind::Function:           [[fallthrough]];
+    case SymbolKind::Method:             [[fallthrough]];
+    case SymbolKind::StaticMethod:       [[fallthrough]];
+    case SymbolKind::Constructor:        [[fallthrough]];
+    case SymbolKind::Destructor:         [[fallthrough]];
+    case SymbolKind::Operator:           [[fallthrough]];
+    case SymbolKind::ConversionFunction: [[fallthrough]];
+    case SymbolKind::Concept:            return true;
+    case SymbolKind::Variable:           [[fallthrough]];
+    case SymbolKind::StaticProperty:     [[fallthrough]];
+    case SymbolKind::Field:
+      return sym.testFlag(VariableInfo::Const | VariableInfo::Constexpr) && isDef;
+    default:                             return false;
+    }
+  };
+
+  if (!should_index_decl(symbol)) {
+    return;
+  }
+
+  SymbolDeclaration decl;
+  decl.symbolID = symbol.id;
+  decl.isDefinition = isDef;
+
+  const clang::SourceRange range = declaration.getSourceRange();
+  std::tie(decl.fileID, decl.startPosition) = convert(range.getBegin());
+  std::tie(decl.fileID, decl.endPosition) = convert(range.getEnd());
+
+  getCurrentIndex()->add(decl);
+}
+
 bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::SymbolRoleSet roles,
   llvm::ArrayRef<clang::index::SymbolRelation> relations,
   clang::SourceLocation loc, ASTNodeInfo astNode)
@@ -1069,6 +1115,17 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
 
     if (decl->isImplicit()) {
       symref.flags |= SymbolReference::Implicit;
+    } else {
+
+      if (auto* fdecl = llvm::dyn_cast<clang::FunctionDecl>(decl))
+      {
+        if (testFlag(symref, SymbolReference::Definition))
+        {
+          std::cout << symref.position.line() << ":" << symbol->name << ":" << (fdecl->getDefinition() != fdecl) << std::endl;
+        }
+      }
+
+      recordSymbolDeclaration(*symbol, *decl, testFlag(symref, SymbolReference::Definition));
     }
   }
 
@@ -1364,6 +1421,8 @@ void Indexer::finish()
 
   sortAndRemoveDuplicates(m_index->symReferences);
   markImplicitReferences(*m_index, *this);
+
+  sortAndRemoveDuplicates(m_index->declarations);
 
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();

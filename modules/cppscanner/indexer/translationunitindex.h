@@ -8,6 +8,7 @@
 #include "indexersymbol.h"
 
 #include "cppscanner/index/baseof.h"
+#include "cppscanner/index/declaration.h"
 #include "cppscanner/index/diagnostic.h"
 #include "cppscanner/index/include.h"
 #include "cppscanner/index/override.h"
@@ -41,7 +42,7 @@ public:
 
   std::map<SymbolID, IndexerSymbol> symbols;
 
-  std::vector<SymbolReference> symReferences;
+  std::vector<SymbolReference> symReferences; // TODO: move to fileAnnotations ?
 
   struct {
     std::vector<BaseOf> baseOfs;
@@ -57,6 +58,8 @@ public:
 
   FileAnnotations fileAnnotations;
 
+  std::vector<SymbolDeclaration> declarations;
+
 public:
   void add(const Include& incl);
   void add(const SymbolReference& symRef);
@@ -64,6 +67,7 @@ public:
   void add(const Override& fnOverride);
   void add(Diagnostic d);
   void add(ArgumentPassedByReference refarg);
+  void add(SymbolDeclaration decl);
 
   IndexerSymbol* getSymbolById(const SymbolID& id);
 };
@@ -99,6 +103,11 @@ inline void TranslationUnitIndex::add(ArgumentPassedByReference refarg)
   fileAnnotations.refargs.push_back(refarg);
 }
 
+inline void TranslationUnitIndex::add(SymbolDeclaration declaration)
+{
+  this->declarations.push_back(declaration);
+}
+
 inline IndexerSymbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
 {
   auto it = this->symbols.find(id);
@@ -107,6 +116,7 @@ inline IndexerSymbol* TranslationUnitIndex::getSymbolById(const SymbolID& id)
 
 void sortAndRemoveDuplicates(std::vector<SymbolReference>& refs);
 void sortAndRemoveDuplicates(std::vector<ArgumentPassedByReference>& refargs);
+void sortAndRemoveDuplicates(std::vector<SymbolDeclaration>& declarations);
 
 } // namespace cppscanner
 
