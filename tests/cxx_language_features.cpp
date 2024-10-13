@@ -368,3 +368,162 @@ TEST_CASE("arguments passed by reference", "[scanner][cxx_language_features]")
   REQUIRE(refargs.size() == 1);
   REQUIRE(refargs.front().position == FilePosition(10, 27));
 }
+
+
+TEST_CASE("declarations", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-declarations.db";
+
+  ScannerInvocation inv{
+    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "-f:tu", "declarations.cpp",
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  SnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  File srcfile = getFile(files, std::regex("declarations\\.cpp"));
+
+  auto sort_by_startline = [](std::vector<SymbolDeclaration>& declarations) {
+    std::sort(declarations.begin(), declarations.end(), [](const SymbolDeclaration& a, const SymbolDeclaration& b) {
+      return a.startPosition.line() < b.startPosition.line();
+      });
+  };
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "integer_t" });
+    REQUIRE(symbol.kind == SymbolKind::Typedef);
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 1);
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 2);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "real" });
+    REQUIRE(symbol.kind == SymbolKind::TypeAlias);
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 1);
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 4);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "Alphabet" });
+    REQUIRE(symbol.kind == SymbolKind::Enum);
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 1);
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 6);
+    REQUIRE(declarations.front().endPosition.line() == 9);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "MyClass" });
+    REQUIRE(symbol.kind == SymbolKind::Class);
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 2);
+    sort_by_startline(declarations);
+
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 11);
+    REQUIRE(!declarations.front().isDefinition);
+
+    REQUIRE(declarations.back().fileID == srcfile.id);
+    REQUIRE(declarations.back().startPosition.line() == 13);
+    REQUIRE(declarations.back().endPosition.line() == 26);
+    REQUIRE(declarations.back().isDefinition);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "MyClass", "myMethod()" });
+    REQUIRE(symbol.kind == SymbolKind::Method);
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 2);
+    sort_by_startline(declarations);
+
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 17);
+    REQUIRE(!declarations.front().isDefinition);
+
+    REQUIRE(declarations.back().fileID == srcfile.id);
+    REQUIRE(declarations.back().startPosition.line() == 28);
+    REQUIRE(declarations.back().endPosition.line() == 31);
+    REQUIRE(declarations.back().isDefinition);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "MyClass", "myInlineMethod()" });
+    REQUIRE(symbol.kind == SymbolKind::Method);
+    REQUIRE(testFlag(symbol, FunctionInfo::Inline));
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 1);
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 19);
+    REQUIRE(declarations.front().endPosition.line() == 22);
+    REQUIRE(declarations.front().isDefinition);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "MyClass", "N" });
+    REQUIRE(symbol.kind == SymbolKind::StaticProperty);
+    REQUIRE(testFlag(symbol, VariableInfo::Const));
+    REQUIRE(testFlag(symbol, VariableInfo::Static));
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 1);
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 33);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "MyClass", "M" });
+    REQUIRE(symbol.kind == SymbolKind::StaticProperty);
+    REQUIRE(testFlag(symbol, VariableInfo::Constexpr));
+    REQUIRE(testFlag(symbol, VariableInfo::Static));
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 1);
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 25);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "P" });
+    REQUIRE(symbol.kind == SymbolKind::Variable);
+    REQUIRE(testFlag(symbol, VariableInfo::Constexpr));
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 1);
+    REQUIRE(declarations.front().fileID == srcfile.id);
+    REQUIRE(declarations.front().startPosition.line() == 35);
+  }
+
+  {
+    SymbolRecord symbol = s.getSymbolByName({ "myFunctionDecl(int, int)" });
+    REQUIRE(symbol.kind == SymbolKind::Function);
+    std::vector<SymbolDeclaration> declarations = s.getSymbolDeclarations(symbol.id);
+    REQUIRE(declarations.size() == 3);
+    sort_by_startline(declarations);
+
+    REQUIRE(declarations.at(0).fileID == srcfile.id);
+    REQUIRE(declarations.at(0).startPosition.line() == 37);
+    REQUIRE(!declarations.at(0).isDefinition);
+
+    REQUIRE(declarations.at(1).fileID == srcfile.id);
+    REQUIRE(declarations.at(1).startPosition.line() == 39);
+    REQUIRE(!declarations.at(1).isDefinition);
+
+    REQUIRE(declarations.back().fileID == srcfile.id);
+    REQUIRE(declarations.back().startPosition.line() == 41);
+    REQUIRE(declarations.back().endPosition.line() == 44);
+    REQUIRE(declarations.back().isDefinition);
+  }
+}

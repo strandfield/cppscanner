@@ -39,7 +39,8 @@ class SymbolCollector
 {
 private:
   Indexer& m_indexer;
-  std::map<const void*, SymbolID> m_symbolIdCache;
+  std::map<const clang::Decl*, SymbolID> m_symbolIdCache;
+  std::map<const clang::MacroInfo*, SymbolID> m_macroIdCache;
 
 public:
   explicit SymbolCollector(Indexer& idxr);
@@ -51,6 +52,8 @@ public:
 
   SymbolID getSymbolId(const clang::Decl* decl) const;
   SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
+
+  const std::map<const clang::Decl*, SymbolID>& declarations() const;
 
 protected:
   std::string getDeclSpelling(const clang::Decl* decl);
@@ -159,7 +162,8 @@ protected:
 protected:
   void processRelations(std::pair<const clang::Decl*, IndexerSymbol*> declAndSymbol, clang::SourceLocation refLocation, llvm::ArrayRef<clang::index::SymbolRelation> relations);
   void indexPreprocessingRecord(clang::Preprocessor& pp);
-  void recordSymbolDeclaration(const IndexerSymbol& symbol, const clang::Decl& declaration, bool isDef);
+  void recordSymbolDeclarations();
+  void recordSymbolDeclaration(const IndexerSymbol& symbol, const clang::Decl& declaration);
 };
 
 } // namespace cppscanner
