@@ -79,6 +79,9 @@ public:
   std::vector<Diagnostic> loadDiagnosticsInFile(FileID fid);
   void removeAllDiagnosticsInFile(FileID fid);
 
+  std::vector<SymbolDeclaration> loadDeclarationsInFile(FileID fid);
+  void removeAllDeclarationsInFile(FileID fid);
+
 private:
   std::unique_ptr<Database> m_database; // TODO: why use a unique_ptr here ?
 };

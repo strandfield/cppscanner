@@ -746,9 +746,10 @@ void SnapshotWriter::insert(const std::vector<SymbolDeclaration>& declarations)
     return;
   }
 
+  // "insert or ignore" wouldn't work here because there are no primary key in the sql table.
   sql::Statement stmt{ 
     database(),
-    "INSERT OR IGNORE INTO symbolDeclaration(symbol_id, file_id, startPosition, endPosition, isDefinition) VALUES(?,?,?,?,?)" 
+    "INSERT INTO symbolDeclaration(symbol_id, file_id, startPosition, endPosition, isDefinition) VALUES(?,?,?,?,?)" 
   };
 
   for (const SymbolDeclaration& decl : declarations)
@@ -855,6 +856,40 @@ void SnapshotWriter::removeAllDiagnosticsInFile(FileID fid)
   sql::Statement stmt{ 
     database(),
     "DELETE FROM diagnostic WHERE fileID = ?"
+  };
+
+  stmt.bind(1, (int)fid);
+
+  stmt.step();
+}
+
+std::vector<SymbolDeclaration> SnapshotWriter::loadDeclarationsInFile(FileID fid)
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT symbol_id, startPosition, endPosition, isDefinition FROM symbolDeclaration WHERE file_id = ?"
+  };
+
+  stmt.bind(1, (int)fid);
+
+  auto read_row = [fid](sql::Statement& q) -> SymbolDeclaration {
+    SymbolDeclaration d;
+    d.fileID = fid;
+    d.symbolID = SymbolID::fromRawID(q.columnInt64(0));
+    d.startPosition = FilePosition::fromBits(q.columnInt(1));
+    d.endPosition = FilePosition::fromBits(q.columnInt(2));
+    d.isDefinition = q.columnInt(3) != 0;
+    return d;
+    };
+
+  return sql::readRowsAsVector<SymbolDeclaration>(stmt, read_row);
+}
+
+void SnapshotWriter::removeAllDeclarationsInFile(FileID fid)
+{
+  sql::Statement stmt{ 
+    database(),
+    "DELETE FROM symbolDeclaration WHERE fileID = ?"
   };
 
   stmt.bind(1, (int)fid);

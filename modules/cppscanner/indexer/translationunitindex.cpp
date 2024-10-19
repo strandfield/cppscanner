@@ -50,6 +50,8 @@ void sortAndRemoveDuplicates(std::vector<ArgumentPassedByReference>& refargs)
 
 void sortAndRemoveDuplicates(std::vector<SymbolDeclaration>& declarations)
 {
+  // declarations must be sorted by file (expected by scanner.cpp)
+
   auto comp = [](const SymbolDeclaration& lhs, const SymbolDeclaration& rhs) {
     return std::forward_as_tuple(lhs.fileID, lhs.startPosition, lhs.endPosition, lhs.symbolID, lhs.isDefinition)
       < std::forward_as_tuple(rhs.fileID, rhs.startPosition, rhs.endPosition, rhs.symbolID, rhs.isDefinition);

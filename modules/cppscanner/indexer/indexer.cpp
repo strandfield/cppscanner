@@ -1561,6 +1561,13 @@ void Indexer::recordSymbolDeclaration(const IndexerSymbol& symbol, const clang::
   decl.isDefinition = is_def;
 
   const clang::SourceRange range = declaration.getSourceRange();
+
+  const clang::FileID clang_file_id = getSourceManager().getFileID(range.getEnd());
+
+  if (!shouldIndexFile(clang_file_id)) {
+    return;
+  }
+
   std::tie(decl.fileID, decl.startPosition) = convert(range.getBegin());
   std::tie(decl.fileID, decl.endPosition) = convert(range.getEnd());
 
