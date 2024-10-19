@@ -99,13 +99,14 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     }
 
     REQUIRE(symbols.size() == 2);
+
     {
       std::vector<VariableRecord> properties = s.getStaticProperties(base.id);
       REQUIRE(properties.size() == 1);
       VariableRecord value = properties.front();
       REQUIRE(value.name == "value");
-      REQUIRE(testFlag(value, VariableInfo::Const));
-      REQUIRE(value.type == "const bool");
+      REQUIRE(testFlag(value, VariableInfo::Constexpr));
+      REQUIRE(value.type == "const bool"); // writen as "constexpr bool" in the code; should it be fixed?
       REQUIRE(value.init == "false");
     }
 

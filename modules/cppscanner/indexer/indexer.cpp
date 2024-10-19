@@ -134,6 +134,15 @@ std::string prettyPrint(const clang::QualType& type, const Indexer& idxr)
   return type.getAsString(pp);
 }
 
+std::string prettyPrint(const clang::TypeSourceInfo* info, const Indexer& idxr)
+{
+  if (!info) {
+    return {};
+  } 
+
+  return prettyPrint(info->getType(), idxr);
+}
+
 std::string prettyPrint(const clang::Expr* expr, const Indexer& idxr)
 {
   llvm::SmallString<64> str;
@@ -518,7 +527,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
 
     auto& varinfo = symbol.getExtraInfo<VariableInfo>();
 
-    varinfo.type = prettyPrint(fdecl->getTypeSourceInfo()->getType(), m_indexer);
+    varinfo.type = prettyPrint(fdecl->getTypeSourceInfo(), m_indexer);
 
     if (fdecl->getInClassInitializer() && (symbol.flags & (VariableInfo::Const | VariableInfo::Constexpr))) {
       varinfo.init = prettyPrint(fdecl->getInClassInitializer(), m_indexer);
@@ -533,6 +542,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     symbol.setFlag(VariableInfo::Const, vardecl->getTypeSourceInfo()->getType().isConstQualified());
     symbol.setFlag(VariableInfo::Constexpr, vardecl->isConstexpr());
     symbol.setFlag(VariableInfo::Static, vardecl->isStaticDataMember());
+
+    varinfo.type = prettyPrint(vardecl->getTypeSourceInfo(), m_indexer);
 
     if (vardecl->getInit() && (symbol.flags & (VariableInfo::Const | VariableInfo::Constexpr))) {
       varinfo.init = prettyPrint(vardecl->getInit(), m_indexer);
@@ -598,7 +609,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     info.parameterIndex = parmdecl->getIndex();
 
     if (parmdecl->getTypeSourceInfo()) {
-      info.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
+      info.type = prettyPrint(parmdecl->getTypeSourceInfo(), m_indexer);
     }
 
     if (parmdecl->hasDefaultArgument()) {
