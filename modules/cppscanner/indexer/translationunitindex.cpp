@@ -5,6 +5,7 @@
 #include "translationunitindex.h"
 
 #include <algorithm>
+#include <tuple>
 
 namespace cppscanner
 {
@@ -44,6 +45,24 @@ void sortAndRemoveDuplicates(std::vector<ArgumentPassedByReference>& refargs)
   {
     auto it = std::unique(refargs.begin(), refargs.end());
     refargs.erase(it, refargs.end());
+  }
+}
+
+void sortAndRemoveDuplicates(std::vector<SymbolDeclaration>& declarations)
+{
+  // declarations must be sorted by file (expected by scanner.cpp)
+
+  auto comp = [](const SymbolDeclaration& lhs, const SymbolDeclaration& rhs) {
+    return std::forward_as_tuple(lhs.fileID, lhs.startPosition, lhs.endPosition, lhs.symbolID, lhs.isDefinition)
+      < std::forward_as_tuple(rhs.fileID, rhs.startPosition, rhs.endPosition, rhs.symbolID, rhs.isDefinition);
+    };
+
+  std::sort(declarations.begin(), declarations.end(), comp);
+
+  // remove duplicates
+  {
+    auto it = std::unique(declarations.begin(), declarations.end());
+    declarations.erase(it, declarations.end());
   }
 }
 

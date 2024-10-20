@@ -97,6 +97,29 @@ std::vector<ArgumentPassedByReference> SnapshotReader::getArgumentsPassedByRefer
   return sql::readRowsAsVector<ArgumentPassedByReference>(stmt, readArgumentPassedByReference);
 }
 
+inline static SymbolDeclaration readSymbolDeclaration(sql::Statement& row)
+{
+  SymbolDeclaration ret;
+  ret.symbolID = SymbolID::fromRawID(row.columnInt64(0));
+  ret.fileID = row.columnInt(1);
+  ret.startPosition = FilePosition::fromBits(row.columnInt(2));
+  ret.endPosition = FilePosition::fromBits(row.columnInt(3));
+  ret.isDefinition = (row.columnInt(4) != 0);
+  return ret;
+}
+
+std::vector<SymbolDeclaration> SnapshotReader::getSymbolDeclarations(SymbolID symbolId) const
+{
+  sql::Statement stmt { 
+    database(),
+    "SELECT symbol_id, file_id, startPosition, endPosition, isDefinition FROM symbolDeclaration WHERE symbol_id = ?"
+  };
+
+  stmt.bind(1, symbolId.rawID());
+
+  return sql::readRowsAsVector<SymbolDeclaration>(stmt, readSymbolDeclaration);
+}
+
 std::vector<SymbolRecord> SnapshotReader::getSymbolsByName(const std::string& name) const
 {
   return fetchAll(*this, SymbolRecordFilter().withName(name));

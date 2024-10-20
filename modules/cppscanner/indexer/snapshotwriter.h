@@ -8,6 +8,7 @@
 #include "cppscanner/database/database.h"
 
 #include "cppscanner/index/baseof.h"
+#include "cppscanner/index/declaration.h"
 #include "cppscanner/index/diagnostic.h"
 #include "cppscanner/index/file.h"
 #include "cppscanner/index/include.h"
@@ -67,6 +68,7 @@ public:
   void insertOverrides(const std::vector<Override>& overrides);
   void insertDiagnostics(const std::vector<Diagnostic>& diagnostics);
   void insert(const std::vector<ArgumentPassedByReference>& refargs);
+  void insert(const std::vector<SymbolDeclaration>& declarations);
 
   std::vector<Include> loadAllIncludesInFile(FileID fid);
   void removeAllIncludesInFile(FileID fid);
@@ -76,6 +78,9 @@ public:
 
   std::vector<Diagnostic> loadDiagnosticsInFile(FileID fid);
   void removeAllDiagnosticsInFile(FileID fid);
+
+  std::vector<SymbolDeclaration> loadDeclarationsInFile(FileID fid);
+  void removeAllDeclarationsInFile(FileID fid);
 
 private:
   std::unique_ptr<Database> m_database; // TODO: why use a unique_ptr here ?

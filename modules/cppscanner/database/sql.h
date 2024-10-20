@@ -76,6 +76,7 @@ public:
   void bind(int n, const std::string& text) = delete;
   void bind(int n, std::string_view text);
   void bind(int n, int value);
+  void bind(int n, uint32_t value);
   void bind(int n, uint64_t value);
   void bind(int n, int64_t value);
   void bind(int n, Blob blob);
@@ -189,6 +190,11 @@ inline void Statement::bind(int n, std::string_view text)
 inline void Statement::bind(int n, int value)
 {
   sqlite3_bind_int(m_statement, n, value);
+}
+
+inline void Statement::bind(int n, uint32_t value)
+{
+  bind(n, static_cast<int>(value));
 }
 
 inline void Statement::bind(int n, uint64_t value)

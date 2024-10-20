@@ -8,6 +8,7 @@
 #include "cppscanner/database/database.h"
 
 #include "cppscanner/index/baseof.h"
+#include "cppscanner/index/declaration.h"
 #include "cppscanner/index/diagnostic.h"
 #include "cppscanner/index/file.h"
 #include "cppscanner/index/include.h"
@@ -42,6 +43,7 @@ public:
   std::vector<File> getFiles() const;
   std::vector<Include> getIncludedFiles(FileID fid) const;
   std::vector<ArgumentPassedByReference> getArgumentsPassedByReference(FileID file) const;
+  std::vector<SymbolDeclaration> getSymbolDeclarations(SymbolID symbolId) const;
 
   std::vector<SymbolRecord> getSymbolsByName(const std::string& name) const;
   SymbolRecord getChildSymbolByName(const std::string& name, SymbolID parentID = {}) const;

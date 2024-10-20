@@ -77,6 +77,8 @@ static_assert(SymbolReference::Call == 16);
 static_assert(SymbolReference::Dynamic == 32);
 static_assert(SymbolReference::Implicit == 128);
 
+static_assert(FilePosition::ColumnBits == 12);
+
 static const char* SQL_CREATE_STATEMENTS = R"(
 BEGIN TRANSACTION;
 
@@ -252,6 +254,20 @@ CREATE TABLE "symbolReference" (
 CREATE VIEW symbolDefinition (symbol_id, file_id, line, col, flags) AS
   SELECT symbol_id, file_id, line, col, flags
   FROM symbolReference WHERE isDefinition = 1;
+
+CREATE TABLE "symbolDeclaration" (
+  "symbol_id"                     INTEGER NOT NULL,
+  "file_id"                       INTEGER NOT NULL,
+  "startPosition"                 INTEGER NOT NULL,
+  "endPosition"                   INTEGER NOT NULL,
+  "isDefinition"                  INTEGER NOT NULL DEFAULT 0,
+  startPositionLine               INT GENERATED ALWAYS AS (startPosition >> 12) VIRTUAL,
+  startPositionColumn             INT GENERATED ALWAYS AS (startPosition & 4095) VIRTUAL,
+  endPositionLine                 INT GENERATED ALWAYS AS (endPosition >> 12) VIRTUAL,
+  endPositionColumn               INT GENERATED ALWAYS AS (endPosition & 4095) VIRTUAL,
+  FOREIGN KEY("symbol_id")        REFERENCES "symbol"("id"),
+  FOREIGN KEY("file_id")          REFERENCES "file"("id")
+);
 
 CREATE TABLE "baseOf" (
   "baseClassID"                  INTEGER NOT NULL,
@@ -724,6 +740,30 @@ void SnapshotWriter::insert(const std::vector<ArgumentPassedByReference>& refarg
   }
 }
 
+void SnapshotWriter::insert(const std::vector<SymbolDeclaration>& declarations)
+{
+  if (declarations.empty()) {
+    return;
+  }
+
+  // "insert or ignore" wouldn't work here because there are no primary key in the sql table.
+  sql::Statement stmt{ 
+    database(),
+    "INSERT INTO symbolDeclaration(symbol_id, file_id, startPosition, endPosition, isDefinition) VALUES(?,?,?,?,?)" 
+  };
+
+  for (const SymbolDeclaration& decl : declarations)
+  {
+    stmt.bind(1, decl.symbolID.rawID());
+    stmt.bind(2, static_cast<int>(decl.fileID));
+    stmt.bind(3, decl.startPosition.bits());
+    stmt.bind(4, decl.endPosition.bits());
+    stmt.bind(5, decl.isDefinition);
+
+    stmt.insert();
+  }
+}
+
 std::vector<Include> SnapshotWriter::loadAllIncludesInFile(FileID fid)
 {
   sql::Statement stmt{ 
@@ -816,6 +856,40 @@ void SnapshotWriter::removeAllDiagnosticsInFile(FileID fid)
   sql::Statement stmt{ 
     database(),
     "DELETE FROM diagnostic WHERE fileID = ?"
+  };
+
+  stmt.bind(1, (int)fid);
+
+  stmt.step();
+}
+
+std::vector<SymbolDeclaration> SnapshotWriter::loadDeclarationsInFile(FileID fid)
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT symbol_id, startPosition, endPosition, isDefinition FROM symbolDeclaration WHERE file_id = ?"
+  };
+
+  stmt.bind(1, (int)fid);
+
+  auto read_row = [fid](sql::Statement& q) -> SymbolDeclaration {
+    SymbolDeclaration d;
+    d.fileID = fid;
+    d.symbolID = SymbolID::fromRawID(q.columnInt64(0));
+    d.startPosition = FilePosition::fromBits(q.columnInt(1));
+    d.endPosition = FilePosition::fromBits(q.columnInt(2));
+    d.isDefinition = q.columnInt(3) != 0;
+    return d;
+    };
+
+  return sql::readRowsAsVector<SymbolDeclaration>(stmt, read_row);
+}
+
+void SnapshotWriter::removeAllDeclarationsInFile(FileID fid)
+{
+  sql::Statement stmt{ 
+    database(),
+    "DELETE FROM symbolDeclaration WHERE fileID = ?"
   };
 
   stmt.bind(1, (int)fid);

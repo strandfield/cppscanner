@@ -134,6 +134,15 @@ std::string prettyPrint(const clang::QualType& type, const Indexer& idxr)
   return type.getAsString(pp);
 }
 
+std::string prettyPrint(const clang::TypeSourceInfo* info, const Indexer& idxr)
+{
+  if (!info) {
+    return {};
+  } 
+
+  return prettyPrint(info->getType(), idxr);
+}
+
 std::string prettyPrint(const clang::Expr* expr, const Indexer& idxr)
 {
   llvm::SmallString<64> str;
@@ -296,7 +305,7 @@ IndexerSymbol* SymbolCollector::process(const clang::Decl* decl)
 
 IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo)
 {
-  auto [it, inserted] = m_symbolIdCache.try_emplace(macroInfo, SymbolID());
+  auto [it, inserted] = m_macroIdCache.try_emplace(macroInfo, SymbolID());
 
   if (inserted) {
     try {
@@ -336,8 +345,13 @@ SymbolID SymbolCollector::getSymbolId(const clang::Decl* decl) const
 
 SymbolID SymbolCollector::getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const
 {
-  auto it = m_symbolIdCache.find(macroInfo);
-  return it != m_symbolIdCache.end() ? it->second : SymbolID();
+  auto it = m_macroIdCache.find(macroInfo);
+  return it != m_macroIdCache.end() ? it->second : SymbolID();
+}
+
+const std::map<const clang::Decl*, SymbolID>& SymbolCollector::declarations() const
+{
+  return m_symbolIdCache;
 }
 
 std::string SymbolCollector::getDeclSpelling(const clang::Decl* decl)
@@ -513,7 +527,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
 
     auto& varinfo = symbol.getExtraInfo<VariableInfo>();
 
-    varinfo.type = prettyPrint(fdecl->getTypeSourceInfo()->getType(), m_indexer);
+    varinfo.type = prettyPrint(fdecl->getTypeSourceInfo(), m_indexer);
 
     if (fdecl->getInClassInitializer() && (symbol.flags & (VariableInfo::Const | VariableInfo::Constexpr))) {
       varinfo.init = prettyPrint(fdecl->getInClassInitializer(), m_indexer);
@@ -523,13 +537,13 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   case clang::Decl::Kind::Var:
   {
     auto* vardecl = llvm::dyn_cast<clang::VarDecl>(decl);
-
     auto& varinfo = symbol.getExtraInfo<VariableInfo>();
 
     symbol.setFlag(VariableInfo::Const, vardecl->getTypeSourceInfo()->getType().isConstQualified());
-    varinfo.type = prettyPrint(vardecl->getTypeSourceInfo()->getType(), m_indexer);
-    
+    symbol.setFlag(VariableInfo::Constexpr, vardecl->isConstexpr());
     symbol.setFlag(VariableInfo::Static, vardecl->isStaticDataMember());
+
+    varinfo.type = prettyPrint(vardecl->getTypeSourceInfo(), m_indexer);
 
     if (vardecl->getInit() && (symbol.flags & (VariableInfo::Const | VariableInfo::Constexpr))) {
       varinfo.init = prettyPrint(vardecl->getInit(), m_indexer);
@@ -595,7 +609,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     info.parameterIndex = parmdecl->getIndex();
 
     if (parmdecl->getTypeSourceInfo()) {
-      info.type = prettyPrint(parmdecl->getTypeSourceInfo()->getType(), m_indexer);
+      info.type = prettyPrint(parmdecl->getTypeSourceInfo(), m_indexer);
     }
 
     if (parmdecl->hasDefaultArgument()) {
@@ -1365,6 +1379,8 @@ void Indexer::finish()
   sortAndRemoveDuplicates(m_index->symReferences);
   markImplicitReferences(*m_index, *this);
 
+  recordSymbolDeclarations();
+
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();
 
@@ -1467,6 +1483,106 @@ void Indexer::indexPreprocessingRecord(clang::Preprocessor& pp)
 {
   PreprocessingRecordIndexer pprindexer{ *this };
   pprindexer.process(pp.getPreprocessingRecord());
+}
+
+void Indexer::recordSymbolDeclarations()
+{
+  for (const auto& p : m_symbolCollector.declarations())
+  {
+    const IndexerSymbol* symbol = getCurrentIndex()->getSymbolById(p.second);
+
+    if (!symbol) {
+      continue;
+    }
+
+    const clang::Decl* first = p.first->getCanonicalDecl();
+    const clang::Decl* latest = first->getMostRecentDecl();
+    const clang::Decl* decl = latest;
+
+    while (decl != nullptr)
+    {
+      recordSymbolDeclaration(*symbol, *decl);
+      decl = decl->getPreviousDecl();
+    }
+  }
+
+  sortAndRemoveDuplicates(m_index->declarations);
+}
+
+void Indexer::recordSymbolDeclaration(const IndexerSymbol& symbol, const clang::Decl& declaration)
+{
+  bool is_def = false;
+
+  if (const clang::FunctionDecl* fdecl = declaration.getAsFunction())
+  {
+    is_def = (fdecl->getDefinition() == &declaration);
+  }
+  else if (const auto* vardecl = llvm::dyn_cast<clang::VarDecl>(&declaration))
+  {
+    is_def = vardecl->getInit() != nullptr;
+  }
+  else if (const auto* fielddecl = llvm::dyn_cast<clang::FieldDecl>(&declaration))
+  {
+    is_def = fielddecl->getInClassInitializer() != nullptr;
+  }
+  else if (const auto* recdecl = llvm::dyn_cast<clang::RecordDecl>(&declaration))
+  {
+    is_def = (recdecl->getDefinition() == &declaration);
+  }
+  else if (const auto* enumdecl = llvm::dyn_cast<clang::EnumDecl>(&declaration))
+  {
+    is_def = (enumdecl->getDefinition() == &declaration);
+  }
+
+  auto should_index_decl = [is_def](const IndexerSymbol& sym) {
+    if (sym.testFlag(SymbolFlag::Local)) {
+      return false;
+    }
+
+    switch (sym.kind) {
+    case SymbolKind::Enum:               [[fallthrough]];
+    case SymbolKind::EnumClass:          [[fallthrough]];
+    case SymbolKind::Struct:             [[fallthrough]];
+    case SymbolKind::Class:              [[fallthrough]];
+    case SymbolKind::Union:              [[fallthrough]];
+    case SymbolKind::Typedef:            [[fallthrough]];
+    case SymbolKind::TypeAlias:          [[fallthrough]];
+    case SymbolKind::Function:           [[fallthrough]];
+    case SymbolKind::Method:             [[fallthrough]];
+    case SymbolKind::StaticMethod:       [[fallthrough]];
+    case SymbolKind::Constructor:        [[fallthrough]];
+    case SymbolKind::Destructor:         [[fallthrough]];
+    case SymbolKind::Operator:           [[fallthrough]];
+    case SymbolKind::ConversionFunction: [[fallthrough]];
+    case SymbolKind::Concept:            return true;
+    case SymbolKind::Variable:           [[fallthrough]];
+    case SymbolKind::StaticProperty:     [[fallthrough]];
+    case SymbolKind::Field:
+      return sym.testFlag(VariableInfo::Const | VariableInfo::Constexpr) && is_def;
+    default:                             return false;
+    }
+    };
+
+  if (!should_index_decl(symbol)) {
+    return;
+  }
+
+  SymbolDeclaration decl;
+  decl.symbolID = symbol.id;
+  decl.isDefinition = is_def;
+
+  const clang::SourceRange range = declaration.getSourceRange();
+
+  const clang::FileID clang_file_id = getSourceManager().getFileID(range.getEnd());
+
+  if (!shouldIndexFile(clang_file_id)) {
+    return;
+  }
+
+  std::tie(decl.fileID, decl.startPosition) = convert(range.getBegin());
+  std::tie(decl.fileID, decl.endPosition) = convert(range.getEnd());
+
+  getCurrentIndex()->add(decl);
 }
 
 } // namespace cppscanner
