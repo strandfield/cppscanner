@@ -134,11 +134,11 @@ void write_extendedsymbolFlagFunctions(std::ofstream& stream)
   stream << std::endl;
 
   write_func("variable_isConst", cppscanner::VariableInfo::Const);
-  write_func("symbol_isConstexpr", cppscanner::VariableInfo::Constexpr);
-  write_func("symbol_isStatic", cppscanner::VariableInfo::Static);
-  write_func("symbol_isMutable", cppscanner::VariableInfo::Mutable);  
-  write_func("symbol_isThreadLocal", cppscanner::VariableInfo::ThreadLocal);
-  write_func("symbol_isInline", cppscanner::VariableInfo::Inline);
+  write_func("variable_isConstexpr", cppscanner::VariableInfo::Constexpr);
+  write_func("variable_isStatic", cppscanner::VariableInfo::Static);
+  write_func("variable_isMutable", cppscanner::VariableInfo::Mutable);  
+  write_func("variable_isThreadLocal", cppscanner::VariableInfo::ThreadLocal);
+  write_func("variable_isInline", cppscanner::VariableInfo::Inline);
 
   stream << std::endl;
 
