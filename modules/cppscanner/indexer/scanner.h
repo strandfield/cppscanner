@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_SCANNER_H
 #define CPPSCANNER_SCANNER_H
 
-#include "snapshot.h"
+#include "snapshotwriter.h"
 
 #include <filesystem>
 
@@ -19,7 +19,11 @@ struct ScannerData;
 /**
  * \brief top level class for indexing a C++ project and creating a snapshot 
  * 
- * The initSnapshot() must be called before scan().
+ * The Scanner class uses the Indexer class for producing a TranslationUnitIndex
+ * for each translation unit in the project and then aggregates the results
+ * in a single database file.
+ * 
+ * Warning: the initSnapshot() must be called before scan().
  */
 class Scanner
 {
@@ -38,7 +42,7 @@ public:
   void setTranslationUnitFilters(const std::vector<std::string>& filters);
 
   void initSnapshot(const std::filesystem::path& p);
-  Snapshot* snapshot() const;
+  SnapshotWriter* snapshot() const;
 
   void scan(const std::filesystem::path& compileCommandsPath);
 
@@ -48,7 +52,7 @@ protected:
   void setFileIndexed(FileID f);
 
 private:
-  std::unique_ptr<Snapshot> m_snapshot;
+  std::unique_ptr<SnapshotWriter> m_snapshot;
   std::unique_ptr<ScannerData> d;
 };
 

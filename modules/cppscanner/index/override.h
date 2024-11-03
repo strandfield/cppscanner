@@ -5,7 +5,6 @@
 #ifndef CPPSCANNER_OVERRIDE_H
 #define CPPSCANNER_OVERRIDE_H
 
-#include "relation.h"
 #include "symbolid.h"
 
 namespace cppscanner
@@ -14,20 +13,11 @@ namespace cppscanner
 /**
  * \brief represents an "overrides" relation between two member functions
  */
-class Override
+struct Override
 {
-public:
   SymbolID baseMethodID; //< the id of the virtual method in the base class
   SymbolID overrideMethodID; //< the id of the method in the derived class
-
-public:
-  Relation toRelation() const;
 };
-
-inline Relation Override::toRelation() const
-{
-  return Relation(baseMethodID, RelationKind::OverriddenBy, overrideMethodID);
-}
 
 } // namespace cppscanner
 

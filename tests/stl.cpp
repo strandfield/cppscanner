@@ -33,8 +33,10 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   File stringcpp = getFile(files, std::regex("string\\.cpp"));
   REQUIRE_THROWS(getFile(files, std::regex("vector\\.cpp")));
 
-  Symbol init = s.getSymbolByName("init");
+  SymbolRecord init = s.getChildSymbolByName("init()");
   REQUIRE(init.kind == SymbolKind::Function);
+
+  // TODO: tester que std::string n'a pas le flag FromProject
 }
 
 TEST_CASE("vector.cpp", "[scanner][stl]")
@@ -62,7 +64,7 @@ TEST_CASE("vector.cpp", "[scanner][stl]")
   File vectorcpp = getFile(files, std::regex("vector\\.cpp"));
   REQUIRE_THROWS(getFile(files, std::regex("string\\.cpp")));
 
-  Symbol sortThisVector = s.getSymbolByName("sortThisVector");
+  SymbolRecord sortThisVector = s.getChildSymbolByName("sortThisVector(std::vector<int>&)");
   REQUIRE(sortThisVector.kind == SymbolKind::Function);
 }
 
@@ -84,7 +86,7 @@ TEST_CASE("tuple.cpp", "[scanner][stl]")
     REQUIRE(inv.errors().empty());
   }
 
-  TemporarySnapshot s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() > 0);

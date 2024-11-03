@@ -25,6 +25,7 @@ endmacro()
 setup_test_project(simple_project)
 setup_test_project(hello_world)
 setup_test_project(cxx_language_features)
+setup_test_project(cpp20_language_features)
 setup_test_project(stl)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
@@ -38,6 +39,7 @@ add_executable(TEST_cppscanner "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "${CMAKE_
   "simple_project.cpp"
   "hello_world.cpp"
   "cxx_language_features.cpp"
+  "cpp20_language_features.cpp"
   "stl.cpp"
 )
 target_link_libraries(TEST_cppscanner scannerInvocation)
