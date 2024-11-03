@@ -34,6 +34,13 @@ class Indexer;
 
 /**
  * \brief a class for collecting C++ symbols while indexing a translation unit
+ * 
+ * This class creates an IndexerSymbol for each C++ symbol encountered while 
+ * indexing a translation unit. Macros are also handled by this class.
+ * 
+ * Because all declarations go through this class, it is also used by the 
+ * Indexer class for post-processing purposes: the location of some declarations 
+ * that went thought the SymbolCollector are recorded in the output TranslationUnitIndex.
  */
 class SymbolCollector
 {
@@ -50,7 +57,6 @@ public:
   IndexerSymbol* process(const clang::Decl* decl);
   IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
 
-  SymbolID getSymbolId(const clang::Decl* decl) const;
   SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
 
   const std::map<const clang::Decl*, SymbolID>& declarations() const;
@@ -81,6 +87,12 @@ public:
   void finish() final;
 };
 
+/**
+ * \brief class for collecting information from a PreprocessingRecord
+ * 
+ * This class is used by the Indexer class for listing files that were #included 
+ * in the translation unit and for checking if macros were used as header guards.
+ */
 class PreprocessingRecordIndexer
 {
 private:
@@ -105,6 +117,24 @@ protected:
 
 /**
  * \brief class for receiving indexing data from clang
+ * 
+ * This class is used to index a translation unit by filling a 
+ * corresponding TranslationUnitIndex.
+ * 
+ * The main role of this class is to collect references to symbols 
+ * and macros in handleDeclOccurrence() and handleMacroOccurrence().
+ * When a symbol or macro is first encountered, SymbolCollector is 
+ * used to create a IndexerSymbol object representing the symbol.
+ * 
+ * When the indexing of the translation unit is about to be completed
+ * in finish(), the Indexer does some post-processing:
+ * - list the files that were included by the clang::Preprocessor,
+ * - check whether macros were used as header guards,
+ * - visit the ast to list places where arguments are passed by reference,
+ * - and collect the precise location of some symbol's declarations.
+ *
+ * Compiler diagnostics are not handled by this class but rather
+ * by the IdxrDiagnosticConsumer class.
  */
 class Indexer : public clang::index::IndexDataConsumer
 {

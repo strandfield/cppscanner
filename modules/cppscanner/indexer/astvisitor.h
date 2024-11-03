@@ -17,6 +17,12 @@ namespace cppscanner
 
 class Indexer;
 
+/**
+ * \brief clang ast visitor
+ * 
+ * This visitor is used by the Indexer class to collect locations in files
+ * where arguments are passed (to functions) by reference.
+ */
 class ClangAstVisitor : public clang::RecursiveASTVisitor<ClangAstVisitor>
 {
 private:

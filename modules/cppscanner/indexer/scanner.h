@@ -19,7 +19,11 @@ struct ScannerData;
 /**
  * \brief top level class for indexing a C++ project and creating a snapshot 
  * 
- * The initSnapshot() must be called before scan().
+ * The Scanner class uses the Indexer class for producing a TranslationUnitIndex
+ * for each translation unit in the project and then aggregates the results
+ * in a single database file.
+ * 
+ * Warning: the initSnapshot() must be called before scan().
  */
 class Scanner
 {

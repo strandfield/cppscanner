@@ -28,6 +28,9 @@ class IndexerSymbol;
 
 /**
  * \brief class for writing a snapshot of a C++ program stored as a SQLite database
+ * 
+ * This class is used by the Scanner class to produce a snapshot by aggregating one 
+ * or more TranslationUnitIndex.
  */
 class SnapshotWriter
 {

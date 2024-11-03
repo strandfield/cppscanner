@@ -16,6 +16,7 @@ namespace cppscanner
 {
 
 class FileIdentificator;
+class Indexer;
 
 /**
  * \brief base class for filtering which files should be indexed
@@ -31,7 +32,7 @@ public:
 
   FileIdentificator& fileIdentificator() const;
 
-  virtual bool shouldIndex(FileID file, void* context);
+  virtual bool shouldIndex(FileID file, const Indexer* indexer = nullptr);
 
   static std::unique_ptr<FileIndexingArbiter> createCompositeArbiter(std::vector<std::unique_ptr<FileIndexingArbiter>> arbiters);
   static std::unique_ptr<FileIndexingArbiter> createThreadSafeArbiter(std::unique_ptr<FileIndexingArbiter> arbiter);
@@ -48,12 +49,12 @@ inline FileIdentificator& FileIndexingArbiter::fileIdentificator() const
 class IndexOnceFileIndexingArbiter : public FileIndexingArbiter
 {
 private:
-  std::map<FileID, void*> m_indexers;
+  std::map<FileID, const Indexer*> m_indexers;
 
 public:
   explicit IndexOnceFileIndexingArbiter(FileIdentificator& fIdentificator);
 
-  bool shouldIndex(FileID file, void* idxr) final;
+  bool shouldIndex(FileID file, const Indexer* idxr) final;
 };
 
 /**
@@ -70,7 +71,7 @@ private:
 public:
   explicit IndexDirectoryFileIndexingArbiter(FileIdentificator& fIdentificator, const std::string& dir);
 
-  bool shouldIndex(FileID file, void* idxr) final;
+  bool shouldIndex(FileID file, const Indexer* idxr) final;
 };
 
 bool filename_match(const std::string& filePath, const std::string& fileName);
@@ -92,7 +93,7 @@ private:
 public:
   explicit IndexFilesMatchingPatternIndexingArbiter(FileIdentificator& fIdentificator, const std::vector<std::string>& patterns);
 
-  bool shouldIndex(FileID file, void* idxr) final;
+  bool shouldIndex(FileID file, const Indexer* idxr) final;
 };
 
 } // namespace cppscanner

@@ -28,6 +28,9 @@ class FileIdentificator;
 
 /**
  * \brief the result of indexing a translation unit
+ * 
+ * A TranslationUnitIndex is produced by the Indexer class for every
+ * translation unit in the input project.
  */
 class TranslationUnitIndex
 {

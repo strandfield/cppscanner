@@ -26,6 +26,8 @@ namespace cppscanner
 
 /**
  * \brief helper class for reading snapshots of C++ program produced by the scanner
+ * 
+ * The primary use of this class is for writing tests.
  * */
 class SnapshotReader
 {

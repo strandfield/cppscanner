@@ -337,12 +337,6 @@ IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const
   return &symbol;
 }
 
-SymbolID SymbolCollector::getSymbolId(const clang::Decl* decl) const
-{
-  auto it = m_symbolIdCache.find(decl);
-  return it != m_symbolIdCache.end() ? it->second : SymbolID();
-}
-
 SymbolID SymbolCollector::getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const
 {
   auto it = m_macroIdCache.find(macroInfo);
@@ -929,7 +923,7 @@ bool Indexer::shouldIndexFile(clang::FileID fileId)
   }
 
   cppscanner::FileID fid = getFileID(fileId);
-  bool ok = m_fileIndexingArbiter.shouldIndex(fid, m_index.get());
+  bool ok = m_fileIndexingArbiter.shouldIndex(fid, this);
   m_ShouldIndexFileCache[fileId] = ok;
 
   if (ok) {

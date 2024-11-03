@@ -18,7 +18,7 @@ constexpr const char* HELP_OPTIONS = R"(Options:
   --overwrite             overwrites output file if it exists
   --home <directory>      specifies a home directory
   --root <directory>      specifies a root directory
-  --index-external-files  specifies that files outside of the root directory should be indexed
+  --index-external-files  specifies that files outside of the home directory should be indexed
   --index-local-symbols   specifies that local symbols should be indexed
   -f <pattern>
   --filter <pattern>      specifies a pattern for the file to index
