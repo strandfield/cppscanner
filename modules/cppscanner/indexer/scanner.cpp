@@ -153,6 +153,11 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
       compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
   );
 
+  if (!compile_commands) {
+    std::cerr << "error while parsing compile_commands.json file: " << error_message << std::endl;
+    return;
+  }
+
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
   IndexingResultQueue results_queue;
