@@ -35,10 +35,10 @@ public:
     }
   }
 
-  bool shouldIndex(FileID file, const Indexer* idxr) final
+  bool shouldIndex(FileID file, const TranslationUnitIndex* tu) final
   {
-    return std::all_of(m_arbiters.begin(), m_arbiters.end(), [file, idxr](const ArbiterPtr& arbiter) {
-      return arbiter->shouldIndex(file, idxr);
+    return std::all_of(m_arbiters.begin(), m_arbiters.end(), [file, tu](const ArbiterPtr& arbiter) {
+      return arbiter->shouldIndex(file, tu);
       });
   }
 };
@@ -53,7 +53,7 @@ private:
 public:
   explicit ThreadSafeFileIndexingArbiter(std::unique_ptr<FileIndexingArbiter> arbiter);
 
-  bool shouldIndex(FileID file, const Indexer* context) final;
+  bool shouldIndex(FileID file, const TranslationUnitIndex* context) final;
 };
 
 ThreadSafeFileIndexingArbiter::ThreadSafeFileIndexingArbiter(std::unique_ptr<FileIndexingArbiter> arbiter) :
@@ -63,7 +63,7 @@ ThreadSafeFileIndexingArbiter::ThreadSafeFileIndexingArbiter(std::unique_ptr<Fil
 
 }
 
-bool ThreadSafeFileIndexingArbiter::shouldIndex(FileID file, const Indexer* context)
+bool ThreadSafeFileIndexingArbiter::shouldIndex(FileID file, const TranslationUnitIndex* context)
 {
   std::lock_guard lock{ m_mutex };
   return m_arbiter->shouldIndex(file, context);
@@ -82,15 +82,15 @@ FileIndexingArbiter::~FileIndexingArbiter()
 
 /**
  * \brief returns whether a file should be indexed
- * \param file     the file id
- * \param indexer  pointer to the indexer (optional)
+ * \param file  the file id
+ * \param tu    pointer to the translation unit (optional)
  * 
- * If \a indexer is nullptr, the function returns whether the file should be indexed.
- * Otherwise, it returns whether the file should be indexed by the the given \a indexer.
+ * If \a tu is nullptr, the function returns whether the file should be indexed.
+ * Otherwise, it returns whether the file should be indexed within the translation unit.
  * 
  * \sa IndexOnceFileIndexingArbiter
  */
-bool FileIndexingArbiter::shouldIndex(FileID /* file */, const Indexer* /* indexer */)
+bool FileIndexingArbiter::shouldIndex(FileID /* file */, const TranslationUnitIndex* /* tu */)
 {
   return true;
 }
@@ -133,29 +133,29 @@ IndexOnceFileIndexingArbiter::IndexOnceFileIndexingArbiter(FileIdentificator& fI
 }
 
 /**
- * \brief returns whether the file should be indexed by a given indexer
+ * \brief returns whether the file should be indexed in a given translation unit
  * 
- * The first time this function is called with a non-null indexer (for a given
- * file), it assigns the file to the indexer and will subsequently return true
- * on that file only for that indexer.
+ * The first time this function is called with a non-null translation unit (for a given
+ * file), it assigns the file to the translation unit and will subsequently return true
+ * on that file only for that translation unit.
  */
-bool IndexOnceFileIndexingArbiter::shouldIndex(FileID file, const Indexer* idxr)
+bool IndexOnceFileIndexingArbiter::shouldIndex(FileID file, const TranslationUnitIndex* tu)
 {
   if (!file) {
     return false;
   }
 
-  if (!idxr) {
+  if (!tu) {
     return true;
   }
 
-  auto it = m_indexers.find(file);
+  auto it = m_translation_units.find(file);
 
-  if (it != m_indexers.end()) {
-    return it->second == idxr;
+  if (it != m_translation_units.end()) {
+    return it->second == tu;
   }
 
-  m_indexers[file] = idxr;
+  m_translation_units[file] = tu;
   return true;
 }
 
@@ -166,9 +166,9 @@ IndexDirectoryFileIndexingArbiter::IndexDirectoryFileIndexingArbiter(FileIdentif
 
 }
 
-bool IndexDirectoryFileIndexingArbiter::shouldIndex(FileID file, const Indexer* idxr)
+bool IndexDirectoryFileIndexingArbiter::shouldIndex(FileID file, const TranslationUnitIndex* tu)
 {
-  (void)idxr;
+  (void)tu;
 
   std::string path = fileIdentificator().getFile(file);
   path = std::filesystem::absolute(path).generic_u8string();
@@ -191,9 +191,9 @@ bool filename_match(const std::string& filePath, const std::string& fileName)
     filePath.find(fileName, filePath.size() - fileName.size()) != std::string::npos;
 }
 
-bool IndexFilesMatchingPatternIndexingArbiter::shouldIndex(FileID file, const Indexer* idxr)
+bool IndexFilesMatchingPatternIndexingArbiter::shouldIndex(FileID file, const TranslationUnitIndex* tu)
 {
-  (void)idxr;
+  (void)tu;
 
   std::string path = fileIdentificator().getFile(file);
 

@@ -955,7 +955,7 @@ bool Indexer::shouldIndexFile(clang::FileID fileId)
   }
 
   cppscanner::FileID fid = getFileID(fileId);
-  bool ok = m_fileIndexingArbiter.shouldIndex(fid, this);
+  bool ok = m_fileIndexingArbiter.shouldIndex(fid, getCurrentIndex());
   m_ShouldIndexFileCache[fileId] = ok;
 
   if (ok) {
