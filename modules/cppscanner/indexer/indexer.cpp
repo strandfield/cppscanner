@@ -713,18 +713,39 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   dinfo.FormatDiagnostic(diag);
   d.message = diag.str().str();
 
+  const clang::SourceRange srcrange = dinfo.getLocation();
+
   if (!m_indexer.initialized())
   {
     if (!dinfo.hasSourceManager())
     {
       std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+      return;
+    }
+
+    clang::PresumedLoc ploc = dinfo.getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+    if (ploc.isValid())
+    {
+      std::cout << ploc.getLine() << ":" << ploc.getColumn() << ": " 
+        << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
+    }
+    else
+    {
+      std::cout << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
     }
 
     return;
   }
 
-  clang::SourceRange srcrange = dinfo.getLocation();
   clang::PresumedLoc ploc = m_indexer.getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+  if (!ploc.isValid())
+  {
+    return;
+  }
+
+  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
 
   if (!m_indexer.shouldIndexFile(ploc.getFileID())) {
     return;
@@ -736,9 +757,11 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
     return;
   }
 
-  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
-
   m_indexer.getCurrentIndex()->add(std::move(d));
+
+  std::cout << m_indexer.fileIdentificator().getFile(d.fileID) 
+    << ploc.getLine() << ":" << ploc.getColumn() << ": " 
+    << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
 }
 
 void IdxrDiagnosticConsumer::finish()
@@ -1324,12 +1347,11 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
 
         return;
       }
-
     }
   }
 
-  std::cout << n << " (non-implicit) symrefs with same loc @" << file
-    << ":" << line << ":" << col << std::endl;
+  //std::cout << n << " (non-implicit) symrefs with same loc @ " << file
+  //  << ":" << line << ":" << col << std::endl;
 }
 
 static void markImplicitReferences(TranslationUnitIndex& index, Indexer& indexer)
