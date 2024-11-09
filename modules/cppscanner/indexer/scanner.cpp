@@ -275,26 +275,38 @@ std::vector<Include> merge(
     };
 
   std::sort(existingIncludes.begin(),  existingIncludes.end(), comp);
-  auto new_logical_end = std::unique(existingIncludes.begin(), existingIncludes.end(), comp);
+
+  auto eq = [](const Include& a, const Include& b) -> bool {
+    return std::forward_as_tuple(a.fileID, a.line) == std::forward_as_tuple(b.fileID, b.line);
+    };
+
+  auto new_logical_end = std::unique(existingIncludes.begin(), existingIncludes.end(), eq);
   existingIncludes.erase(new_logical_end, existingIncludes.end());
+
   return existingIncludes;
 }
 
-std::vector<SymbolReference> merge(
-  std::vector<SymbolReference>&& existingReferences, 
+std::vector<SymbolReference>& insertOrIgnore(
+  std::vector<SymbolReference>& references, 
   std::vector<SymbolReference>::const_iterator newReferencesBegin, 
   std::vector<SymbolReference>::const_iterator newReferencesEnd)
 {
-  existingReferences.insert(existingReferences.end(), newReferencesBegin, newReferencesEnd);
+  references.insert(references.end(), newReferencesBegin, newReferencesEnd);
 
   auto ref_comp = [](const SymbolReference& a, const SymbolReference& b) -> bool {
     return std::forward_as_tuple(a.fileID, a.position, a.symbolID) < std::forward_as_tuple(b.fileID, b.position, b.symbolID);
     };
 
-  std::sort(existingReferences.begin(),  existingReferences.end(), ref_comp);
-  auto new_logical_end = std::unique(existingReferences.begin(), existingReferences.end(), ref_comp);
-  existingReferences.erase(new_logical_end, existingReferences.end());
-  return existingReferences;
+  std::sort(references.begin(),  references.end(), ref_comp);
+
+  auto ref_eq = [](const SymbolReference& a, const SymbolReference& b) -> bool {
+    return std::forward_as_tuple(a.fileID, a.position, a.symbolID) == std::forward_as_tuple(b.fileID, b.position, b.symbolID);
+    };
+
+  auto new_logical_end = std::unique(references.begin(), references.end(), ref_eq);
+  references.erase(new_logical_end, references.end());
+
+  return references;
 }
 
 inline FileID fileOf(const Diagnostic& d)
@@ -345,6 +357,12 @@ bool mergeComp(const SymbolDeclaration& a, const SymbolDeclaration& b)
 }
 
 template<typename T>
+bool mergeEq(const T& a, const T& b)
+{
+  return !mergeComp(a, b) && !mergeComp(b, a);
+}
+
+template<typename T>
 std::vector<T> merge(
   std::vector<T>&& existingElements, 
   typename std::vector<T>::const_iterator newElementsBegin, 
@@ -352,7 +370,7 @@ std::vector<T> merge(
 {
   existingElements.insert(existingElements.end(), newElementsBegin, newElementsEnd);
   std::sort(existingElements.begin(), existingElements.end(), [](const T& a, const T& b) { return mergeComp(a, b); });
-  auto new_logical_end = std::unique(existingElements.begin(), existingElements.end(), [](const T& a, const T& b) { return mergeComp(a, b); });
+  auto new_logical_end = std::unique(existingElements.begin(), existingElements.end(), [](const T& a, const T& b) { return mergeEq(a, b); });
   existingElements.erase(new_logical_end, existingElements.end());
   return existingElements;
 }
@@ -502,7 +520,8 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
       );
 
       if (fileAlreadyIndexed(cur_file_id)) {
-        std::vector<SymbolReference> references = merge(m_snapshot->loadSymbolReferencesInFile(cur_file_id), it, end);
+        std::vector<SymbolReference> references = m_snapshot->loadSymbolReferencesInFile(cur_file_id);
+        insertOrIgnore(references, it, end);
 
         sql::runTransacted(m_snapshot->database(), [this, cur_file_id, &references]() {
           m_snapshot->removeAllSymbolReferencesInFile(cur_file_id);
