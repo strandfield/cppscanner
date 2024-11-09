@@ -889,7 +889,7 @@ void SnapshotWriter::removeAllDeclarationsInFile(FileID fid)
 {
   sql::Statement stmt{ 
     database(),
-    "DELETE FROM symbolDeclaration WHERE fileID = ?"
+    "DELETE FROM symbolDeclaration WHERE file_id = ?"
   };
 
   stmt.bind(1, (int)fid);
