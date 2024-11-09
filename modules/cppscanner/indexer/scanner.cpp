@@ -172,9 +172,8 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
         return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
         });
 
-      std::cout << "[SKIPPED] " << cc.Filename << std::endl;
-
       if (exclude) {
+        std::cout << "[SKIPPED] " << cc.Filename << std::endl;
         continue;
       }
     }
@@ -188,8 +187,15 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
 
     std::cout << cc.Filename << std::endl;
 
-    if (invocation.run()) {
-      assimilate(results_queue.read());
+    const bool success = invocation.run();
+
+    if (success) {
+      std::optional<TranslationUnitIndex> result = results_queue.readSync();
+      // "result" may be std::nullopt if a fatal error occured while parsing
+      // the translation unit.
+      if (result.has_value()) {
+        assimilate(std::move(result.value()));
+      }
     } else {
       std::cout << "error: tool invocation failed" << std::endl;
     }
