@@ -137,6 +137,7 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
   m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
   m_snapshot->setProperty("scanner.root", SnapshotWriter::Path(d->rootDirectory.value_or(std::string())));
+  m_snapshot->setProperty("scanner.workingDirectory", SnapshotWriter::Path(std::filesystem::current_path().generic_u8string()));
 }
 
 SnapshotWriter* Scanner::snapshot() const
