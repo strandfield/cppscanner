@@ -579,7 +579,9 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     info.parameterIndex = parmdecl->getFunctionScopeIndex(); 
     
     if (parmdecl->hasDefaultArg()) {
-      info.defaultValue = prettyPrint(parmdecl->getDefaultArg(), m_indexer);
+      if (!parmdecl->hasUninstantiatedDefaultArg()) {
+        info.defaultValue = prettyPrint(parmdecl->getDefaultArg(), m_indexer);
+      }
     }
   }
   break;
