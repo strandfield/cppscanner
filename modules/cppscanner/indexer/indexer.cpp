@@ -251,6 +251,10 @@ void fillEmptyName(IndexerSymbol& symbol, const clang::Decl& decl)
   case SymbolKind::Union:
     symbol.name = "__anonymous_union_" + symbol.id.toHex();
     break;
+  case SymbolKind::Enum:
+  case SymbolKind::EnumClass:
+    symbol.name = "__anonymous_enum_" + symbol.id.toHex();
+    break;
   default:
     break;
   }
@@ -643,6 +647,9 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     // we use a dedicated kind instead.
     assert(symbol.kind == SymbolKind::TypeAlias);
     symbol.kind = SymbolKind::Typedef;
+
+    // TODO: handle "typedef enum {} my_enum;"
+    // --> rename the enum ?
   }
   break;
   case clang::Decl::Kind::Import:
