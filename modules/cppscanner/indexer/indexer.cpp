@@ -756,12 +756,12 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   if (!d.fileID) {
     return;
   }
-
-  m_indexer.getCurrentIndex()->add(std::move(d));
-
-  std::cout << m_indexer.fileIdentificator().getFile(d.fileID) 
+  
+  std::cout << m_indexer.fileIdentificator().getFile(d.fileID) << ":"
     << ploc.getLine() << ":" << ploc.getColumn() << ": " 
     << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
+
+  m_indexer.getCurrentIndex()->add(std::move(d));
 }
 
 void IdxrDiagnosticConsumer::finish()
