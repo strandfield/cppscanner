@@ -619,10 +619,6 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     if (nsdecl->isInline()) {
       symbol.kind = SymbolKind::InlineNamespace;
     }
-
-    if (symbol.name.empty()) {
-      fillEmptyName(symbol, *nsdecl);
-    }
   }
   break;
   case clang::Decl::Kind::NamespaceAlias:
@@ -666,6 +662,10 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   break;
   default:
     break;
+  }
+
+  if (symbol.name.empty()) {
+    fillEmptyName(symbol, *decl);
   }
 }
 
