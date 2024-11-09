@@ -88,12 +88,12 @@ Scanner::~Scanner() = default;
 
 void Scanner::setHomeDir(const std::filesystem::path& p)
 {
-  d->homeDirectory = p.generic_u8string();
+  d->homeDirectory = std::filesystem::absolute(p).generic_u8string();
 }
 
 void Scanner::setRootDir(const std::filesystem::path& p)
 {
-  d->rootDirectory = p.generic_u8string();
+  d->rootDirectory = std::filesystem::absolute(p).generic_u8string();
 }
 
 void Scanner::setIndexExternalFiles(bool on)
