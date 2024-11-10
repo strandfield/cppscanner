@@ -9,6 +9,7 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <queue>
 
 namespace cppscanner
@@ -51,6 +52,19 @@ public:
     TranslationUnitIndex idx{ std::move(m_indexingResults.front()) };
     m_indexingResults.pop();
     return idx;
+  }
+
+  std::optional<TranslationUnitIndex> readSync()
+  {
+    std::unique_lock lock{ m_sync.mutex };
+
+    if (m_indexingResults.empty()) {
+      return std::nullopt;
+    } else {
+      TranslationUnitIndex idx{ std::move(m_indexingResults.front()) };
+      m_indexingResults.pop();
+      return idx;
+    }
   }
 };
 
