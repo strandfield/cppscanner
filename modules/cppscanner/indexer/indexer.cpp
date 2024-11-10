@@ -251,6 +251,10 @@ void fillEmptyName(IndexerSymbol& symbol, const clang::Decl& decl)
   case SymbolKind::Union:
     symbol.name = "__anonymous_union_" + symbol.id.toHex();
     break;
+  case SymbolKind::Enum:
+  case SymbolKind::EnumClass:
+    symbol.name = "__anonymous_enum_" + symbol.id.toHex();
+    break;
   default:
     break;
   }
@@ -579,7 +583,9 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     info.parameterIndex = parmdecl->getFunctionScopeIndex(); 
     
     if (parmdecl->hasDefaultArg()) {
-      info.defaultValue = prettyPrint(parmdecl->getDefaultArg(), m_indexer);
+      if (!parmdecl->hasUninstantiatedDefaultArg()) {
+        info.defaultValue = prettyPrint(parmdecl->getDefaultArg(), m_indexer);
+      }
     }
   }
   break;
@@ -617,10 +623,6 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     if (nsdecl->isInline()) {
       symbol.kind = SymbolKind::InlineNamespace;
     }
-
-    if (symbol.name.empty()) {
-      fillEmptyName(symbol, *nsdecl);
-    }
   }
   break;
   case clang::Decl::Kind::NamespaceAlias:
@@ -645,6 +647,9 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
     // we use a dedicated kind instead.
     assert(symbol.kind == SymbolKind::TypeAlias);
     symbol.kind = SymbolKind::Typedef;
+
+    // TODO: handle "typedef enum {} my_enum;"
+    // --> rename the enum ?
   }
   break;
   case clang::Decl::Kind::Import:
@@ -664,6 +669,10 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   break;
   default:
     break;
+  }
+
+  if (symbol.name.empty()) {
+    fillEmptyName(symbol, *decl);
   }
 }
 
@@ -711,18 +720,39 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   dinfo.FormatDiagnostic(diag);
   d.message = diag.str().str();
 
+  const clang::SourceRange srcrange = dinfo.getLocation();
+
   if (!m_indexer.initialized())
   {
     if (!dinfo.hasSourceManager())
     {
       std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+      return;
+    }
+
+    clang::PresumedLoc ploc = dinfo.getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+    if (ploc.isValid())
+    {
+      std::cout << ploc.getLine() << ":" << ploc.getColumn() << ": " 
+        << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
+    }
+    else
+    {
+      std::cout << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
     }
 
     return;
   }
 
-  clang::SourceRange srcrange = dinfo.getLocation();
   clang::PresumedLoc ploc = m_indexer.getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+  if (!ploc.isValid())
+  {
+    return;
+  }
+
+  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
 
   if (!m_indexer.shouldIndexFile(ploc.getFileID())) {
     return;
@@ -733,8 +763,10 @@ void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dl
   if (!d.fileID) {
     return;
   }
-
-  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
+  
+  std::cout << m_indexer.fileIdentificator().getFile(d.fileID) << ":"
+    << ploc.getLine() << ":" << ploc.getColumn() << ": " 
+    << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
 
   m_indexer.getCurrentIndex()->add(std::move(d));
 }
@@ -923,7 +955,7 @@ bool Indexer::shouldIndexFile(clang::FileID fileId)
   }
 
   cppscanner::FileID fid = getFileID(fileId);
-  bool ok = m_fileIndexingArbiter.shouldIndex(fid, this);
+  bool ok = m_fileIndexingArbiter.shouldIndex(fid, getCurrentIndex());
   m_ShouldIndexFileCache[fileId] = ok;
 
   if (ok) {
@@ -1322,12 +1354,11 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
 
         return;
       }
-
     }
   }
 
-  std::cout << n << " (non-implicit) symrefs with same loc @" << file
-    << ":" << line << ":" << col << std::endl;
+  //std::cout << n << " (non-implicit) symrefs with same loc @ " << file
+  //  << ":" << line << ":" << col << std::endl;
 }
 
 static void markImplicitReferences(TranslationUnitIndex& index, Indexer& indexer)

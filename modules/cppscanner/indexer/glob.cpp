@@ -42,6 +42,12 @@ std::regex glob2regex(const std::string& pattern)
       r.push_back('.');
       r.push_back('*');
     }
+#ifdef WIN32
+    else if (c == '\\' || c == '/')
+    {
+      r += "[\\\\\\/]";
+    }
+#endif // WIN32
     else
     {
       r.push_back(c);

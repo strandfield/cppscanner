@@ -38,4 +38,12 @@ TEST_CASE("Matching files", "[glob]")
   REQUIRE(is_glob_pattern("/t?t?.*"));
   REQUIRE(glob_match("~/directory/titi.cpp", "/t?t?.*"));
   REQUIRE(glob_match("~/directory/toto.h", "/t?t?.*"));
+
+#ifdef WIN32
+  REQUIRE(glob_match("a\\b", "a/b"));
+  REQUIRE(glob_match("a\\b", "a\\b"));
+  REQUIRE(glob_match("a/b", "a\\b"));
+  REQUIRE(glob_match("a/b", "a/b"));
+#endif // WIN32
+
 }
