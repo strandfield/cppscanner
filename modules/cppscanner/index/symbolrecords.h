@@ -55,7 +55,7 @@ struct MacroInfo
     FunctionLike           = 0x0040
   };
 
-  static_assert(MacroUsedAsHeaderGuard == SymbolFlag::MinCustomFlag);
+  static_assert(static_cast<SymbolFlag::Value>(MacroUsedAsHeaderGuard) == SymbolFlag::MinCustomFlag);
 
   std::string definition;
 };
@@ -81,7 +81,7 @@ struct VariableInfo
     Inline      = 0x0400,
   };
 
-  static_assert(Const == SymbolFlag::MinCustomFlag);
+  static_assert(static_cast<SymbolFlag::Value>(Const) == SymbolFlag::MinCustomFlag);
 
   std::string type;
   std::string init;
@@ -117,7 +117,7 @@ struct FunctionInfo
     Explicit  = 0x20000,
   };
 
-  static_assert(Inline == SymbolFlag::MinCustomFlag);
+  static_assert(static_cast<SymbolFlag::Value>(Inline) == SymbolFlag::MinCustomFlag);
 
   std::string returnType;
   std::string declaration;
@@ -147,7 +147,7 @@ struct ClassInfo
     Final = 0x00020
   };
 
-  static_assert(Final == SymbolFlag::MinCustomFlag);
+  static_assert(static_cast<SymbolFlag::Value>(Final) == SymbolFlag::MinCustomFlag);
 };
 
 } // namespace cppscanner

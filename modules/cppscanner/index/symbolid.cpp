@@ -4,6 +4,7 @@
 
 #include "symbolid.h"
 
+#include <algorithm>
 #include <array>
 
 namespace cppscanner

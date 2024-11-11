@@ -6,6 +6,10 @@ set(CXX_STANDARD_REQUIRED ON)
 
 set(CPPSCANNER_PROJECT_DIR ${CMAKE_CURRENT_LIST_DIR})
 
+if (UNIX)
+  add_compile_options(-fno-rtti)
+endif()
+
 SET(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO "RelWithDebInfo;Release;")
 find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG HINTS "${LLVM_INSTALL_PREFIX}/lib/cmake/clang")

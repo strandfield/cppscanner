@@ -8,6 +8,8 @@
 
 #include "cppscanner/database/readrows.h"
 
+#include <algorithm>
+
 namespace cppscanner
 {
 
