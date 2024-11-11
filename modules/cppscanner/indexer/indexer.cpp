@@ -273,6 +273,7 @@ SymbolCollector::SymbolCollector(Indexer& idxr) :
 void SymbolCollector::reset()
 {
   m_symbolIdCache.clear();
+  m_macroIdCache.clear();
 }
 
 IndexerSymbol* SymbolCollector::process(const clang::Decl* decl)
@@ -316,6 +317,7 @@ IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const
       std::string usr = getUSR(name, macroInfo, m_indexer.getAstContext()->getSourceManager());
       it->second = computeSymbolIdFromUsr(usr);
     } catch (const std::exception&) {
+      m_macroIdCache.erase(it);
       return nullptr;
     }
   };
@@ -326,6 +328,8 @@ IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const
   if (inserted) {
     symbol.id = symid;
     fillSymbol(symbol, name, macroInfo);
+  } else {
+    assert(symbol.id != SymbolID());
   }
 
   // note: it seems we have to delay the call to isUsedForHeaderGuard()
@@ -378,6 +382,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
       symbol.kind = SymbolKind::GotoLabel;
     }
   }
+
+  assert(symbol.kind != SymbolKind::Unknown);
 
   if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 
   {

@@ -16,12 +16,33 @@ This project uses the CMake build system.
 The following options are available:
 - `BUILD_TESTS`: whether the tests should be built.
 
-Settings `BUILD_TESTS` to `OFF` will likely be required on systems other than Windows
-as the CMake files have been written with that system in mind. <br/>
-The rest of the project should okay as long as the dependencies are found in the 
-CMake search paths.
-
 A C++17 compiler is required to build this project.
+
+**Getting the clang development binaries (Linux)**
+
+Download the "clang+llvm" release for your system from [GitHub](https://github.com/llvm/llvm-project/releases).
+
+Example on Debian: 
+
+```
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz --skip-old-files --strip-components=1 -C /usr/
+```
+
+You may also need to install the `libncurses5` package.
+
+```
+apt install -y libncurses5
+```
+
+**Getting the clang development binaries (Windows)**
+
+For Windows, a similar approach may work, but would only give you the "Release" binaries.
+If you want to be able to build in Debug mode, the correct way to go seems to be to 
+build LLVM yourself (as I did).
+This may help: [Building LLVM with CMake](https://llvm.org/docs/CMake.html).
+Building LLVM isn't hard, it just takes a lot of time and produces a lot of binaries
+(my personal Release+Debug builds take around 13 gigabytes of disk space).
 
 ## Using the tool
 

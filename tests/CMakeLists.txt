@@ -11,10 +11,17 @@ macro(setup_test_project folderName)
     file(MAKE_DIRECTORY ${WDIR})
   endif()
   
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "${PROJECT_SOURCE_DIR}/tests/${folderName}" 
-    WORKING_DIRECTORY ${WDIR}
-  )
+  if (WIN32)
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "${PROJECT_SOURCE_DIR}/tests/${folderName}" 
+      WORKING_DIRECTORY ${WDIR}
+    )
+  else()
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} "${PROJECT_SOURCE_DIR}/tests/${folderName}" 
+      WORKING_DIRECTORY ${WDIR}
+    )
+  endif()
   
   string(TOUPPER ${folderName} FOLDER)
   set (${FOLDER}_BUILD_DIR ${WDIR})
@@ -56,10 +63,17 @@ if (NOT EXISTS ${SELFTEST_BUILD_DIR})
   file(MAKE_DIRECTORY ${SELFTEST_BUILD_DIR})
 endif()
 
-execute_process(
+if (WIN32)
+  execute_process(
     COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" "-DLLVM_DIR=${LLVM_DIR}" "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" "-DCMAKE_BUILD_TYPE=Debug" "-DBUILD_TESTS=OFF" "${PROJECT_SOURCE_DIR}" 
     WORKING_DIRECTORY ${SELFTEST_BUILD_DIR}
   )
+else()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" "-DLLVM_DIR=${LLVM_DIR}" "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" "-DCMAKE_BUILD_TYPE=Debug" "-DBUILD_TESTS=OFF" "${PROJECT_SOURCE_DIR}" 
+    WORKING_DIRECTORY ${SELFTEST_BUILD_DIR}
+  )
+endif()
 
 add_executable(TEST_cppscanner_selftest "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "selftest.cpp" "helpers.h")
 target_compile_definitions(TEST_cppscanner_selftest PUBLIC SELFTEST_BUILD_DIR="${SELFTEST_BUILD_DIR}")
