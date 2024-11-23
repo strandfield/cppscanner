@@ -1130,6 +1130,10 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
         symref.flags |= SymbolReference::Implicit;
       }
     } else if (auto* ctorexpr = llvm::dyn_cast<clang::CXXConstructExpr>(astNode.OrigE)) {
+
+      // as of llvm version 18, clang does not seem to set the SymbolRole::Implicit flag
+      // when a constructor is (implicitly) called with a brace-init list.
+      // e.g. manhattanLength({x,y})
       if (ctorexpr->getParenOrBraceRange().getBegin() == ctorexpr->getSourceRange().getBegin()) {
         // the name of the constructor isn't written
         symref.flags |= SymbolReference::Implicit;
