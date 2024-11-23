@@ -24,6 +24,7 @@ constexpr const char* HELP_OPTIONS = R"(Options:
   --filter <pattern>      specifies a pattern for the file to index
   --filter_tu <pattern>
   -f:tu <pattern>         specifies a pattern for the translation units to index
+  --threads <count>       number of threads dedicated to parsing translation units
   --project-name <name>   specifies the name of the project
   --project-version <v>   specifies a version for the project)";
 
@@ -38,6 +39,8 @@ constexpr const char* HELP_DESCRIPTION = R"(Description:
   specified, it defaults to the current working directory.
   If --index-local-symbols is specified, locals symbol (e.g., variables defined 
   in function bodies) will be indexed.
+  Unless a non-zero number of parsing threads is specified, the scanner runs in a
+  single-threaded mode.
   The name and version of the project are written as metadata in the snapshot
   if they are provided but are otherwise not used while indexing.)";
 
