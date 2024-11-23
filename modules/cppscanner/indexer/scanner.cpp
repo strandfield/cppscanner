@@ -334,9 +334,16 @@ public:
 
 void Scanner::scanMultiThreaded()
 {
+  assert(d->nbThreads > 0);
+
   d->fileIdentificator = FileIdentificator::createThreadSafeFileIdentificator();
+
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
-  indexing_arbiter = FileIndexingArbiter::createThreadSafeArbiter(std::move(indexing_arbiter));
+
+  if (d->nbThreads > 1)
+  {
+    indexing_arbiter = FileIndexingArbiter::createThreadSafeArbiter(std::move(indexing_arbiter));
+  }
 
   std::vector<WorkQueue::ToolInvocation> tasks;
 
@@ -367,7 +374,6 @@ void Scanner::scanMultiThreaded()
   WorkQueue input_queue{ tasks };
   IndexingResultQueue results_queue;
 
-  assert(d->nbThreads > 0);
 
   WorkerThreads threads{ d.get(), indexing_arbiter.get(), &input_queue, &results_queue };
   threads.add(d->nbThreads);
@@ -569,7 +575,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     remapFileIds(tuIndex, *d->fileIdentificator);
   }
 
-  const std::vector<std::string>& known_files = d->fileIdentificator->getFiles();
+  const std::vector<std::string> known_files = d->fileIdentificator->getFiles();
 
   std::vector<File> newfiles;
 

@@ -99,6 +99,10 @@ There is usually on translation unit per source file (e.g., `main.cpp`).
 `--threads <count>`: specifies a number of dedicated threads to use for parsing C++.
 The default is zero (the program runs in a single-threaded mode and parsing is done in 
 the main thread). 
+A value of 1 means that all the parsing is done in a (single) secondary thread while 
+the output database is written in the main thread. The performance benefit should be
+small because parsing takes most of the time.
+The recommended minimum when using this option is therefore 2.
 
 ### Unsupported language features & toolchains
 
