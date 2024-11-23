@@ -92,3 +92,10 @@ matching the pattern are indexed).
 `-f:tu`: specifies a glob pattern for filtering the translation unit to index
 (only the translation units matching the pattern are indexed).
 There is usually on translation unit per source file (e.g., `main.cpp`).
+
+### Unsupported language features & toolchains
+
+Although the parser may be able to process some other C++20 constructs (such as
+the spaceship operator), **C++20 modules** are not supported.
+
+Precompiled headers are not supported.
