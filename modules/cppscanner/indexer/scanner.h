@@ -41,12 +41,16 @@ public:
   void setFilters(const std::vector<std::string>& filters);
   void setTranslationUnitFilters(const std::vector<std::string>& filters);
 
+  void setNumberOfParsingThread(size_t n);
+
   void initSnapshot(const std::filesystem::path& p);
   SnapshotWriter* snapshot() const;
 
   void scan(const std::filesystem::path& compileCommandsPath);
 
 protected:
+  void scanSingleThreaded();
+  void scanMultiThreaded();
   void assimilate(TranslationUnitIndex tuIndex);
   bool fileAlreadyIndexed(FileID f) const;
   void setFileIndexed(FileID f);

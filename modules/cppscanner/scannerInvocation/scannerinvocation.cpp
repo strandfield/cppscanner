@@ -71,6 +71,13 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.translation_unit_filters.push_back(args.at(i++));
     }
+    else if (arg == "--threads")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --threads");
+
+      result.nb_threads = std::stoi(args.at(i++));
+    }
     else if (arg == "--project-name")
     {
       if (i >= args.size())
@@ -87,7 +94,7 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
     }
     else
     {
-      throw std::runtime_error("unrecognized command line argument");
+      throw std::runtime_error("unrecognized command line argument: " + arg);
     }
   }
 
@@ -160,6 +167,14 @@ void ScannerInvocation::run()
 
   if (!options().translation_unit_filters.empty()) {
     scanner.setTranslationUnitFilters(options().translation_unit_filters);
+  }
+
+  if (options().nb_threads.has_value())
+  {
+    int n = *options().nb_threads;
+    if (n >= 0) {
+      scanner.setNumberOfParsingThread((size_t)n);
+    }
   }
 
   scanner.initSnapshot(options().output);

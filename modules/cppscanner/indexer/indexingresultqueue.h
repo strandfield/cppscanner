@@ -41,23 +41,26 @@ public:
     m_sync.cv.notify_one();
   }
 
-  TranslationUnitIndex read()
+  std::optional<TranslationUnitIndex> tryRead(std::chrono::milliseconds timeout)
   {
     std::unique_lock lock{ m_sync.mutex };
 
-    m_sync.cv.wait(lock, [&]() {
+    m_sync.cv.wait_for(lock, timeout, [&]() {
       return !m_indexingResults.empty();
       });
 
-    TranslationUnitIndex idx{ std::move(m_indexingResults.front()) };
-    m_indexingResults.pop();
-    return idx;
+    return unsafeRead();
   }
 
   std::optional<TranslationUnitIndex> readSync()
   {
     std::unique_lock lock{ m_sync.mutex };
+    return unsafeRead();
+  }
 
+protected:
+  std::optional<TranslationUnitIndex> unsafeRead()
+  {
     if (m_indexingResults.empty()) {
       return std::nullopt;
     } else {
