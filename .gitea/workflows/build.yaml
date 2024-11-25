@@ -6,7 +6,7 @@ jobs:
   build-linux:
     runs-on: docker-wsl
     container:
-      image: gitea.strandfield.dev/docker/cppscanner-build-env:1.0
+      image: cppscanner-build-env:1.0
     steps:
       - run: git --version
       - run: gcc --version
