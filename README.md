@@ -35,6 +35,9 @@ You may also need to install the `libncurses5` package.
 apt install -y libncurses5
 ```
 
+Alternatively, you may use the `node:21-bookworm`-based `Dockerfile` provided in the `docker` directory ([here](docker/Dockerfile))
+to build a Docker image and compile the code in a container.
+
 **Getting the clang development binaries (Windows)**
 
 For Windows, a similar approach may work, but would only give you the "Release" binaries.
