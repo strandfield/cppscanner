@@ -4,7 +4,9 @@ on: [push]
 
 jobs:
   build-linux:
-    runs-on: docker-cppscanner-build-env
+    runs-on: docker-wsl
+    container:
+      image: localhost:5000/cppscanner-build-env:1.0
     steps:
       - run: git --version
       - run: gcc --version
