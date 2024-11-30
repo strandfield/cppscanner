@@ -8,13 +8,15 @@
 
 using namespace cppscanner;
 
+static const std::string HOME_DIR = TESTFILES_DIRECTORY + std::string("/cpp20_language_features");
+
 TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
 {
   const std::string snapshot_name = "cpp20_language_features-spaceship.db";
 
   ScannerInvocation inv{
-    { "-i", CPP20_LANGUAGE_FEATURES_ROOT_DIR + std::string("/spaceship.cpp"),
-    "--home", CPP20_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/spaceship.cpp"),
+    "--home", HOME_DIR,
     "--overwrite",
     "-o", snapshot_name,
     "--", "-std=c++20"}
@@ -40,8 +42,8 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
   const std::string snapshot_name = "cpp20_language_features-designated-initializers.db";
 
   ScannerInvocation inv{
-    { "-i", CPP20_LANGUAGE_FEATURES_ROOT_DIR + std::string("/designated-initializers.cpp"),
-    "--home", CPP20_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/designated-initializers.cpp"),
+    "--home", HOME_DIR,
     "--overwrite",
     "-o", snapshot_name,
     "--", "-std=c++20" }

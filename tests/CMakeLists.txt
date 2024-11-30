@@ -1,9 +1,14 @@
 
 enable_testing()
 
-# tests with example projects
+# test files
 
 set (PROJECT_LISTS_STR "")
+set (PROJECT_LISTS_STR "${PROJECT_LISTS_STR}\nstatic constexpr const char* TESTFILES_DIRECTORY = \"${CMAKE_CURRENT_LIST_DIR}/testfiles\";")
+
+add_subdirectory(testfiles)
+
+# tests with example projects
 
 macro(setup_test_project folderName)
   add_subdirectory(${folderName})
@@ -34,7 +39,6 @@ endmacro()
 setup_test_project(simple_project)
 setup_test_project(hello_world)
 setup_test_project(cxx_language_features)
-setup_test_project(cpp20_language_features)
 setup_test_project(stl)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
