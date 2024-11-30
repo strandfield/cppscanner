@@ -234,9 +234,8 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-namespace.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/namespace.cpp"),
     "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "namespace.cpp",
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -266,9 +265,8 @@ TEST_CASE("goto", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-goto.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/gotolabel.cpp"),
     "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "gotolabel.cpp",
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
@@ -297,9 +295,8 @@ TEST_CASE("converting constructor", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-converting-ctor.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/converting-constructor.cpp"),
     "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "converting-constructor.cpp",
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -345,9 +342,8 @@ TEST_CASE("arguments passed by reference", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-converting-refargs.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/pass-by-reference.cpp"),
     "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "pass-by-reference.cpp",
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
@@ -375,9 +371,8 @@ TEST_CASE("declarations", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-declarations.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/declarations.cpp"),
     "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "declarations.cpp",
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }

@@ -13,11 +13,11 @@ TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
   const std::string snapshot_name = "cpp20_language_features-spaceship.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CPP20_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CPP20_LANGUAGE_FEATURES_ROOT_DIR + std::string("/spaceship.cpp"),
     "--home", CPP20_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "spaceship.cpp",
     "--overwrite",
-    "-o", snapshot_name }
+    "-o", snapshot_name,
+    "--", "-std=c++20"}
   };
 
   // the scanner invocation succeeds
@@ -40,11 +40,11 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
   const std::string snapshot_name = "cpp20_language_features-designated-initializers.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CPP20_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CPP20_LANGUAGE_FEATURES_ROOT_DIR + std::string("/designated-initializers.cpp"),
     "--home", CPP20_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "designated-initializers.cpp",
     "--overwrite",
-    "-o", snapshot_name }
+    "-o", snapshot_name,
+    "--", "-std=c++20" }
   };
 
   // the scanner invocation succeeds
