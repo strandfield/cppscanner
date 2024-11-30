@@ -75,6 +75,187 @@ TEST_CASE("main", "[scanner][cxx_language_features]")
   }
 }
 
+
+TEST_CASE("include", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-include.db";
+
+  ScannerInvocation inv{
+    { "-i", HOME_DIR + std::string("/include.cpp"),
+    "--home", HOME_DIR,
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  SnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  REQUIRE(files.size() == 2);
+  File srcfile = getFile(files, std::regex("include\\.cpp"));
+  File hdrfile = getFile(files, std::regex("include\\.h"));
+
+  // pp-includes are indexed correcly
+  {
+    std::vector<Include> includes = s.getIncludedFiles(srcfile.id);
+    REQUIRE(includes.size() == 1);
+    REQUIRE(includes.front().includedFileID == hdrfile.id);
+    REQUIRE(s.getIncludedFiles(hdrfile.id).empty());
+  }
+
+  REQUIRE_NOTHROW(s.getSymbolByName("MyCppStruct"));
+  REQUIRE_NOTHROW(s.getSymbolByName("MyIncludedStruct"));
+}
+
+
+TEST_CASE("data members", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-datamembers.db";
+
+  ScannerInvocation inv{
+    { "-i", HOME_DIR + std::string("/datamembers.cpp"),
+    "--home", HOME_DIR,
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  SnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  REQUIRE(files.size() ==1);
+  File srcfile = getFile(files, std::regex("datamembers\\.cpp"));
+
+  SymbolRecord structFoo = s.getSymbolByName("Foo");
+  REQUIRE(structFoo.kind == SymbolKind::Struct);
+
+  // data members are indexed correcly
+  {
+    SymbolRecord a = s.getChildSymbolByName("a", structFoo.id);
+    REQUIRE(a.kind == SymbolKind::Field);
+    SymbolRecord b = s.getChildSymbolByName("b", structFoo.id);
+    REQUIRE(b.kind == SymbolKind::StaticProperty);
+    REQUIRE(testFlag(b, VariableInfo::Static));
+    REQUIRE(testFlag(b, VariableInfo::Const));
+  }
+
+  // symbol references are indexed correcly
+  {
+    SymbolRecord a = s.getSymbolByName("a");
+    SymbolRecord b = s.getSymbolByName("b");
+
+    std::vector<SymbolReference> refs = s.findReferences(a.id);
+    REQUIRE(!refs.empty());
+    REQUIRE(refs.size() == 2);
+
+    refs = s.findReferences(b.id);
+    REQUIRE(!refs.empty());
+    REQUIRE(refs.size() == 2);
+    REQUIRE(containsRef(refs, SymbolRefPattern(b).inFile(srcfile).at(5)));
+    REQUIRE(containsRef(refs, SymbolRefPattern(b).inFile(srcfile).at(8)));
+  }
+
+
+  // function local symbols are ignored
+  {
+    REQUIRE_THROWS(s.getSymbolByName("myfoo"));
+  }
+
+}
+
+TEST_CASE("inheritance", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-inheritance.db";
+
+  ScannerInvocation inv{
+    { "-i", HOME_DIR + std::string("/inheritance.cpp"),
+    "--home", HOME_DIR,
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  SnapshotReader s{ snapshot_name };
+
+  SymbolRecord classBase = s.getSymbolByName("Base");
+  SymbolRecord classDerived = s.getSymbolByName("Derived");
+
+  // derived classes are indexed correcly
+  {
+    std::vector<BaseOf> bases = s.getBasesOf(classDerived.id);
+    REQUIRE(bases.size() == 1);
+    REQUIRE(bases.front().baseClassID == classBase.id);
+    REQUIRE(bases.front().accessSpecifier == AccessSpecifier::Public);
+  }
+
+  // method overrides are indexed correcly
+  {
+    SymbolRecord base_method = s.getChildSymbolByName("vmethod()", classBase.id);
+    SymbolRecord derived_method = s.getChildSymbolByName("vmethod()", classDerived.id);
+    REQUIRE(testFlag(base_method, FunctionInfo::Virtual));
+    REQUIRE(testFlag(base_method, FunctionInfo::Pure));
+    REQUIRE(testFlag(derived_method, FunctionInfo::Override));
+    REQUIRE(testFlag(derived_method, SymbolFlag::Protected));
+    std::vector<Override> overrides = s.getOverridesOf(base_method.id);
+    REQUIRE(overrides.size() == 1);
+    REQUIRE(overrides.front().overrideMethodID == derived_method.id);
+  }
+
+  // global variables are indexed correcly
+  {
+    SymbolRecord global_var = s.getSymbolByName("gBoolean");
+    std::vector<SymbolReference> refs = s.findReferences(global_var.id);
+    REQUIRE(refs.size() == 3);
+  }
+}
+
+TEST_CASE("function", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-function.db";
+
+  ScannerInvocation inv{
+    { "-i", HOME_DIR + std::string("/function.cpp"),
+    "--home", HOME_DIR,
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  SnapshotReader s{ snapshot_name };
+
+  // a function inside a namespace is indexed
+  {
+    SymbolRecord foobar = s.getSymbolByName("foobar");
+    REQUIRE(foobar.kind == SymbolKind::Namespace);
+    SymbolRecord qux = s.getSymbolByName("qux()");
+    REQUIRE(qux.kind == SymbolKind::Function);
+    REQUIRE(qux.parentId == foobar.id);
+  }
+}
+
 TEST_CASE("Enum", "[scanner][cxx_language_features]")
 {
   const std::string snapshot_name = "cxx_language_features-enum.db";
@@ -334,7 +515,7 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
     REQUIRE(inv.errors().empty());
   }
 
-  TemporarySnapshot s{ snapshot_name };
+  TestSnapshotReader s{ snapshot_name };
 
   SymbolRecord namespaceA = s.getSymbolByName("namespaceA");
   SymbolRecord namespaceB = s.getSymbolByName("namespaceB");
