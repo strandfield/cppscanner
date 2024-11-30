@@ -44,6 +44,10 @@ constexpr const char* HELP_DESCRIPTION = R"(Description:
   The name and version of the project are written as metadata in the snapshot
   if they are provided but are otherwise not used while indexing.)";
 
+constexpr const char* HELP_EXAMPLES = R"(Example:
+  Compile a single file with C++17 enabled:
+    cppscanner -i source.cpp -o snapshot.db -- -std=c++17)";
+
 
 [[noreturn]] void help()
 {
@@ -51,10 +55,13 @@ constexpr const char* HELP_DESCRIPTION = R"(Description:
   std::cout << std::endl;
   std::cout << "Syntax:" << std::endl;
   std::cout << "  cppscanner run --compile-commands <compile_commands.json> --output <snapshot.db> [options]" << std::endl;
+  std::cout << "  cppscanner run -i <source.cpp> --output <snapshot.db> [options] [--] [compilation arguments]" << std::endl;
   std::cout << "" << std::endl;
   std::cout << HELP_OPTIONS << std::endl;
   std::cout << "" << std::endl;
   std::cout << HELP_DESCRIPTION << std::endl;
+  std::cout << "" << std::endl;
+  std::cout << HELP_EXAMPLES << std::endl;
 
   std::exit(0);
 }
