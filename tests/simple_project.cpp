@@ -52,7 +52,7 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
     REQUIRE(values.size() == 3);
   }
 
-  SymbolRecord structFoo = s.getChildSymbolByName("Foo");
+  SymbolRecord structFoo = s.getSymbolByName("Foo");
   REQUIRE(structFoo.kind == SymbolKind::Struct);
 
   // data members are indexed correcly
@@ -65,8 +65,8 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
     REQUIRE(testFlag(b, VariableInfo::Const));
   }
 
-  SymbolRecord classBase = s.getChildSymbolByName("Base");
-  SymbolRecord classDerived = s.getChildSymbolByName("Derived");
+  SymbolRecord classBase = s.getSymbolByName("Base");
+  SymbolRecord classDerived = s.getSymbolByName("Derived");
 
   // derived classes are indexed correcly
   {
@@ -91,8 +91,8 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // symbol references are indexed correcly
   {
-    SymbolRecord a = s.getChildSymbolByName("a");
-    SymbolRecord b = s.getChildSymbolByName("b");
+    SymbolRecord a = s.getSymbolByName("a");
+    SymbolRecord b = s.getSymbolByName("b");
 
     std::vector<SymbolReference> refs = s.findReferences(a.id);
     REQUIRE(!refs.empty());
@@ -108,19 +108,19 @@ TEST_CASE("The Scanner runs properly on simple_project", "[scanner][simple_proje
 
   // global variables are indexed correcly
   {
-    REQUIRE_NOTHROW(s.getChildSymbolByName("gBoolean"));
+    REQUIRE_NOTHROW(s.getSymbolByName("gBoolean"));
   }
 
   // function local symbols are ignored
   {
-    REQUIRE_THROWS(s.getChildSymbolByName("myfoo"));
+    REQUIRE_THROWS(s.getSymbolByName("myfoo"));
   }
 
   // a function inside a namespace is indexed
   {
-    SymbolRecord foobar = s.getChildSymbolByName("foobar");
+    SymbolRecord foobar = s.getSymbolByName("foobar");
     REQUIRE(foobar.kind == SymbolKind::Namespace);
-    SymbolRecord qux = s.getChildSymbolByName("qux()");
+    SymbolRecord qux = s.getSymbolByName("qux()");
     REQUIRE(qux.kind == SymbolKind::Function);
     REQUIRE(qux.parentId == foobar.id);
   }

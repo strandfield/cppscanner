@@ -38,7 +38,7 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
 
   // lambda
   {
-    SymbolRecord fwithlambda = s.getChildSymbolByName("functionWithLambda(int&, int)");
+    SymbolRecord fwithlambda = s.getSymbolByName("functionWithLambda(int&, int)");
     std::vector<SymbolRecord> alllambdas = s.getChildSymbols(fwithlambda.id, SymbolKind::Lambda);
     REQUIRE(alllambdas.size() == 1);
     const SymbolRecord& lambda = alllambdas.front();
@@ -248,15 +248,15 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
 
   TemporarySnapshot s{ snapshot_name };
 
-  SymbolRecord namespaceA = s.getChildSymbolByName("namespaceA");
-  SymbolRecord namespaceB = s.getChildSymbolByName("namespaceB");
+  SymbolRecord namespaceA = s.getSymbolByName("namespaceA");
+  SymbolRecord namespaceB = s.getSymbolByName("namespaceB");
 
   NamespaceAliasRecord nsA = s.getNamespaceAliasRecord("nsA");
   NamespaceAliasRecord nsB = s.getNamespaceAliasRecord("nsB");
   REQUIRE(nsA.value == "namespaceA");
   REQUIRE(nsB.value == "nsA::namespaceB");
 
-  SymbolRecord inlNs = s.getChildSymbolByName("inlineNamespace");
+  SymbolRecord inlNs = s.getSymbolByName("inlineNamespace");
   REQUIRE(inlNs.kind == SymbolKind::InlineNamespace);
 }
 
@@ -280,11 +280,11 @@ TEST_CASE("goto", "[scanner][cxx_language_features]")
 
   SnapshotReader s{ snapshot_name };
 
-  SymbolRecord func = s.getChildSymbolByName("gotolabel(int)");
+  SymbolRecord func = s.getSymbolByName("gotolabel(int)");
   REQUIRE(func.kind == SymbolKind::Function);
 
-  SymbolRecord labelA = s.getChildSymbolByName("labelA");
-  SymbolRecord labelB = s.getChildSymbolByName("labelB");
+  SymbolRecord labelA = s.getSymbolByName("labelA");
+  SymbolRecord labelB = s.getSymbolByName("labelB");
 
   REQUIRE(labelA.kind == labelB.kind);
   REQUIRE(labelA.kind == SymbolKind::GotoLabel);

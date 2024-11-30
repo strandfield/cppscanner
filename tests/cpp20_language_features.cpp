@@ -30,7 +30,7 @@ TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
 
   SnapshotReader s{ snapshot_name };
 
-  SymbolRecord intpair = s.getChildSymbolByName("IntPair");
+  SymbolRecord intpair = s.getSymbolByName("IntPair");
   SymbolRecord spaceship = s.getChildSymbolByName("operator<=>(const IntPair&) const", intpair.id);
 
   REQUIRE(testFlag(spaceship, FunctionInfo::Const));
@@ -57,7 +57,7 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
 
   SnapshotReader s{ snapshot_name };
 
-  SymbolRecord myaggregate = s.getChildSymbolByName("MyAggregate");
+  SymbolRecord myaggregate = s.getSymbolByName("MyAggregate");
   VariableRecord flag = s.getField(myaggregate.id, "flag");
   VariableRecord n = s.getField(myaggregate.id, "n");
   VariableRecord x = s.getField(myaggregate.id, "x");
@@ -66,7 +66,7 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
   REQUIRE(n.type == "int");
   REQUIRE(x.type == "float");
 
-  SymbolRecord init_aggregate = s.getChildSymbolByName("init_aggregate()");
+  SymbolRecord init_aggregate = s.getSymbolByName("init_aggregate()");
   REQUIRE(init_aggregate.kind == SymbolKind::Function);
 
   std::vector<File> files = s.getFiles();

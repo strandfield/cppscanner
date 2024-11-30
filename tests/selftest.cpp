@@ -46,7 +46,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
 
   // verify the presence of some classes
   {
-    SymbolRecord ns = s.getChildSymbolByName("cppscanner");
+    SymbolRecord ns = s.getSymbolByName("cppscanner");
     REQUIRE(ns.kind == SymbolKind::Namespace);
     SymbolRecord indexer = s.getChildSymbolByName("Indexer", ns.id);
     REQUIRE(indexer.kind == SymbolKind::Class);

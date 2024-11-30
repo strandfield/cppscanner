@@ -92,6 +92,7 @@ protected:
   static void fill(SymbolRecord& record, sql::Statement& row);
 
   static sql::Statement build_query(const SnapshotReader& s, std::string q, const SymbolRecordFilter& f);
+  static sql::Statement build_query_orderby(const SnapshotReader& s, std::string q, const SymbolRecordFilter& f, const std::string& orderBy);
   static sql::Statement build_query(const SnapshotReader& s, std::string q, SymbolID id);
   void advance();
 };
@@ -143,6 +144,11 @@ inline void SymbolRecordIterator::fill(SymbolRecord& record, sql::Statement& row
 
 inline sql::Statement SymbolRecordIterator::build_query(const SnapshotReader& s, std::string q, const SymbolRecordFilter& f)
 {
+  return build_query_orderby(s, q, f, std::string());
+}
+
+inline sql::Statement SymbolRecordIterator::build_query_orderby(const SnapshotReader& s, std::string q, const SymbolRecordFilter& f, const std::string& orderBy)
+{
   sql::Statement stmt{ s.database() };
 
   if (!f.empty())
@@ -177,6 +183,11 @@ inline sql::Statement SymbolRecordIterator::build_query(const SnapshotReader& s,
         q += "name = ?";
       }
     }
+  }
+
+  if (!orderBy.empty())
+  {
+    q += " ORDER BY " + orderBy;
   }
 
   stmt.prepare(q.c_str());
@@ -459,7 +470,7 @@ class ParameterRecordIterator : public SymbolRecordIterator
 {
 public:
   explicit ParameterRecordIterator(const SnapshotReader& s, SymbolRecordFilter filter = {})
-    : SymbolRecordIterator(build_query(s, "SELECT id, kind, parent, name, flags, parameterIndex, type, defaultValue FROM parameterRecord", filter))
+    : SymbolRecordIterator(build_query_orderby(s, "SELECT id, kind, parent, name, flags, parameterIndex, type, defaultValue FROM parameterRecord", filter, "parameterIndex ASC"))
   {
 
   }
