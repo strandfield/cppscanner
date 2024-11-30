@@ -10,6 +10,8 @@
 
 using namespace cppscanner;
 
+static const std::string HOME_DIR = TESTFILES_DIRECTORY + std::string("/cxx_language_features");
+
 static EnumConstantRecord getEnumConstantRecord(const SnapshotReader& s, SymbolID enumId, const std::string& name)
 {
   return cppscanner::getRecord<EnumConstantRecord>(s, SymbolRecordFilter().withParent(enumId).withName(name));
@@ -20,8 +22,8 @@ TEST_CASE("main", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-main.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/main.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/main.cpp"),
+    "--home", HOME_DIR,
     "--index-local-symbols", "--overwrite", "-o", snapshot_name}
   };
 
@@ -78,8 +80,8 @@ TEST_CASE("Enum", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-enum.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/enum.h"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/enum.h"),
+    "--home", HOME_DIR,
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
@@ -111,8 +113,8 @@ TEST_CASE("Lambda", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-lambda.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/lambda.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/lambda.cpp"),
+    "--home", HOME_DIR,
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
@@ -149,8 +151,8 @@ TEST_CASE("Template", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-template.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/template.h"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/template.h"),
+    "--home", HOME_DIR,
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
@@ -270,8 +272,8 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-macro.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/macro.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/macro.cpp"),
+    "--home", HOME_DIR,
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -320,8 +322,8 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-namespace.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/namespace.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/namespace.cpp"),
+    "--home", HOME_DIR,
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -351,8 +353,8 @@ TEST_CASE("goto", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-goto.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/gotolabel.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/gotolabel.cpp"),
+    "--home", HOME_DIR,
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
@@ -381,8 +383,8 @@ TEST_CASE("converting constructor", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-converting-ctor.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/converting-constructor.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/converting-constructor.cpp"),
+    "--home", HOME_DIR,
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -428,8 +430,8 @@ TEST_CASE("arguments passed by reference", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-converting-refargs.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/pass-by-reference.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/pass-by-reference.cpp"),
+    "--home", HOME_DIR,
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
@@ -457,8 +459,8 @@ TEST_CASE("declarations", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-declarations.db";
 
   ScannerInvocation inv{
-    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/declarations.cpp"),
-    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    { "-i", HOME_DIR + std::string("/declarations.cpp"),
+    "--home", HOME_DIR,
     "--index-local-symbols",
     "--overwrite",
     "-o", snapshot_name }
