@@ -271,7 +271,11 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
       continue;
     }
 
+#ifdef _WIN32
     scanner_command.commandLine = { "clang++" };
+#else
+    scanner_command.commandLine = { "/usr/bin/c++" };
+#endif
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), d->compilationArguments.begin(), d->compilationArguments.end());
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), scanner_command.fileName);
 
