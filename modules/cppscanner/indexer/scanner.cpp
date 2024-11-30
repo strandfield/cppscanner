@@ -270,7 +270,10 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
     d->compileCommands.push_back(std::move(scanner_command));
   }
 
-  std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
+  if (d->compileCommands.size() > 1)
+  {
+    std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
+  }
 
   runScanSingleOrMultiThreaded();
 }

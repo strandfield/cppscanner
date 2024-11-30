@@ -187,9 +187,8 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   const std::string snapshot_name = "cxx_language_features-macro.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"),
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/macro.cpp"),
     "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
-    "-f:tu", "macro.cpp",
     "--overwrite",
     "-o", snapshot_name }
   };
@@ -200,10 +199,10 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
     REQUIRE(inv.errors().empty());
   }
 
-  TemporarySnapshot s{ snapshot_name };
+  TestSnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
-  REQUIRE(files.size() > 0);
+  REQUIRE(files.size() == 2);
   File macro_cpp = getFile(files, std::regex("macro\\.cpp"));
 
   MacroRecord my_constant = getMacroRecordByName(s, "MY_CONSTANT");
