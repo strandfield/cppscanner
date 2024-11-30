@@ -246,7 +246,17 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
       {
         for (const auto& dir_entry : std::filesystem::directory_iterator(input))
         {
-          queue.push_back(dir_entry.path());
+          if (dir_entry.is_directory())
+          {
+            queue.push_back(dir_entry.path());
+          }
+          else if (dir_entry.is_regular_file())
+          {
+            if (dir_entry.path().extension().generic_u8string() == ".cpp")
+            {
+              queue.push_back(dir_entry.path());
+            }
+          }
         }
       }
 
