@@ -1,7 +1,4 @@
 
-#include "enum.h"
-#include "template.h"
-
 class IncompleteType; // declaration
 
 int uninitializedGlobalVariable;  // definition

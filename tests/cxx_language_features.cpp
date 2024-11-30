@@ -15,12 +15,14 @@ static EnumConstantRecord getEnumConstantRecord(const SnapshotReader& s, SymbolI
   return cppscanner::getRecord<EnumConstantRecord>(s, SymbolRecordFilter().withParent(enumId).withName(name));
 }
 
-TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_language_features]")
+TEST_CASE("main", "[scanner][cxx_language_features]")
 {
-  const std::string snapshot_name = "cxx_language_features.db";
+  const std::string snapshot_name = "cxx_language_features-main.db";
 
   ScannerInvocation inv{
-    {"--compile-commands", CXX_LANGUAGE_FEATURES_BUILD_DIR + std::string("/compile_commands.json"), "--index-external-files", "--index-local-symbols", "--overwrite", "-o", snapshot_name}
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/main.cpp"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "--index-local-symbols", "--overwrite", "-o", snapshot_name}
   };
 
   // the scanner invocation succeeds
@@ -32,8 +34,100 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
   SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
-  REQUIRE(files.size() == 12);
+  REQUIRE(files.size() == 1);
   File maincpp = getFile(files, std::regex("main\\.cpp"));
+
+  // main
+  {
+    SymbolRecord record = s.getSymbolByName("main()");
+    REQUIRE(record.kind == SymbolKind::Function);
+
+    record = s.getSymbolByName("notMain(int, char *[])");
+    REQUIRE(record.kind == SymbolKind::Function);
+  }
+
+  // test if declaration of variable is definition
+  {
+    SymbolRecord sym = s.getSymbolByName({"IncompleteType"});
+    REQUIRE(testFlag(sym, SymbolFlag::FromProject));
+    std::vector<SymbolReference> refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(!bool(refs.front().flags & SymbolReference::Definition));
+    REQUIRE(bool(refs.front().flags & SymbolReference::Declaration));
+
+    sym = s.getSymbolByName({"uninitializedGlobalVariable"});
+    refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(bool(refs.front().flags & SymbolReference::Definition));
+
+    sym = s.getSymbolByName({"uninitializedStaticGlobalVariable"});
+    refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(bool(refs.front().flags & SymbolReference::Definition));
+
+    sym = s.getSymbolByName({"uninitializedExternGlobalVariable"});
+    refs = s.findReferences(sym.id);
+    REQUIRE(refs.size() == 1);
+    REQUIRE(!bool(refs.front().flags & SymbolReference::Definition));
+    REQUIRE(bool(refs.front().flags & SymbolReference::Declaration));
+  }
+}
+
+TEST_CASE("Enum", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-enum.db";
+
+  ScannerInvocation inv{
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/enum.h"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  TestSnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  REQUIRE(files.size() ==1);
+
+  // enum
+  {
+    SymbolRecord enumclass = s.getSymbolByName({ "cxx", "EnumClass" });
+    REQUIRE(enumclass.kind == SymbolKind::EnumClass);
+
+    EnumConstantRecord enumclass_z = getEnumConstantRecord(s, enumclass.id, "Z");
+    REQUIRE(enumclass_z.expression == "25");
+  }
+}
+
+TEST_CASE("Lambda", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-lambda.db";
+
+  ScannerInvocation inv{
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/lambda.cpp"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
+  {
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
+  }
+
+  TestSnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  REQUIRE(files.size() ==1);
   File lambdacpp = getFile(files, std::regex("lambda\\.cpp"));
 
   // lambda
@@ -48,16 +142,32 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     SymbolRecord add_to_a = s.getSymbolByName({ "functionWithLambda(int&, int)", "add_to_a" });
     REQUIRE(add_to_a.kind == SymbolKind::Variable);
   }
+}
 
-  // enum
+TEST_CASE("Template", "[scanner][cxx_language_features]")
+{
+  const std::string snapshot_name = "cxx_language_features-template.db";
+
+  ScannerInvocation inv{
+    { "-i", CXX_LANGUAGE_FEATURES_ROOT_DIR + std::string("/template.h"),
+    "--home", CXX_LANGUAGE_FEATURES_ROOT_DIR,
+    "--index-local-symbols",
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  // the scanner invocation succeeds
   {
-    SymbolRecord enumclass = s.getSymbolByName({ "cxx", "EnumClass" });
-    REQUIRE(enumclass.kind == SymbolKind::EnumClass);
-
-    EnumConstantRecord enumclass_z = getEnumConstantRecord(s, enumclass.id, "Z");
-    REQUIRE(enumclass_z.expression == "25");
+    REQUIRE_NOTHROW(inv.run());
+    REQUIRE(inv.errors().empty());
   }
-  
+
+  TestSnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  REQUIRE(files.size() ==1);
+  File templateh = getFile(files, std::regex("template\\.h"));
+
   // function template with type parameter
   {
     SymbolRecord incr = getRecord(s, SymbolRecordFilter().withNameLike("max(%)"));
@@ -143,33 +253,6 @@ TEST_CASE("The Scanner runs properly on cxx_language_features", "[scanner][cxx_l
     REQUIRE(!testFlag(thetypedef, SymbolFlag::Local));
   }
 
-  // test if declaration of variable is definition
-  {
-    SymbolRecord sym = s.getSymbolByName({"IncompleteType"});
-    REQUIRE(testFlag(sym, SymbolFlag::FromProject));
-    std::vector<SymbolReference> refs = s.findReferences(sym.id);
-    REQUIRE(refs.size() == 1);
-    REQUIRE(!bool(refs.front().flags & SymbolReference::Definition));
-    REQUIRE(bool(refs.front().flags & SymbolReference::Declaration));
-
-    sym = s.getSymbolByName({"uninitializedGlobalVariable"});
-    refs = s.findReferences(sym.id);
-    REQUIRE(refs.size() == 1);
-    REQUIRE(bool(refs.front().flags & SymbolReference::Definition));
-
-    sym = s.getSymbolByName({"uninitializedStaticGlobalVariable"});
-    refs = s.findReferences(sym.id);
-    REQUIRE(refs.size() == 1);
-    REQUIRE(bool(refs.front().flags & SymbolReference::Definition));
-
-    sym = s.getSymbolByName({"uninitializedExternGlobalVariable"});
-    refs = s.findReferences(sym.id);
-    REQUIRE(refs.size() == 1);
-    REQUIRE(!bool(refs.front().flags & SymbolReference::Definition));
-    REQUIRE(bool(refs.front().flags & SymbolReference::Declaration));
-  }
-
-  // TODO: tester que l'ouverture d'un namespace ajoute le flag FromProject
 }
 
 static MacroRecord getMacroRecordByName(const SnapshotReader& s, const std::string& name)
@@ -231,6 +314,9 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
 
 TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
 {
+  // TODO: tester que l'ouverture d'un namespace ajoute le flag FromProject
+
+
   const std::string snapshot_name = "cxx_language_features-namespace.db";
 
   ScannerInvocation inv{
