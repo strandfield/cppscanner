@@ -18,7 +18,8 @@ namespace cppscanner
  */
 struct ScannerOptions
 {
-  std::filesystem::path compile_commands;
+  std::vector<std::filesystem::path> inputs;
+  std::optional<std::filesystem::path> compile_commands;
   std::filesystem::path output;
   std::optional<std::filesystem::path> home;
   std::optional<std::filesystem::path> root;
@@ -30,6 +31,7 @@ struct ScannerOptions
   std::vector<std::string> translation_unit_filters;
   std::optional<std::string> project_name;
   std::optional<std::string> project_version;
+  std::vector<std::string> compilation_arguments; // arguments passed after --
 };
 
 /**

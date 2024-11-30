@@ -18,6 +18,7 @@
 #include "cppscanner/index/symbolrecords.h"
 
 #include <filesystem>
+#include <initializer_list>
 #include <memory>
 #include <vector>
 
@@ -48,8 +49,10 @@ public:
   std::vector<SymbolDeclaration> getSymbolDeclarations(SymbolID symbolId) const;
 
   std::vector<SymbolRecord> getSymbolsByName(const std::string& name) const;
-  SymbolRecord getChildSymbolByName(const std::string& name, SymbolID parentID = {}) const;
+  SymbolRecord getChildSymbolByName(const std::string& name, SymbolID parentID) const;
   SymbolRecord getSymbolByName(const std::vector<std::string>& qualifiedName) const;
+  SymbolRecord getSymbolByName(std::initializer_list<std::string>&& qualifiedName) const;
+  SymbolRecord getSymbolByName(const std::string& name) const;
   std::vector<SymbolRecord> getChildSymbols(SymbolID parentID) const;
   std::vector<SymbolRecord> getChildSymbols(SymbolID parentID, SymbolKind kind) const;
   NamespaceAliasRecord getNamespaceAliasRecord(const std::string& name) const;

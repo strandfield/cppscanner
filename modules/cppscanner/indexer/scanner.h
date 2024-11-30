@@ -43,14 +43,20 @@ public:
 
   void setNumberOfParsingThread(size_t n);
 
+  void setCompilationArguments(const std::vector<std::string>& args);
+
   void initSnapshot(const std::filesystem::path& p);
   SnapshotWriter* snapshot() const;
 
-  void scan(const std::filesystem::path& compileCommandsPath);
+  void scanFromCompileCommands(const std::filesystem::path& compileCommandsPath);
+  void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs);
+  [[deprecated]] void scan(const std::filesystem::path& compileCommandsPath);
 
 protected:
+  bool passTranslationUnitFilters(const std::string& filename) const;
   void scanSingleThreaded();
   void scanMultiThreaded();
+  void runScanSingleOrMultiThreaded();
   void assimilate(TranslationUnitIndex tuIndex);
   bool fileAlreadyIndexed(FileID f) const;
   void setFileIndexed(FileID f);

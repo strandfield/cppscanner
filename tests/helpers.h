@@ -72,7 +72,7 @@ inline void filterRefs(std::vector<cppscanner::SymbolReference>& refs, const Sym
   refs.erase(it, refs.end());
 }
 
-class TemporarySnapshot : public cppscanner::SnapshotReader
+class [[deprecated]] TemporarySnapshot : public cppscanner::SnapshotReader
 {
 private:
   std::filesystem::path m_db_path;
@@ -88,6 +88,30 @@ public:
   }
 
   ~TemporarySnapshot()
+  {
+    database().close();
+    if (delete_on_close) {
+      std::filesystem::remove(m_db_path);
+    }
+  }
+};
+
+class TestSnapshotReader : public cppscanner::SnapshotReader
+{
+private:
+  std::filesystem::path m_db_path;
+public:
+  bool delete_on_close = false;
+
+public:
+  explicit TestSnapshotReader(const std::filesystem::path& p)
+    : SnapshotReader(p),
+    m_db_path(p)
+  {
+
+  }
+
+  ~TestSnapshotReader()
   {
     database().close();
     if (delete_on_close) {

@@ -1,7 +1,7 @@
 
 #include <iostream>
 
-int main()
+inline void sayHello()
 {
   std::cout << "Hello World!" << std::endl;
 }

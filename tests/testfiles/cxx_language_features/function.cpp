@@ -1,0 +1,4 @@
+
+namespace foobar {
+void qux();
+}

@@ -1,9 +1,14 @@
 
 enable_testing()
 
-# tests with example projects
+# test files
 
 set (PROJECT_LISTS_STR "")
+set (PROJECT_LISTS_STR "${PROJECT_LISTS_STR}\nstatic constexpr const char* TESTFILES_DIRECTORY = \"${CMAKE_CURRENT_LIST_DIR}/testfiles\";")
+
+add_subdirectory(testfiles)
+
+# tests with example projects
 
 macro(setup_test_project folderName)
   add_subdirectory(${folderName})
@@ -31,11 +36,7 @@ macro(setup_test_project folderName)
   set (PROJECT_LISTS_STR "${PROJECT_LISTS_STR}\nstatic constexpr const char* ${FOLDER}_BUILD_DIR = \"${WDIR}\";")
 endmacro()
 
-setup_test_project(simple_project)
 setup_test_project(hello_world)
-setup_test_project(cxx_language_features)
-setup_test_project(cpp20_language_features)
-setup_test_project(stl)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
   message("Downloading Catch2")
@@ -45,7 +46,6 @@ endif()
 configure_file("projects.h.in" "projects.h")
 
 add_executable(TEST_cppscanner "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "${CMAKE_CURRENT_BINARY_DIR}/projects.h" "main.cpp" "helpers.h" "projects.h.in"
-  "simple_project.cpp"
   "hello_world.cpp"
   "cxx_language_features.cpp"
   "cpp20_language_features.cpp"

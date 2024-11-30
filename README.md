@@ -52,21 +52,24 @@ Building LLVM isn't hard, it just takes a lot of time and produces a lot of bina
 Running `cppscanner` with no arguments or with the `--help` option prints the help.
 
 Currently, `run` is the only valid command; and it is used to create a snapshot of
-a program.
+a program. Snapshots are saved as a SQLite database.
 
-Syntax:
+Syntax for creating a snapshot from a `compile_commands.json` compilation database:
 ```
 cppscanner run --compile-commands <compile_commands.json> --output <snapshot.db> [options]
 ```
 
-The input is taken as a `compile_commands.json` file and the output is a SQLite database.
+Syntax for creating a snapshot from a single file:
+```
+cppscanner run -i <source.cpp> --output <snapshot.db> [options] -- [compiler arguments]
+```
 
 ### Getting a `compile_commands.json` with CMake
 
 Getting a `compile_commands.json` is relative easy if you are using CMake: set the 
 `CMAKE_EXPORT_COMPILE_COMMANDS` variable to `ON` when generating the project.
 
-A minimal working example is available in [tests/simple_project](tests/simple_project).
+A minimal working example is available in [tests/hello_world](tests/hello_world).
 
 On Windows, if you are using a "Visual Studio" generator, you will have to switch
 to the "NMake Makefiles" generator. <br/>
