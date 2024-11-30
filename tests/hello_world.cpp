@@ -31,12 +31,17 @@ TEST_CASE("The Scanner runs properly on hello_world", "[scanner][hello_world]")
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() >= 2);
-  File hellocpp = getFile(files, std::regex("hello\\.cpp"));
+  File srcfile = getFile(files, std::regex("main\\.cpp"));
+  File hdrfile = getFile(files, std::regex("hello\\.h"));
   File iostream = getFile(files, std::regex("iostream"));
 
   // pp-includes are indexed correcly
   {
-    std::vector<Include> includes = s.getIncludedFiles(hellocpp.id);
+    std::vector<Include> includes = s.getIncludedFiles(srcfile.id);
+    REQUIRE(includes.size() == 1);
+    REQUIRE(includes.front().includedFileID == hdrfile.id);
+
+    includes = s.getIncludedFiles(hdrfile.id);
     REQUIRE(includes.size() == 1);
     REQUIRE(includes.front().includedFileID == iostream.id);
   }
@@ -50,12 +55,12 @@ TEST_CASE("The Scanner runs properly on hello_world", "[scanner][hello_world]")
   {
     std::vector<SymbolReference> refs = s.findReferences(stdcout.id);
     REQUIRE(!refs.empty());
-    filterRefs(refs, SymbolRefPattern(stdcout).inFile(hellocpp));
+    filterRefs(refs, SymbolRefPattern(stdcout).inFile(hdrfile));
     REQUIRE(refs.size() == 1);
 
     refs = s.findReferences(stdendl.id);
     REQUIRE(!refs.empty());
-    filterRefs(refs, SymbolRefPattern(stdendl).inFile(hellocpp));
+    filterRefs(refs, SymbolRefPattern(stdendl).inFile(hdrfile));
     REQUIRE(refs.size() == 1);
   }
 }
