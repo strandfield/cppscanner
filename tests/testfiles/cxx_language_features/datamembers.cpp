@@ -7,7 +7,7 @@ struct Foo
 
 const bool Foo::b = false;
 
-int main()
+void dataMembersFunc()
 {
   Foo myfoo;
   myfoo.a = 5;

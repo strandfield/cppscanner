@@ -69,7 +69,7 @@ cppscanner run -i <source.cpp> --output <snapshot.db> [options] -- [compiler arg
 Getting a `compile_commands.json` is relative easy if you are using CMake: set the 
 `CMAKE_EXPORT_COMPILE_COMMANDS` variable to `ON` when generating the project.
 
-A minimal working example is available in [tests/simple_project](tests/simple_project).
+A minimal working example is available in [tests/hello_world](tests/hello_world).
 
 On Windows, if you are using a "Visual Studio" generator, you will have to switch
 to the "NMake Makefiles" generator. <br/>

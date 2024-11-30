@@ -36,7 +36,6 @@ macro(setup_test_project folderName)
   set (PROJECT_LISTS_STR "${PROJECT_LISTS_STR}\nstatic constexpr const char* ${FOLDER}_BUILD_DIR = \"${WDIR}\";")
 endmacro()
 
-setup_test_project(simple_project)
 setup_test_project(hello_world)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
@@ -47,7 +46,6 @@ endif()
 configure_file("projects.h.in" "projects.h")
 
 add_executable(TEST_cppscanner "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "${CMAKE_CURRENT_BINARY_DIR}/projects.h" "main.cpp" "helpers.h" "projects.h.in"
-  "simple_project.cpp"
   "hello_world.cpp"
   "cxx_language_features.cpp"
   "cpp20_language_features.cpp"
