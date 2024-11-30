@@ -1052,8 +1052,10 @@ void Indexer::initialize(clang::ASTContext& Ctx)
   m_ShouldIndexFileCache.clear();
   m_symbolCollector.reset();
 
+  resetDidProduceOutput();
   m_index = std::make_unique<TranslationUnitIndex>();
   m_index->fileIdentificator = &m_fileIdentificator;
+  m_index->mainFileId = getFileID(Ctx.getSourceManager().getMainFileID());
 }
 
 void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
@@ -1418,8 +1420,19 @@ void Indexer::finish()
 
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();
+  m_produced_output = true;
 
   mAstContext = nullptr;
+}
+
+bool Indexer::didProduceOutput() const
+{
+  return m_produced_output;
+}
+
+void Indexer::resetDidProduceOutput()
+{
+  m_produced_output = false;
 }
 
 namespace

@@ -8,6 +8,7 @@
 
 #include "indexer.h"
 #include "indexingresultqueue.h"
+#include "workqueue.h"
 
 #include "frontendactionfactory.h"
 #include "fileidentificator.h"
@@ -24,6 +25,8 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <thread>
+#include <vector>
 
 namespace cppscanner
 {
@@ -34,8 +37,10 @@ struct ScannerData
   std::optional<std::string> rootDirectory;
   bool indexExternalFiles = false;
   bool indexLocalSymbols = false;
+  size_t nbThreads = 0;
   std::vector<std::string> filters;
   std::vector<std::string> translationUnitFilters;
+  std::unique_ptr<clang::tooling::JSONCompilationDatabase> compileCommands;
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
@@ -81,7 +86,6 @@ Scanner::Scanner()
 {
   d = std::make_unique<ScannerData>();
   d->homeDirectory = std::filesystem::current_path().generic_u8string();
-  d->fileIdentificator = FileIdentificator::createFileIdentificator();
 }
 
 Scanner::~Scanner() = default;
@@ -114,6 +118,11 @@ void Scanner::setFilters(const std::vector<std::string>& filters)
 void Scanner::setTranslationUnitFilters(const std::vector<std::string>& filters)
 {
   d->translationUnitFilters = filters;
+}
+
+void Scanner::setNumberOfParsingThread(size_t n)
+{
+  d->nbThreads = n;
 }
 
 /**
@@ -150,15 +159,28 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
   assert(snapshot());
 
   std::string error_message;
-  std::unique_ptr<clang::tooling::JSONCompilationDatabase> compile_commands = clang::tooling::JSONCompilationDatabase::loadFromFile(
+  d->compileCommands = clang::tooling::JSONCompilationDatabase::loadFromFile(
       compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
   );
 
-  if (!compile_commands) {
+  if (!d->compileCommands) {
     std::cerr << "error while parsing compile_commands.json file: " << error_message << std::endl;
     return;
   }
 
+  if (d->nbThreads == 0)
+  {
+    scanSingleThreaded();
+  }
+  else
+  {
+    scanMultiThreaded();
+  }
+}
+
+void Scanner::scanSingleThreaded()
+{
+  d->fileIdentificator = FileIdentificator::createFileIdentificator();
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
   IndexingResultQueue results_queue;
@@ -171,7 +193,7 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
   clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
   clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
 
-  for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
+  for (const clang::tooling::CompileCommand& cc : d->compileCommands->getAllCompileCommands())
   {
     if (!d->translationUnitFilters.empty()) {
       bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&cc](const std::string& e) {
@@ -184,7 +206,7 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
       }
     }
 
-     std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
+    std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
     /* std::vector<std::string> command = clang::tooling::getClangSyntaxOnlyAdjuster()(cc.CommandLine, cc.Filename);
     command = clang::tooling::getClangStripOutputAdjuster()(command, cc.Filename);*/
     clang::tooling::ToolInvocation invocation{ std::move(command), actionfactory.create(), file_manager.get() };
@@ -206,6 +228,176 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
       std::cout << "error: tool invocation failed" << std::endl;
     }
   }
+}
+
+void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
+{
+  clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
+  auto index_data_consumer = std::make_shared<Indexer>(*arbiter, *resultQueue);
+  IndexingFrontendActionFactory actionfactory{ index_data_consumer };
+  actionfactory.setIndexLocalSymbols(data->indexLocalSymbols);
+
+  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
+  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
+  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
+  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
+
+  for (;;)
+  {
+    std::optional<WorkQueue::ToolInvocation> item = inputQueue->next();
+
+    if (!item.has_value())
+    {
+      break;
+    }
+
+    std::vector<std::string> command = item->command;
+
+    clang::tooling::ToolInvocation invocation{ std::move(command), actionfactory.create(), file_manager.get() };
+    invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
+
+    //std::cout << item->filename << std::endl;
+
+    bool success = false;
+
+    try {
+      success = invocation.run();
+    }
+    catch (...)
+    {
+      success = false;
+    }
+
+    if (!success || !index_data_consumer->didProduceOutput())
+    {
+      TranslationUnitIndex index;
+      index.mainFileId = arbiter->fileIdentificator().getIdentification(item->filename);
+      index.isError = true;
+      resultQueue->write(std::move(index));
+    }
+
+    index_data_consumer->resetDidProduceOutput();
+  }
+
+  running.fetch_sub(1);
+}
+
+class WorkerThreads
+{
+private:
+  ScannerData* m_data; FileIndexingArbiter* m_arbiter; WorkQueue* m_inputQueue; IndexingResultQueue* m_resultQueue;
+  std::vector<std::thread> m_threads;
+  std::atomic<int> m_running = 0;
+
+public:
+
+  WorkerThreads(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue) :
+    m_data(data), m_arbiter(arbiter), m_inputQueue(inputQueue), m_resultQueue(resultQueue)
+  {
+
+  }
+
+  ~WorkerThreads()
+  {
+    destroy();
+  }
+
+  void addOne()
+  {
+    m_running.fetch_add(1);
+
+    std::thread worker{ parsing_thread_proc, m_data, m_arbiter, m_inputQueue, m_resultQueue, std::ref(m_running) };
+    m_threads.emplace_back(std::move(worker));
+  }
+
+  void add(size_t n)
+  {
+    while (n-- > 0) {
+      addOne();
+    }
+  }
+
+  int nbRunning()
+  {
+    return m_running.load();
+  }
+
+  void destroy()
+  {
+    for (std::thread& worker : m_threads)
+    {
+      worker.join();
+    }
+    m_threads.clear();
+  }
+};
+
+void Scanner::scanMultiThreaded()
+{
+  assert(d->nbThreads > 0);
+
+  d->fileIdentificator = FileIdentificator::createThreadSafeFileIdentificator();
+
+  std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
+
+  if (d->nbThreads > 1)
+  {
+    indexing_arbiter = FileIndexingArbiter::createThreadSafeArbiter(std::move(indexing_arbiter));
+  }
+
+  std::vector<WorkQueue::ToolInvocation> tasks;
+
+  {
+    clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
+    clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
+    clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
+    clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
+
+    for (const clang::tooling::CompileCommand& cc : d->compileCommands->getAllCompileCommands())
+    {
+      if (!d->translationUnitFilters.empty()) {
+        bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&cc](const std::string& e) {
+          return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
+          });
+
+        if (exclude) {
+          std::cout << "[SKIPPED] " << cc.Filename << std::endl;
+          continue;
+        }
+      }
+
+      std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
+      tasks.push_back(WorkQueue::ToolInvocation{ cc.Filename, std::move(command) });
+    }
+  }
+
+  WorkQueue input_queue{ tasks };
+  IndexingResultQueue results_queue;
+
+
+  WorkerThreads threads{ d.get(), indexing_arbiter.get(), &input_queue, &results_queue };
+  threads.add(d->nbThreads);
+
+  while (threads.nbRunning() > 0)
+  {
+    std::optional<TranslationUnitIndex> item = results_queue.tryRead(std::chrono::milliseconds(250));
+
+    if (!item.has_value())
+      continue;
+
+    TranslationUnitIndex& result = item.value();
+    if (!result.isError)
+    {
+      assimilate(std::move(result));
+    }
+    else 
+    {
+      std::cout << "error: tool invocation failed for " << result.fileIdentificator->getFile(result.mainFileId) << std::endl;
+
+    }
+  }
+
+  threads.destroy();
 }
 
 namespace
@@ -383,7 +575,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     remapFileIds(tuIndex, *d->fileIdentificator);
   }
 
-  const std::vector<std::string>& known_files = d->fileIdentificator->getFiles();
+  const std::vector<std::string> known_files = d->fileIdentificator->getFiles();
 
   std::vector<File> newfiles;
 

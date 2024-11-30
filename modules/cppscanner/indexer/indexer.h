@@ -149,6 +149,7 @@ private:
   std::unique_ptr<TranslationUnitIndex> m_index;
   std::map<clang::FileID, bool> m_ShouldIndexFileCache;
   std::map<clang::FileID, cppscanner::FileID> m_FileIdCache;
+  bool m_produced_output = false;
 
 public:
 
@@ -184,6 +185,9 @@ public:
     const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
     clang::SourceLocation Loc)  final;
   void finish() final;
+
+  bool didProduceOutput() const;
+  void resetDidProduceOutput();
 
 protected:
   friend IdxrDiagnosticConsumer;
