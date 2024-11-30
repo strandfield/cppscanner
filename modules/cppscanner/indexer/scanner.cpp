@@ -22,6 +22,7 @@
 #include <clang/Tooling/JSONCompilationDatabase.h>
 
 #include <algorithm>
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -30,6 +31,12 @@
 
 namespace cppscanner
 {
+
+struct ScannerCompileCommand
+{
+  std::string fileName;
+  std::vector<std::string> commandLine;
+};
 
 struct ScannerData
 {
@@ -40,7 +47,10 @@ struct ScannerData
   size_t nbThreads = 0;
   std::vector<std::string> filters;
   std::vector<std::string> translationUnitFilters;
-  std::unique_ptr<clang::tooling::JSONCompilationDatabase> compileCommands;
+  std::vector<std::string> compilationArguments;
+
+  std::vector<ScannerCompileCommand> compileCommands;
+
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
@@ -125,6 +135,11 @@ void Scanner::setNumberOfParsingThread(size_t n)
   d->nbThreads = n;
 }
 
+void Scanner::setCompilationArguments(const std::vector<std::string>& args)
+{
+  d->compilationArguments = args;
+}
+
 /**
  * \brief creates an empty snapshot
  * \param p  the path of the database
@@ -154,28 +169,115 @@ SnapshotWriter* Scanner::snapshot() const
   return m_snapshot.get();
 }
 
-void Scanner::scan(const std::filesystem::path& compileCommandsPath)
+bool Scanner::passTranslationUnitFilters(const std::string& filename) const
+{
+  if (!d->translationUnitFilters.empty())
+  {
+    bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&filename](const std::string& e) {
+      return is_glob_pattern(e) ? glob_match(filename, e) : filename_match(filename, e);
+      });
+
+    return !exclude;
+  }
+
+  return true;
+}
+
+void Scanner::scanFromCompileCommands(const std::filesystem::path& compileCommandsPath)
 {
   assert(snapshot());
 
   std::string error_message;
-  d->compileCommands = clang::tooling::JSONCompilationDatabase::loadFromFile(
-      compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
+  auto compile_commands = clang::tooling::JSONCompilationDatabase::loadFromFile(
+    compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
   );
 
-  if (!d->compileCommands) {
+  if (!compile_commands) {
     std::cerr << "error while parsing compile_commands.json file: " << error_message << std::endl;
     return;
   }
 
-  if (d->nbThreads == 0)
+  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
+  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
+  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
+  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
+
+  std::cout << "Processing compile_commands.json..." << std::endl;
+
+  for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
   {
-    scanSingleThreaded();
+    if (!passTranslationUnitFilters(cc.Filename)) {
+      std::cout << "[SKIPPED] " << cc.Filename << std::endl;
+      continue;
+    }
+
+    ScannerCompileCommand scanner_command;
+    scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
+    scanner_command.fileName = cc.Filename;
+
+    d->compileCommands.push_back(scanner_command);
   }
-  else
+
+  std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
+
+  runScanSingleOrMultiThreaded();
+}
+
+void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs)
+{
+  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
+  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
+  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
+  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
+
+  // TODO: add support for glob pattern
+  auto queue = std::deque<std::filesystem::path>(inputs.begin(), inputs.end());
+
+  while (!queue.empty())
   {
-    scanMultiThreaded();
+    std::filesystem::path item = queue.front();
+    queue.pop_front();
+
+    const auto input = std::filesystem::absolute(item);
+
+    if (!std::filesystem::is_regular_file(input))
+    {
+      if (std::filesystem::is_directory(input))
+      {
+        for (const auto& dir_entry : std::filesystem::directory_iterator(input))
+        {
+          queue.push_back(dir_entry.path());
+        }
+      }
+
+      continue;
+    }
+
+    ScannerCompileCommand scanner_command;
+    scanner_command.fileName = input.generic_u8string();
+
+    if (!passTranslationUnitFilters(scanner_command.fileName)) {
+      std::cout << "[SKIPPED] " << scanner_command.fileName << std::endl;
+      continue;
+    }
+
+    scanner_command.commandLine = { "clang++" };
+    scanner_command.commandLine.insert(scanner_command.commandLine.end(), d->compilationArguments.begin(), d->compilationArguments.end());
+    scanner_command.commandLine.insert(scanner_command.commandLine.end(), scanner_command.fileName);
+
+    scanner_command.commandLine = argsAdjuster(scanner_command.commandLine, scanner_command.fileName);
+   
+    d->compileCommands.push_back(std::move(scanner_command));
   }
+
+  std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
+
+  runScanSingleOrMultiThreaded();
+}
+
+void Scanner::scan(const std::filesystem::path& compileCommandsPath)
+{
+  scanFromCompileCommands(compileCommandsPath);
 }
 
 void Scanner::scanSingleThreaded()
@@ -188,32 +290,13 @@ void Scanner::scanSingleThreaded()
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
 
-  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
-  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
-  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
-  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
-
-  for (const clang::tooling::CompileCommand& cc : d->compileCommands->getAllCompileCommands())
+  for (const ScannerCompileCommand& cc : d->compileCommands)
   {
-    if (!d->translationUnitFilters.empty()) {
-      bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&cc](const std::string& e) {
-        return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
-        });
-
-      if (exclude) {
-        std::cout << "[SKIPPED] " << cc.Filename << std::endl;
-        continue;
-      }
-    }
-
-    std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
-    /* std::vector<std::string> command = clang::tooling::getClangSyntaxOnlyAdjuster()(cc.CommandLine, cc.Filename);
-    command = clang::tooling::getClangStripOutputAdjuster()(command, cc.Filename);*/
-    clang::tooling::ToolInvocation invocation{ std::move(command), actionfactory.create(), file_manager.get() };
+    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
 
-    std::cout << cc.Filename << std::endl;
+    std::cout << cc.fileName << std::endl;
 
     const bool success = invocation.run();
 
@@ -236,11 +319,6 @@ void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQu
   auto index_data_consumer = std::make_shared<Indexer>(*arbiter, *resultQueue);
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(data->indexLocalSymbols);
-
-  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
-  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
-  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
-  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
 
   for (;;)
   {
@@ -348,26 +426,9 @@ void Scanner::scanMultiThreaded()
   std::vector<WorkQueue::ToolInvocation> tasks;
 
   {
-    clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
-    clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
-    clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
-    clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
-
-    for (const clang::tooling::CompileCommand& cc : d->compileCommands->getAllCompileCommands())
+    for (const ScannerCompileCommand& cc : d->compileCommands)
     {
-      if (!d->translationUnitFilters.empty()) {
-        bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&cc](const std::string& e) {
-          return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
-          });
-
-        if (exclude) {
-          std::cout << "[SKIPPED] " << cc.Filename << std::endl;
-          continue;
-        }
-      }
-
-      std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
-      tasks.push_back(WorkQueue::ToolInvocation{ cc.Filename, std::move(command) });
+      tasks.push_back(WorkQueue::ToolInvocation{ cc.fileName, cc.commandLine });
     }
   }
 
@@ -398,6 +459,18 @@ void Scanner::scanMultiThreaded()
   }
 
   threads.destroy();
+}
+
+void Scanner::runScanSingleOrMultiThreaded()
+{
+  if (d->nbThreads == 0)
+  {
+    scanSingleThreaded();
+  }
+  else
+  {
+    scanMultiThreaded();
+  }
 }
 
 namespace

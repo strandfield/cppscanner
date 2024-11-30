@@ -1,6 +1,7 @@
 
 #include "scannerinvocation.h"
 
+#include <iostream>
 #include <stdexcept>
 
 namespace cppscanner
@@ -23,6 +24,13 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
         throw std::runtime_error("missing argument after --compile-commands");
 
       result.compile_commands = args.at(i++);
+    }
+    else if (arg == "--input" || arg == "-i") 
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after " + arg + " command");
+
+      result.inputs.push_back(args.at(i++));
     }
     else if (arg == "--output" || arg == "-o") 
     {
@@ -92,25 +100,46 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.project_version = args.at(i++);
     }
+    else if (arg == "--")
+    {
+      result.compilation_arguments.assign(args.begin() + i + 1, args.end());
+      i = args.size();
+    }
     else
     {
       throw std::runtime_error("unrecognized command line argument: " + arg);
     }
   }
 
-  if (result.compile_commands.empty()) {
-    throw std::runtime_error("missing input file");
+  return result;
+}
+
+void checkConsistency(const ScannerOptions& opts)
+{
+  if (opts.compile_commands.has_value()) 
+  {
+    if (!opts.inputs.empty()) {
+      throw std::runtime_error("cannot have both input files and a compile_commands.json");
+    }
+    if (!opts.compilation_arguments.empty()) {
+      std::cout << "a compile_commands.json was provided, compilation arguments will be ignored" << std::endl;
+    }
+  }
+  else 
+  {
+    if (opts.inputs.empty()) {
+      throw std::runtime_error("no input specified");
+    }
   }
 
-  if (result.output.empty()) {
+  if (opts.output.empty()) {
     throw std::runtime_error("missing output file");
   }
 
-  if (result.root.has_value() && !std::filesystem::is_directory(*result.root)) {
+  if (opts.root.has_value() && !std::filesystem::is_directory(*opts.root)) {
     throw std::runtime_error("Root path must be a directory");
   }
 
-  return result;
 }
 
 } // namespace
@@ -118,6 +147,7 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 ScannerInvocation::ScannerInvocation(const std::vector<std::string>& command)
 {
   m_options = parseCommandLine(command);
+  checkConsistency(m_options);
 }
 
 const ScannerOptions& ScannerInvocation::parsedCommandLine() const
@@ -177,6 +207,8 @@ void ScannerInvocation::run()
     }
   }
 
+  scanner.setCompilationArguments(options().compilation_arguments);
+
   scanner.initSnapshot(options().output);
 
   if (options().project_name.has_value()) {
@@ -187,7 +219,14 @@ void ScannerInvocation::run()
     scanner.snapshot()->setProperty("project.version", *options().project_version);
   }
 
-  scanner.scan(options().compile_commands);
+  if (options().compile_commands.has_value())
+  {
+    scanner.scanFromCompileCommands(*options().compile_commands);
+  }
+  else
+  {
+    scanner.scanFromListOfInputs(options().inputs);
+  }
 }
 
 const std::vector<std::string>& ScannerInvocation::errors() const
