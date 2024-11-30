@@ -1,4 +1,6 @@
 
+enable_testing()
+
 # tests with example projects
 
 set (PROJECT_LISTS_STR "")
@@ -83,4 +85,14 @@ target_include_directories(TEST_cppscanner_selftest PRIVATE ${CMAKE_CURRENT_BINA
 
 if (WIN32)
   set_target_properties(TEST_cppscanner_selftest PROPERTIES VS_DEBUGGER_ENVIRONMENT "PATH=${SQLite3_INCLUDE_DIR}/../bin;%PATH%")
+endif()
+
+## cmake tests
+
+add_test(NAME TEST_cppscanner COMMAND TEST_cppscanner)
+add_test(NAME TEST_cppscanner_selftest COMMAND TEST_cppscanner_selftest)
+
+if (WIN32)
+  set_tests_properties(TEST_cppscanner TEST_cppscanner_selftest
+                     PROPERTIES ENVIRONMENT "PATH=${SQLite3_INCLUDE_DIR}/../bin;%PATH%")
 endif()

@@ -18,3 +18,5 @@ jobs:
       - run: cmake -B ${{ gitea.workspace }}/build
       - run: make
         working-directory: ${{ gitea.workspace }}/build
+      - run: ctest .
+        working-directory: ${{ gitea.workspace }}/build
