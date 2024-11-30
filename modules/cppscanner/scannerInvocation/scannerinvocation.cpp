@@ -102,7 +102,7 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
     }
     else if (arg == "--")
     {
-      result.compilation_arguments.assign(args.begin() + i + 1, args.end());
+      result.compilation_arguments.assign(args.begin() + i, args.end());
       i = args.size();
     }
     else
