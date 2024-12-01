@@ -6,6 +6,7 @@
 #include <vector>
 
 extern void run(std::vector<std::string> args);
+extern void runCMake(std::vector<std::string> args);
 
 [[noreturn]] void version()
 {
@@ -79,6 +80,11 @@ int main(int argc, char* argv[])
   {
     args.erase(args.begin(), args.begin() + 2);
     run(args);
+  }
+  else if (args.at(1) == "cmake")
+  {
+    args.erase(args.begin(), args.begin() + 2);
+    runCMake(args);
   }
   else
   {
