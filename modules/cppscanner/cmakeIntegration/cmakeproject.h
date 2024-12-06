@@ -70,6 +70,7 @@ public:
     std::string language;
     std::string languageStandard;
     std::vector<CompileCommandFragment> compileCommandFragments;
+    std::vector<std::filesystem::path> includes;
     std::vector<int> sourceIndexes;
   };
 

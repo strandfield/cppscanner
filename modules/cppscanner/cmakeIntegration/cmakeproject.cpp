@@ -188,6 +188,25 @@ void parse_target(CMakeIndex& idx, CMakeTarget& target, const std::string& jsonF
         }
       }
 
+      if (const llvm::json::Array* includes = compileGroupObj->getArray("includes"))
+      {
+        for (const llvm::json::Value& includeValue : *includes)
+        {
+          const llvm::json::Object* includeObj = includeValue.getAsObject();
+
+          if (!includeObj) {
+            continue;
+          }
+
+          std::string path = includeObj->getString("path").value_or(std::string()).str();
+
+          if (!path.empty())
+          {
+            compileGroup.includes.push_back(std::move(path));
+          }
+        }
+      }
+
       if (const llvm::json::Array* sourceIndexes = compileGroupObj->getArray("sourceIndexes"))
       {
         for (const llvm::json::Value& val : *sourceIndexes)

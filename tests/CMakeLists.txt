@@ -48,6 +48,7 @@ macro(setup_test_project folderName)
 endmacro()
 
 setup_test_project(hello_world)
+setup_test_project(includedir)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
   message("Downloading Catch2")
@@ -61,6 +62,7 @@ add_executable(TEST_cppscanner "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "${CMAKE_
   "cxx_language_features.cpp"
   "cpp20_language_features.cpp"
   "stl.cpp"
+  "cmakeintegration.cpp"
 )
 target_link_libraries(TEST_cppscanner scannerInvocation)
 target_include_directories(TEST_cppscanner PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
