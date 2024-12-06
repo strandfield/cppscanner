@@ -11,8 +11,8 @@ add_subdirectory(testfiles)
 # tests with example projects
 
 macro(setup_test_project folderName)
-  add_subdirectory(${folderName})
-  set(WDIR "${CMAKE_BINARY_DIR}/${folderName}/build")
+  add_subdirectory("testprojects/${folderName}")
+  set(WDIR "${CMAKE_BINARY_DIR}/testprojects/${folderName}/build")
   
   if (NOT EXISTS ${WDIR})
     file(MAKE_DIRECTORY ${WDIR})
@@ -20,19 +20,19 @@ macro(setup_test_project folderName)
   
   if (WIN32)
     execute_process(
-      COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "${PROJECT_SOURCE_DIR}/tests/${folderName}" 
+      COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "${PROJECT_SOURCE_DIR}/tests/testprojects/${folderName}" 
       WORKING_DIRECTORY ${WDIR}
     )
   else()
     execute_process(
-      COMMAND ${CMAKE_COMMAND} "${PROJECT_SOURCE_DIR}/tests/${folderName}" 
+      COMMAND ${CMAKE_COMMAND} "${PROJECT_SOURCE_DIR}/tests/testprojects/${folderName}" 
       WORKING_DIRECTORY ${WDIR}
     )
   endif()
   
   string(TOUPPER ${folderName} FOLDER)
   set (${FOLDER}_BUILD_DIR ${WDIR})
-  set (PROJECT_LISTS_STR "${PROJECT_LISTS_STR}\nstatic constexpr const char* ${FOLDER}_ROOT_DIR = \"${CMAKE_CURRENT_LIST_DIR}/${folderName}\";")
+  set (PROJECT_LISTS_STR "${PROJECT_LISTS_STR}\nstatic constexpr const char* ${FOLDER}_ROOT_DIR = \"${CMAKE_CURRENT_LIST_DIR}/testprojects/${folderName}\";")
   set (PROJECT_LISTS_STR "${PROJECT_LISTS_STR}\nstatic constexpr const char* ${FOLDER}_BUILD_DIR = \"${WDIR}\";")
 endmacro()
 
