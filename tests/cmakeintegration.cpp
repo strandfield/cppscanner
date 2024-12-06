@@ -28,15 +28,9 @@ TEST_CASE("includedir", "[scanner][cmake]")
 
   const std::string snapshot_name = "includedir.db";
 
-#ifdef _WIN32
-  const std::string all = "ALL_BUILD";
-#else
-  const std::string all = "all";
-#endif // _WIN32
-
   ScannerInvocation inv{
     { "--build", INCLUDEDIR_BUILD_DIR,
-    "--target", all,
+    "--target", CMakeTarget::all(),
     "--home", INCLUDEDIR_ROOT_DIR,
     "--overwrite",
     "-o", snapshot_name }

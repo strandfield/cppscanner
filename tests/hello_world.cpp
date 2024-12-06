@@ -47,15 +47,9 @@ TEST_CASE("hello_world test project", "[scanner][hello_world]")
 
     const std::string snapshot_name = "hello_world-cmake.db";
 
-#ifdef _WIN32
-    const std::string all = "ALL_BUILD";
-#else
-    const std::string all = "all";
-#endif // _WIN32
-
     ScannerInvocation inv{
       { "--build", HELLO_WORLD_BUILD_DIR,
-      "--target", all,
+      "--target", CMakeTarget::all(),
       "--home", HELLO_WORLD_ROOT_DIR,
       "--overwrite",
       "-o", snapshot_name }

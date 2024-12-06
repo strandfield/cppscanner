@@ -75,8 +75,17 @@ public:
   };
 
   std::vector<CompileGroup> compileGroups;
-};
 
+public:
+  static std::string all()
+  {
+#ifdef _WIN32
+    return "ALL_BUILD";
+#else
+    return "all";
+#endif // _WIN32
+  }
+};
 
 class CMakeConfiguration
 {
