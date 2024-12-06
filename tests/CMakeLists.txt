@@ -20,9 +20,20 @@ macro(setup_test_project folderName)
   
   if (WIN32)
     execute_process(
-      COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "${PROJECT_SOURCE_DIR}/tests/testprojects/${folderName}" 
+      COMMAND ${CMAKE_COMMAND} "-G" ${CMAKE_GENERATOR} "${PROJECT_SOURCE_DIR}/tests/testprojects/${folderName}" 
       WORKING_DIRECTORY ${WDIR}
     )
+    if (NOT EXISTS "${WDIR}/compile_commands.json")
+      set(WDIR_NMAKE "${WDIR}_nmake")
+      if (NOT EXISTS ${WDIR_NMAKE})
+        file(MAKE_DIRECTORY ${WDIR_NMAKE})
+      endif()
+      execute_process(
+        COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "${PROJECT_SOURCE_DIR}/tests/testprojects/${folderName}" 
+        WORKING_DIRECTORY ${WDIR_NMAKE}
+      )
+      file(COPY "${WDIR_NMAKE}/compile_commands.json" DESTINATION ${WDIR})
+    endif()
   else()
     execute_process(
       COMMAND ${CMAKE_COMMAND} "${PROJECT_SOURCE_DIR}/tests/testprojects/${folderName}" 
