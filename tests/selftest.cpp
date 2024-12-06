@@ -1,7 +1,10 @@
 
 #include "helpers.h"
+#include "cppscanner-cmake.h"
 
+#include "cppscanner/cmakeIntegration/cmakeproject.h"
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
+#include "cppscanner/scannerInvocation/cmakeinvocation.h"
 #include "cppscanner/indexer/version.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/database/sql.h"
@@ -16,31 +19,45 @@ using namespace cppscanner;
 
 TEST_CASE("Self parsing test", "[scanner][self]")
 {
-  std::cout << SELFTEST_BUILD_DIR << std::endl;
+  const std::string snapshot_name = "cppscanner.db";
+  const std::string build_dirname = "cppscanner_self_parse";
 
-  const std::string snapshot_name = "self.db";
+  {
+    auto start = std::chrono::high_resolution_clock::now();
 
-  ScannerInvocation inv{
-    { "--compile-commands", SELFTEST_BUILD_DIR + std::string("/compile_commands.json"),
-    "--home", PROJECT_SOURCE_DIR,
-    "--threads", "2",
-    "--project-name", "cppscanner",
-    "--project-version", cppscanner::versioncstr(),
-    "--overwrite",
-    "-o", snapshot_name }
-  };
+    const std::string build_dir = (std::filesystem::path(CMAKE_BINARY_DIR) / build_dirname).generic_u8string();
 
-  auto start = std::chrono::high_resolution_clock::now();
+    CMakeCommandInvocation cmake{
+      { 
+        "-B", build_dir,
+        "-S", CMAKE_SOURCE_DIR,
+        "-G", CMAKE_GENERATOR,
+        "-DCMAKE_PREFIX_PATH=" + std::string(CMAKE_PREFIX_PATH),
+        "-DLLVM_DIR=" + std::string(LLVM_DIR), 
+        "-DBUILD_TESTS=OFF",
+      }
+    };
 
-  // the scanner invocation succeeds
-  { 
+    REQUIRE(cmake.exec());
+
+    ScannerInvocation inv{
+      { "--build", build_dir,
+      "--target", CMakeTarget::all(),
+      "--home", CMAKE_SOURCE_DIR,
+      "--threads", "2",
+      "--project-name", "cppscanner",
+      "--project-version", cppscanner::versioncstr(),
+      "--overwrite",
+      "-o", snapshot_name }
+    };
+
     REQUIRE_NOTHROW(inv.run());
-    REQUIRE(inv.errors().empty());
+    CHECK(inv.errors().empty());
+  
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Self parse completed in " << duration.count() << "ms." << std::endl;
   }
-
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-  std::cout << "Self parse succeeded in " << duration.count() << "ms." << std::endl;
 
   SnapshotReader s{ snapshot_name };
 

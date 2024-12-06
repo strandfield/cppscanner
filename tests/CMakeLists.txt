@@ -74,26 +74,11 @@ endif()
 
 # self test
 
-set(SELFTEST_BUILD_DIR "${CMAKE_BINARY_DIR}/self_test")
-if (NOT EXISTS ${SELFTEST_BUILD_DIR})
-  file(MAKE_DIRECTORY ${SELFTEST_BUILD_DIR})
-endif()
+string(REPLACE "\\" "/" CPPSCANNER_LLVM_DIR "${LLVM_DIR}")
+string(REPLACE "\\" "/" CPPSCANNER_CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}")
+configure_file("cppscanner-cmake.h.in" "cppscanner-cmake.h")
 
-if (WIN32)
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" "-DLLVM_DIR=${LLVM_DIR}" "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" "-DCMAKE_BUILD_TYPE=Debug" "-DBUILD_TESTS=OFF" "${PROJECT_SOURCE_DIR}" 
-    WORKING_DIRECTORY ${SELFTEST_BUILD_DIR}
-  )
-else()
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" "-DLLVM_DIR=${LLVM_DIR}" "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" "-DCMAKE_BUILD_TYPE=Debug" "-DBUILD_TESTS=OFF" "${PROJECT_SOURCE_DIR}" 
-    WORKING_DIRECTORY ${SELFTEST_BUILD_DIR}
-  )
-endif()
-
-add_executable(TEST_cppscanner_selftest "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "selftest.cpp" "helpers.h")
-target_compile_definitions(TEST_cppscanner_selftest PUBLIC SELFTEST_BUILD_DIR="${SELFTEST_BUILD_DIR}")
-target_compile_definitions(TEST_cppscanner_selftest PUBLIC PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+add_executable(TEST_cppscanner_selftest "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "selftest.cpp" "helpers.h" "cppscanner-cmake.h.in")
 target_link_libraries(TEST_cppscanner_selftest scannerInvocation)
 target_include_directories(TEST_cppscanner_selftest PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
