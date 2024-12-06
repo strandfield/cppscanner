@@ -188,6 +188,25 @@ void parse_target(CMakeIndex& idx, CMakeTarget& target, const std::string& jsonF
         }
       }
 
+      if (const llvm::json::Array* defines = compileGroupObj->getArray("defines"))
+      {
+        for (const llvm::json::Value& defineValue : *defines)
+        {
+          const llvm::json::Object* defineObj = defineValue.getAsObject();
+
+          if (!defineObj) {
+            continue;
+          }
+
+          std::string d = defineObj->getString("define").value_or(std::string()).str();
+
+          if (!d.empty())
+          {
+            compileGroup.defines.push_back(std::move(d));
+          }
+        }
+      }
+
       if (const llvm::json::Array* includes = compileGroupObj->getArray("includes"))
       {
         for (const llvm::json::Value& includeValue : *includes)
@@ -284,7 +303,7 @@ void parse_configuration(CMakeIndex& idx, const llvm::json::Value& rootValue)
 
       CMakeTarget target{ id.value().str(), name.value().str() };
 
-      target.projectIndex = targetObj->getInteger("projectIndex").value_or(-1);
+      target.projectIndex = static_cast<int>(targetObj->getInteger("projectIndex").value_or(int64_t(-1)));
 
       std::optional<llvm::StringRef> jsonFile = targetObj->getString("jsonFile");
 

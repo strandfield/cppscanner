@@ -66,6 +66,11 @@ inline std::vector<ScannerCompileCommand> generateCommandsForTargets(
         splitInto(fragment.fragment, ' ', basecmd);
       }
 
+      for (const std::string& define : group.defines)
+      {
+        basecmd.push_back("-D" + define);
+      }
+
       for (const std::filesystem::path& includePath : group.includes)
       {
         basecmd.push_back("-I" + includePath.string());

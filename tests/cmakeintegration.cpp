@@ -58,3 +58,44 @@ TEST_CASE("includedir", "[scanner][cmake]")
   REQUIRE(testFlag(variable, VariableInfo::Constexpr));
   REQUIRE(variable.init == "0");
 }
+
+
+TEST_CASE("cmake_compile_definitions", "[scanner][cmake]")
+{
+  CMakeCommandInvocation cmake{
+    { 
+      "-B", CMAKE_COMPILE_DEFINITIONS_BUILD_DIR,
+      "-S", CMAKE_COMPILE_DEFINITIONS_ROOT_DIR 
+    }
+  };
+
+  cmake.exec();
+
+  const std::string snapshot_name = "cmake_compile_definitions.db";
+
+  ScannerInvocation inv{
+    { "--build", CMAKE_COMPILE_DEFINITIONS_BUILD_DIR,
+    "--target", CMakeTarget::all(),
+    "--home", CMAKE_COMPILE_DEFINITIONS_ROOT_DIR,
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  REQUIRE_NOTHROW(inv.run());
+  CHECK(inv.errors().empty());
+
+  SnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  REQUIRE(files.size() ==1);
+  File srcfile = getFile(files, std::regex("main\\.cpp"));
+
+  std::vector<Diagnostic> diagnostics = s.getDiagnostics();
+  REQUIRE(diagnostics.empty());
+
+  auto macro = getRecord<MacroRecord>(s, SymbolRecordFilter().withName("I_AM_THE_ONE"));
+  REQUIRE(!testFlag(macro, MacroInfo::MacroUsedAsHeaderGuard));
+  REQUIRE(!testFlag(macro, MacroInfo::FunctionLike));
+
+  //REQUIRE(macro.definition == "1"); // TODO: do that?
+}

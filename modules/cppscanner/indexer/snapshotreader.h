@@ -66,6 +66,8 @@ public:
   std::vector<Override> getOverridesOf(SymbolID methodID) const;
   std::vector<SymbolReference> findReferences(SymbolID symbolID);
 
+  std::vector<Diagnostic> getDiagnostics() const;
+
 private:
   std::unique_ptr<Database> m_database; // TODO: why use a unique_ptr here ?
 };
