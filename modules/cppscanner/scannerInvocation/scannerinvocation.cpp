@@ -1,6 +1,9 @@
 
 #include "scannerinvocation.h"
 
+#include "compilecommandsgenerator.h"
+
+#include <array>
 #include <iostream>
 #include <stdexcept>
 
@@ -9,6 +12,11 @@ namespace cppscanner
 
 namespace
 {
+
+bool isOption(const std::string& arg)
+{
+  return !arg.empty() && arg.front() == '-';
+}
 
 ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 {
@@ -31,6 +39,30 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
         throw std::runtime_error("missing argument after " + arg + " command");
 
       result.inputs.push_back(args.at(i++));
+    }
+    else if (arg == "--build")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --build");
+
+      result.cmakeBuildDirectory = std::filesystem::path(args.at(i++));
+    }
+    else if (arg == "--config")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --config");
+
+      result.cmakeConfig = args.at(i++);
+    }
+    else if (arg == "--target")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --target");
+
+      while (i < args.size() && !isOption(args.at(i)))
+      {
+        result.cmakeTargets.push_back(args.at(i++));
+      }
     }
     else if (arg == "--output" || arg == "-o") 
     {
@@ -116,20 +148,12 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
 void checkConsistency(const ScannerOptions& opts)
 {
-  if (opts.compile_commands.has_value()) 
+  const std::array<bool, 3> inputTypes = { opts.compile_commands.has_value(),opts.cmakeBuildDirectory.has_value(), !opts.inputs.empty() };
+  const size_t nbInputs = std::count(inputTypes.begin(), inputTypes.end(), true);
+
+  if (nbInputs != 1)
   {
-    if (!opts.inputs.empty()) {
-      throw std::runtime_error("cannot have both input files and a compile_commands.json");
-    }
-    if (!opts.compilation_arguments.empty()) {
-      std::cout << "a compile_commands.json was provided, compilation arguments will be ignored" << std::endl;
-    }
-  }
-  else 
-  {
-    if (opts.inputs.empty()) {
-      throw std::runtime_error("no input specified");
-    }
+    throw std::runtime_error("too many or too few inputs");
   }
 
   if (opts.output.empty()) {
@@ -222,6 +246,17 @@ void ScannerInvocation::run()
   if (options().compile_commands.has_value())
   {
     scanner.scanFromCompileCommands(*options().compile_commands);
+  }
+  else if (options().cmakeBuildDirectory.has_value())
+  {
+    // TODO: we could use the cmake source directory to set our Home directory
+
+
+    std::vector<ScannerCompileCommand> commands = generateCommands(
+      *options().cmakeBuildDirectory,
+      options().cmakeConfig,
+      options().cmakeTargets);
+    scanner.scan(commands);
   }
   else
   {
