@@ -44,7 +44,7 @@ public:
   const CMakeCommandOptions& parsedCommandLine() const;
   const CMakeCommandOptions& options() const;
 
-  void exec();
+  bool exec();
 
   const std::vector<std::string>& errors() const;
 

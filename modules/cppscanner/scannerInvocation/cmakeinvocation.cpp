@@ -80,7 +80,7 @@ const CMakeCommandOptions& CMakeCommandInvocation::options() const
   return parsedCommandLine();
 }
 
-void CMakeCommandInvocation::exec()
+bool CMakeCommandInvocation::exec()
 {
   if (std::holds_alternative<CMakeCommandOptions::InputPaths>(options().inputDirectories))
   {
@@ -105,7 +105,7 @@ void CMakeCommandInvocation::exec()
     else
     {
       std::cerr << "could not deduce if " << build_or_source << " is a build or source directory" << std::endl;
-      return;
+      return false;
     }
   }
 
@@ -125,6 +125,8 @@ void CMakeCommandInvocation::exec()
   {
     std::cerr << "cmake returned a non-zero exit code (" << r << ")" << std::endl;
   }
+
+  return r == 0;
 }
 
 void CMakeCommandInvocation::writeQueryFile(const std::filesystem::path& buildDir)
