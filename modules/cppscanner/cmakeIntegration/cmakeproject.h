@@ -5,6 +5,7 @@
 #ifndef CPPSCANNER_CMAKEPROJECT_H
 #define CPPSCANNER_CMAKEPROJECT_H
 
+#include <algorithm>
 #include <filesystem>
 #include <map>
 #include <memory>
