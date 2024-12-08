@@ -21,8 +21,9 @@ RUN apt install -y gdb
 
 # Install clang/llvm 18
 RUN apt-get update
-RUN wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-RUN tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz --skip-old-files --strip-components=1 -C /usr/
-RUN apt install -y libncurses5
-RUN clang --version
-RUN rm clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+RUN apt install -y lsb-release wget software-properties-common gnupg
+RUN wget https://apt.llvm.org/llvm.sh
+RUN chmod +x llvm.sh
+RUN ./llvm.sh 18
+RUN apt-get -y install libclang-18-dev
+RUN clang-18 --version

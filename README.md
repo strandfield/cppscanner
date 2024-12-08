@@ -18,31 +18,28 @@ The following options are available:
 
 A C++17 compiler is required to build this project.
 
-**Getting the clang development binaries (Linux)**
+**Getting the clang development binaries (Debian/Ubuntu)**
 
-Download the "clang+llvm" release for your system from [GitHub](https://github.com/llvm/llvm-project/releases).
-
-Example on Debian: 
-
-```
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz --skip-old-files --strip-components=1 -C /usr/
-```
-
-You may also need to install the `libncurses5` package.
+Use the "Automatic installation script" from [apt.llvm.org](https://apt.llvm.org/), 
+then install the clang development binaries.
 
 ```
-apt install -y libncurses5
+apt-get install libclang-18-dev
 ```
 
-Alternatively, you may use the `node:21-bookworm`-based `Dockerfile` provided in the `docker` directory ([here](docker/Dockerfile))
-to build a Docker image and compile the code in a container.
+The `node:21-bookworm`-based `Dockerfile` provided in the `docker` directory ([here](docker/Dockerfile))
+shows how to use this method on a Debian system, and can be used to build a Docker image and compile 
+the project in a container.
 
-**Getting the clang development binaries (Windows)**
+**Getting the clang development binaries (other systems)**
 
-For Windows, a similar approach may work, but would only give you the "Release" binaries.
-If you want to be able to build in Debug mode, the correct way to go seems to be to 
-build LLVM yourself (as I did).
+Some binaries can be downloaded directly from [GitHub](https://github.com/llvm/llvm-project/releases)
+("clang+llvm" release). 
+Note for Windows users: you won't be able to build in debug mode as only the release binaries are
+provided; which will be penalizing if you intend to work on the project rather than just build it.
+
+For all other systems, on for Windows users who want to build in Debug mode, 
+the correct way to go seems to be to build LLVM yourself (as I did).
 This may help: [Building LLVM with CMake](https://llvm.org/docs/CMake.html).
 Building LLVM isn't hard, it just takes a lot of time and produces a lot of binaries
 (my personal Release+Debug builds take around 13 gigabytes of disk space).
