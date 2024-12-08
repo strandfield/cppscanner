@@ -98,7 +98,6 @@ inline bool contains(const  std::vector<const CMakeTarget*>& targets, const CMak
 }
 
 inline void addTargetDependenciesRecursive(
-  const CMakeIndex& index,
   const CMakeConfiguration& config,
   const std::vector<std::string>& targetIds, 
   std::vector<const CMakeTarget*>& targets)
@@ -118,11 +117,31 @@ inline void addTargetDependenciesRecursive(
       continue;
     }
 
-    addTargetDependenciesRecursive(index, config, target->dependencies, targets);
+    addTargetDependenciesRecursive(config, target->dependencies, targets);
 
     if (!contains(targets, target))
     {
       targets.push_back(target);
+    }
+  }
+}
+
+inline void addAllTargets(
+  const CMakeConfiguration& config,
+  std::vector<const CMakeTarget*>& targets)
+{
+  for (const CMakeTarget& target : config.targets)
+  {
+    if (contains(targets, &target))
+    {
+      continue;
+    }
+
+    addTargetDependenciesRecursive(config, target.dependencies, targets);
+
+    if (!contains(targets, &target))
+    {
+      targets.push_back(&target);
     }
   }
 }
@@ -140,7 +159,15 @@ inline std::vector<ScannerCompileCommand> generateCommands(
 
     if (!target)
     {
-      std::cerr << " no such target " << targetName << std::endl;
+      if (targetName == "all")
+      {
+        addAllTargets(config, targets);
+      }
+      else
+      {
+        std::cerr << " no such target " << targetName << std::endl;
+      }
+
       continue;
     }
 
@@ -149,7 +176,7 @@ inline std::vector<ScannerCompileCommand> generateCommands(
       continue;
     }
 
-    addTargetDependenciesRecursive(index, config, target->dependencies, targets);
+    addTargetDependenciesRecursive(config, target->dependencies, targets);
 
     if (!contains(targets, target))
     {
