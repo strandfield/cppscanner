@@ -276,6 +276,26 @@ std::vector<SymbolReference> SnapshotReader::findReferences(SymbolID symbolID)
   return sql::readRowsAsVector<SymbolReference>(stmt, readSymbolReference);
 }
 
+inline static Diagnostic readDiagnostic(sql::Statement& row)
+{
+  Diagnostic r;
+  r.level = static_cast<DiagnosticLevel>(row.columnInt(0));
+  r.fileID = row.columnInt(1);
+  r.position = FilePosition(row.columnInt(2), row.columnInt(3));
+  r.message = row.column(4);
+  return r;
+}
+
+std::vector<Diagnostic> SnapshotReader::getDiagnostics() const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT level, fileID, line, column, message FROM diagnostic"
+  };
+
+  return sql::readRowsAsVector<Diagnostic>(stmt, readDiagnostic);
+}
+
 void sort(std::vector<SymbolReference>& refs)
 {
   std::sort(refs.begin(), refs.end(), [](const SymbolReference& a, const SymbolReference& b) {

@@ -10,6 +10,7 @@
 #include "indexingresultqueue.h"
 #include "workqueue.h"
 
+#include "argumentsadjuster.h"
 #include "frontendactionfactory.h"
 #include "fileidentificator.h"
 #include "fileindexingarbiter.h"
@@ -31,12 +32,6 @@
 
 namespace cppscanner
 {
-
-struct ScannerCompileCommand
-{
-  std::string fileName;
-  std::vector<std::string> commandLine;
-};
 
 struct ScannerData
 {
@@ -197,10 +192,7 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
     return;
   }
 
-  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
-  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
-  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
-  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
+  clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
 
   std::cout << "Processing compile_commands.json..." << std::endl;
 
@@ -225,10 +217,7 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
 
 void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs)
 {
-  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
-  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
-  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
-  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
+  clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
 
   // TODO: add support for glob pattern
   auto queue = std::deque<std::filesystem::path>(inputs.begin(), inputs.end());
@@ -271,11 +260,7 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
       continue;
     }
 
-#ifdef _WIN32
-    scanner_command.commandLine = { "clang++" };
-#else
-    scanner_command.commandLine = { "/usr/bin/c++" };
-#endif
+    scanner_command.commandLine = { getDefaultCompilerExecutableName() };
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), d->compilationArguments.begin(), d->compilationArguments.end());
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), scanner_command.fileName);
 
@@ -292,9 +277,10 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
   runScanSingleOrMultiThreaded();
 }
 
-void Scanner::scan(const std::filesystem::path& compileCommandsPath)
+void Scanner::scan(const std::vector<ScannerCompileCommand>& compileCommands)
 {
-  scanFromCompileCommands(compileCommandsPath);
+  d->compileCommands = compileCommands;
+  runScanSingleOrMultiThreaded();
 }
 
 void Scanner::scanSingleThreaded()

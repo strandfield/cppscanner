@@ -48,7 +48,7 @@ Building LLVM isn't hard, it just takes a lot of time and produces a lot of bina
 
 Running `cppscanner` with no arguments or with the `--help` option prints the help.
 
-Currently, `run` is the only valid command; and it is used to create a snapshot of
+The `run` command is the main command; and it is used to create a snapshot of
 a program. Snapshots are saved as a SQLite database.
 
 Syntax for creating a snapshot from a `compile_commands.json` compilation database:
@@ -61,17 +61,36 @@ Syntax for creating a snapshot from a single file:
 cppscanner run -i <source.cpp> --output <snapshot.db> [options] -- [compiler arguments]
 ```
 
+Syntax for creating a snapshot from a CMake target (see below for prerequisites):
+```
+cppscanner run --build <cmake-build-dir> [--config <cmake-config>] --target <cmake-target-name> --output <snapshot.db> [options]
+```
+
 ### Getting a `compile_commands.json` with CMake
 
 Getting a `compile_commands.json` is relative easy if you are using CMake: set the 
 `CMAKE_EXPORT_COMPILE_COMMANDS` variable to `ON` when generating the project.
 
-A minimal working example is available in [tests/hello_world](tests/hello_world).
+A minimal working example is available in [tests/testprojects/hello_world](tests/testprojects/hello_world).
 
 On Windows, if you are using a "Visual Studio" generator, you will have to switch
 to the "NMake Makefiles" generator. <br/>
 The `setup_test_project` macro in [tests/CMakeLists.txt](tests/CMakeLists.txt)
 demonstrates how this can be done using the "-G" option of CMake.
+
+### CMake support
+
+The `run` command can be made to work on a CMake project if you generated the project
+through the scanner beforehand.
+This can be done using the `cmake` command.
+
+```
+cppscanner cmake -B <cmake-build-dir> -S <cmake-source-dir> [cmake-options]
+```
+
+This command will make the scanner use the CMake file-based API to get information 
+about the build system and targets.
+Ultimately, the `cmake` executable is invoked with the arguments passed as-is.
 
 ### `run` options
 
