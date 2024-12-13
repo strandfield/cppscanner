@@ -50,6 +50,7 @@ endmacro()
 setup_test_project(hello_world)
 setup_test_project(includedir)
 setup_test_project(cmake_compile_definitions)
+setup_test_project(cmake_precompile_headers)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
   message("Downloading Catch2")
