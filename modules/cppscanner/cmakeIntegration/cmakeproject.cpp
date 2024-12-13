@@ -226,6 +226,25 @@ void parse_target(CMakeIndex& idx, CMakeTarget& target, const std::string& jsonF
         }
       }
 
+      if (const llvm::json::Array* precompileHeaders = compileGroupObj->getArray("precompileHeaders"))
+      {
+        for (const llvm::json::Value& pchValue : *precompileHeaders)
+        {
+          const llvm::json::Object* pchObj = pchValue.getAsObject();
+
+          if (!pchObj) {
+            continue;
+          }
+
+          std::string path = pchObj->getString("header").value_or(std::string()).str();
+
+          if (!path.empty())
+          {
+            compileGroup.precompileHeaders.push_back(std::move(path));
+          }
+        }
+      }
+
       if (const llvm::json::Array* sourceIndexes = compileGroupObj->getArray("sourceIndexes"))
       {
         for (const llvm::json::Value& val : *sourceIndexes)

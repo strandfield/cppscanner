@@ -73,6 +73,7 @@ public:
     std::vector<CompileCommandFragment> compileCommandFragments;
     std::vector<std::string> defines;
     std::vector<std::filesystem::path> includes;
+    std::vector<std::filesystem::path> precompileHeaders;
     std::vector<int> sourceIndexes;
   };
 
