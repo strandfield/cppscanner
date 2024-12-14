@@ -8,13 +8,13 @@
 #include "snapshotwriter.h"
 
 #include <filesystem>
-#include <optional>
 #include <string>
 #include <vector>
 
 namespace cppscanner
 {
 
+class FileIndexingArbiter;
 class TranslationUnitIndex;
 
 struct ScannerData;
@@ -23,7 +23,6 @@ struct ScannerCompileCommand
 {
   std::string fileName;
   std::vector<std::string> commandLine;
-  std::optional<std::filesystem::path> pch;
 };
 
 /**
@@ -67,6 +66,7 @@ protected:
   void scanSingleThreaded();
   void scanMultiThreaded();
   void runScanSingleOrMultiThreaded();
+  void generatePrecompiledHeaders(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter);
   void assimilate(TranslationUnitIndex tuIndex);
   bool fileAlreadyIndexed(FileID f) const;
   void setFileIndexed(FileID f);

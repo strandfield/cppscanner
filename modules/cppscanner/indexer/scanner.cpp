@@ -307,12 +307,18 @@ void Scanner::scan(const std::vector<ScannerCompileCommand>& compileCommands)
 class ArgsTranslator
 {
 private:
-  clang::FileManager& m_files;
+  clang::IntrusiveRefCntPtr<clang::FileManager> m_files;
   clang::CompilerInstance m_ci;
 
 public:
+  ArgsTranslator()
+  {
+    m_files = clang::IntrusiveRefCntPtr<clang::FileManager>(new clang::FileManager(clang::FileSystemOptions()));
+    m_ci.createDiagnostics();
+  }
+
   explicit ArgsTranslator(clang::FileManager& files) :
-    m_files(files)
+    m_files(&files)
   {
     m_ci.createDiagnostics();
   }
@@ -321,13 +327,13 @@ public:
   {
     const char* BinaryName = args.front().c_str();
 
-    const auto Driver = newDriver(m_ci.getDiagnostics(), BinaryName, &m_files.getVirtualFileSystem());
+    const auto Driver = newDriver(m_ci.getDiagnostics(), BinaryName, &m_files->getVirtualFileSystem());
 
     // The "input file not found" diagnostics from the driver are useful.
     // The driver is only aware of the VFS working directory, but some clients
     // change this at the FileManager level instead.
     // In this case the checks have false positives, so skip them.
-    if (!m_files.getFileSystemOpts().WorkingDir.empty())
+    if (!m_files->getFileSystemOpts().WorkingDir.empty())
       Driver->setCheckInputsExist(false);
 
     std::vector<const char*> argv;
@@ -345,6 +351,14 @@ public:
       return {};
 
     return getCC1Arguments(*Compilation);
+  }
+
+  void translateCommands(std::vector<ScannerCompileCommand>& commands)
+  {
+    for (ScannerCompileCommand& cc : commands)
+    {
+      cc.commandLine = translateArgs(cc.commandLine);
+    }
   }
 
 private:
@@ -399,20 +413,37 @@ private:
 
 };
 
-static void compilePCH(const ScannerCompileCommand& cc, std::vector<std::string> args, clang::FileManager* fileManager)
+static void compilePCH(const ScannerCompileCommand& cc, const std::filesystem::path& pchOutput, clang::FileManager* fileManager)
 {
   //args.push_back("-emit-pch");
   //args.push_back("-o");
   //args.push_back(cc.pch->generic_u8string());
-  std::filesystem::create_directories(cc.pch->parent_path());
+  std::filesystem::create_directories(pchOutput.parent_path());
 
   auto action = std::make_unique<clang::GeneratePCHAction>();
-  clang::tooling::ToolInvocation invocation{ args, std::move(action), fileManager};
+  clang::tooling::ToolInvocation invocation{ cc.commandLine, std::move(action), fileManager};
   const bool success = invocation.run();
   if (!success)
   {
     std::cerr << "pch compilation failed: " << cc.fileName << std::endl;
   }
+}
+
+static std::optional<std::filesystem::path> findPchOutput(const ScannerCompileCommand& cc)
+{
+  auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-emit-pch");
+
+  if (it == cc.commandLine.end()) {
+    return std::nullopt;
+  }
+
+  it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-o");
+
+  if (it == cc.commandLine.end()) {
+    return std::nullopt;
+  }
+
+  return std::filesystem::path(*std::next(it));
 }
 
 void Scanner::scanSingleThreaded()
@@ -425,20 +456,21 @@ void Scanner::scanSingleThreaded()
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
 
-  ArgsTranslator translator{*file_manager};
+  ArgsTranslator translator{ *file_manager };
+  translator.translateCommands(d->compileCommands);
 
-  for (const ScannerCompileCommand& cc : d->compileCommands)
+  for (ScannerCompileCommand& cc : d->compileCommands)
   {
     std::cout << cc.fileName << std::endl;
 
-    auto args = translator.translateArgs(cc.commandLine);
+    std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
 
-    if (cc.pch.has_value())
+    if (pch_output.has_value())
     {
-      compilePCH(cc, args,  file_manager.get());
+      compilePCH(cc, *pch_output, file_manager.get());
     }
 
-    clang::tooling::ToolInvocation invocation{ args, actionfactory.create(), file_manager.get() };
+    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
 
@@ -568,18 +600,33 @@ void Scanner::scanMultiThreaded()
     indexing_arbiter = FileIndexingArbiter::createThreadSafeArbiter(std::move(indexing_arbiter));
   }
 
-  std::vector<WorkQueue::ToolInvocation> tasks;
+  ArgsTranslator translator;
+  translator.translateCommands(d->compileCommands);
 
+  std::vector<WorkQueue::ToolInvocation> tasks;
+  std::vector<ScannerCompileCommand> pch_ccs;
+
+  for (ScannerCompileCommand& cc : d->compileCommands)
   {
-    for (const ScannerCompileCommand& cc : d->compileCommands)
+    std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
+
+    if (pch_output.has_value())
+    {
+      pch_ccs.push_back(cc);
+    }
+    else
     {
       tasks.push_back(WorkQueue::ToolInvocation{ cc.fileName, cc.commandLine });
     }
   }
 
+  if (!pch_ccs.empty())
+  {
+    generatePrecompiledHeaders(pch_ccs, *indexing_arbiter);
+  }
+
   WorkQueue input_queue{ tasks };
   IndexingResultQueue results_queue;
-
 
   WorkerThreads threads{ d.get(), indexing_arbiter.get(), &input_queue, &results_queue };
   threads.add(d->nbThreads);
@@ -615,6 +662,45 @@ void Scanner::runScanSingleOrMultiThreaded()
   else
   {
     scanMultiThreaded();
+  }
+}
+
+void Scanner::generatePrecompiledHeaders(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter)
+{
+  assert(d->fileIdentificator);
+
+  clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
+  IndexingResultQueue results_queue;
+  auto index_data_consumer = std::make_shared<Indexer>(arbiter, results_queue);
+  IndexingFrontendActionFactory actionfactory{ index_data_consumer };
+  actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
+
+  for (const ScannerCompileCommand& cc : commands)
+  {
+    std::cout << cc.fileName << std::endl;
+
+    std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
+
+    assert(pch_output.has_value());
+
+    compilePCH(cc, *pch_output, file_manager.get());
+
+    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
+
+    invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
+
+    const bool success = invocation.run();
+
+    if (success) {
+      std::optional<TranslationUnitIndex> result = results_queue.readSync();
+      // "result" may be std::nullopt if a fatal error occured while parsing
+      // the translation unit.
+      if (result.has_value()) {
+        assimilate(std::move(result.value()));
+      }
+    } else {
+      std::cout << "error: tool invocation failed" << std::endl;
+    }
   }
 }
 

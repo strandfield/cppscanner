@@ -76,34 +76,6 @@ inline void generateCommandForPrecompileHeaderGroup(const CMakeIndex& index,
     splitInto(fragment.fragment, ' ', basecmd);
   }
 
-  std::filesystem::path pch_input_file_path;
-  {
-    auto it = std::find_if(basecmd.begin(), basecmd.end(), [](const std::string& arg) {
-      return arg.rfind("/Yc", 0) == 0;
-      });
-
-    if (it == basecmd.end()) {
-      return;
-    }
-
-    pch_input_file_path = it->substr(3);
-    //basecmd.erase(it);
-  }
-
-  std::filesystem::path pch_output_file_path;
-  {
-    auto it = std::find_if(basecmd.begin(), basecmd.end(), [](const std::string& arg) {
-      return arg.rfind("/Fp", 0) == 0;
-      });
-
-    if (it == basecmd.end()) {
-      return;
-    }
-
-    pch_output_file_path = it->substr(3);
-    //basecmd.erase(it);
-  }
-
   for (const std::string& define : group.defines)
   {
     basecmd.push_back("-D" + define);
@@ -118,16 +90,8 @@ inline void generateCommandForPrecompileHeaderGroup(const CMakeIndex& index,
   const int srcIndex = group.sourceIndexes.front();
 
   ScannerCompileCommand cmd;
-  cmd.pch = pch_output_file_path;
-  cmd.fileName = pch_input_file_path.generic_u8string();
+  cmd.fileName = target.sources.at(srcIndex);
   cmd.commandLine = basecmd;
-  //cmd.commandLine.push_back("-Xclang");
-  //cmd.commandLine.push_back("-emit-pch");
-  //cmd.commandLine.push_back("-Xclang");
-  //cmd.commandLine.push_back("-o");
-  //cmd.commandLine.push_back("-Xclang");
-  //cmd.commandLine.push_back(pch_output_file_path.generic_u8string());
-  //cmd.commandLine.push_back(pch_input_file_path.generic_u8string());
   cmd.commandLine.push_back(cmd.fileName);
 
   commands.push_back(std::move(cmd));
@@ -140,13 +104,9 @@ inline void generateCommandsForTarget(const CMakeIndex& index,
 
   const CMakeTarget::CompileGroup* pch_group = getPrecompileHeaderGroup(target);
 
-#ifdef _WIN32
   if (pch_group) {
     generateCommandForPrecompileHeaderGroup(index, config, target, *pch_group, commands);
   }
-#else
-  pch_group = nullptr;
-#endif
 
   for (const CMakeTarget::CompileGroup& group : target.compileGroups)
   {
