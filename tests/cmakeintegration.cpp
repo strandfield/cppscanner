@@ -128,8 +128,44 @@ TEST_CASE("cmake_precompile_headers", "[scanner][cmake]")
 
   std::vector<File> files = s.getFiles();
   File srcfile = getFile(files, std::regex("main\\.cpp"));
-  File cmake_pch = getFile(files, std::regex("cmake_pch\\.cxx"));
+  File ah = getFile(files, std::regex("a\\.h"));
+  File bh = getFile(files, std::regex("b\\.h"));
+  File ch = getFile(files, std::regex("c\\.h"));
 
   std::vector<Diagnostic> diagnostics = s.getDiagnostics();
   REQUIRE(diagnostics.empty());
+
+  {
+    auto sayGoodbye = getRecord<FunctionRecord>(s, SymbolRecordFilter().withName("sayGoodBye()"));
+    auto mainfunc = getRecord<FunctionRecord>(s, SymbolRecordFilter().withName("main()"));
+
+    std::vector<SymbolReference> refs = s.findReferences(sayGoodbye.id);
+    REQUIRE(refs.size() == 2);
+
+    if (testFlag(refs.front(), SymbolReference::Call)) {
+      std::swap(refs.front(), refs.back());
+    }
+
+    SymbolReference ref = refs.at(0);
+    REQUIRE(testFlag(ref, SymbolReference::Definition));
+    REQUIRE(ref.fileID == ah.id);
+
+    ref = refs.at(1);
+    REQUIRE(testFlag(ref, SymbolReference::Call));
+    REQUIRE(ref.fileID == srcfile.id);
+    REQUIRE(ref.referencedBySymbolID == mainfunc.id);
+  }
+
+  {
+    auto myEnum = getRecord<EnumRecord>(s, SymbolRecordFilter().withName("MyEnum"));
+    REQUIRE(myEnum.kind == SymbolKind::Enum);
+
+    std::vector<SymbolDeclaration> decls = s.getSymbolDeclarations(myEnum.id);
+    REQUIRE(decls.size() == 1);
+    auto decl = decls.front();
+    REQUIRE(decl.fileID == ch.id);
+
+    auto children = s.getChildSymbols(myEnum.id, SymbolKind::EnumConstant);
+    REQUIRE(children.size() == 3);
+  }
 }

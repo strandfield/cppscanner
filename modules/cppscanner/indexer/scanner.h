@@ -8,6 +8,7 @@
 #include "snapshotwriter.h"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,7 @@ struct ScannerCompileCommand
 {
   std::string fileName;
   std::vector<std::string> commandLine;
+  std::optional<std::filesystem::path> pch;
 };
 
 /**

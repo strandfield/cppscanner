@@ -399,6 +399,22 @@ private:
 
 };
 
+static void compilePCH(const ScannerCompileCommand& cc, std::vector<std::string> args, clang::FileManager* fileManager)
+{
+  //args.push_back("-emit-pch");
+  //args.push_back("-o");
+  //args.push_back(cc.pch->generic_u8string());
+  std::filesystem::create_directories(cc.pch->parent_path());
+
+  auto action = std::make_unique<clang::GeneratePCHAction>();
+  clang::tooling::ToolInvocation invocation{ args, std::move(action), fileManager};
+  const bool success = invocation.run();
+  if (!success)
+  {
+    std::cerr << "pch compilation failed: " << cc.fileName << std::endl;
+  }
+}
+
 void Scanner::scanSingleThreaded()
 {
   d->fileIdentificator = FileIdentificator::createFileIdentificator();
@@ -413,12 +429,18 @@ void Scanner::scanSingleThreaded()
 
   for (const ScannerCompileCommand& cc : d->compileCommands)
   {
+    std::cout << cc.fileName << std::endl;
+
     auto args = translator.translateArgs(cc.commandLine);
+
+    if (cc.pch.has_value())
+    {
+      compilePCH(cc, args,  file_manager.get());
+    }
+
     clang::tooling::ToolInvocation invocation{ args, actionfactory.create(), file_manager.get() };
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
-
-    std::cout << cc.fileName << std::endl;
 
     const bool success = invocation.run();
 
