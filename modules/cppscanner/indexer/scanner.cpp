@@ -64,8 +64,6 @@ struct ScannerData
 
   std::vector<ScannerCompileCommand> compileCommands;
 
-  clang::FileManager* fileManager = nullptr;
-
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
@@ -458,12 +456,11 @@ void Scanner::scanSingleThreaded()
   d->fileIdentificator = FileIdentificator::createFileIdentificator();
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
-  d->fileManager = file_manager.get();
 
   ArgsTranslator translator{ *file_manager };
   translator.translateCommands(d->compileCommands);
 
-  processCommands(d->compileCommands, *indexing_arbiter);
+  processCommands(d->compileCommands, *indexing_arbiter, *file_manager);
 }
 
 void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
@@ -579,7 +576,6 @@ void Scanner::scanMultiThreaded()
 
   ArgsTranslator translator;
   translator.translateCommands(d->compileCommands);
-  d->fileManager = translator.fileManager();
 
   std::vector<WorkQueue::ToolInvocation> tasks;
   std::vector<ScannerCompileCommand> pch_ccs;
@@ -601,7 +597,7 @@ void Scanner::scanMultiThreaded()
   if (!pch_ccs.empty())
   {
     std::cout << "Generating precompiled headers..." << std::endl;
-    processCommands(pch_ccs, *indexing_arbiter);
+    processCommands(pch_ccs, *indexing_arbiter, *translator.fileManager());
   }
 
   WorkQueue input_queue{ tasks };
@@ -643,11 +639,10 @@ void Scanner::runScanSingleOrMultiThreaded()
   }
 }
 
-void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter)
+void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter, clang::FileManager& fileManager)
 {
   assert(d->fileIdentificator);
 
-  clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ d->fileManager ? d->fileManager : new clang::FileManager(clang::FileSystemOptions()) };
   IndexingResultQueue results_queue;
   auto index_data_consumer = std::make_shared<Indexer>(arbiter, results_queue);
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
@@ -661,10 +656,10 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
     if (pch_output.has_value())
     {
-      compilePCH(cc, *pch_output, file_manager.get());
+      compilePCH(cc, *pch_output, &fileManager);
     }
 
-    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
+    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), &fileManager };
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
 
