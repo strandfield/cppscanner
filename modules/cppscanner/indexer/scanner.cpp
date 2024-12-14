@@ -64,6 +64,8 @@ struct ScannerData
 
   std::vector<ScannerCompileCommand> compileCommands;
 
+  clang::FileManager* fileManager = nullptr;
+
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
@@ -361,6 +363,11 @@ public:
     }
   }
 
+  clang::FileManager* fileManager() const
+  {
+    return m_files.get();
+  }
+
 private:
   static std::unique_ptr<clang::driver::Driver> newDriver(clang::DiagnosticsEngine& diagnostics, const char *BinaryName,
     clang::IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS) {
@@ -451,42 +458,12 @@ void Scanner::scanSingleThreaded()
   d->fileIdentificator = FileIdentificator::createFileIdentificator();
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
-  IndexingResultQueue results_queue;
-  auto index_data_consumer = std::make_shared<Indexer>(*indexing_arbiter, results_queue);
-  IndexingFrontendActionFactory actionfactory{ index_data_consumer };
-  actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
+  d->fileManager = file_manager.get();
 
   ArgsTranslator translator{ *file_manager };
   translator.translateCommands(d->compileCommands);
 
-  for (ScannerCompileCommand& cc : d->compileCommands)
-  {
-    std::cout << cc.fileName << std::endl;
-
-    std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
-
-    if (pch_output.has_value())
-    {
-      compilePCH(cc, *pch_output, file_manager.get());
-    }
-
-    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
-
-    invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
-
-    const bool success = invocation.run();
-
-    if (success) {
-      std::optional<TranslationUnitIndex> result = results_queue.readSync();
-      // "result" may be std::nullopt if a fatal error occured while parsing
-      // the translation unit.
-      if (result.has_value()) {
-        assimilate(std::move(result.value()));
-      }
-    } else {
-      std::cout << "error: tool invocation failed" << std::endl;
-    }
-  }
+  processCommands(d->compileCommands, *indexing_arbiter);
 }
 
 void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
@@ -602,6 +579,7 @@ void Scanner::scanMultiThreaded()
 
   ArgsTranslator translator;
   translator.translateCommands(d->compileCommands);
+  d->fileManager = translator.fileManager();
 
   std::vector<WorkQueue::ToolInvocation> tasks;
   std::vector<ScannerCompileCommand> pch_ccs;
@@ -622,7 +600,8 @@ void Scanner::scanMultiThreaded()
 
   if (!pch_ccs.empty())
   {
-    generatePrecompiledHeaders(pch_ccs, *indexing_arbiter);
+    std::cout << "Generating precompiled headers..." << std::endl;
+    processCommands(pch_ccs, *indexing_arbiter);
   }
 
   WorkQueue input_queue{ tasks };
@@ -646,7 +625,6 @@ void Scanner::scanMultiThreaded()
     else 
     {
       std::cout << "error: tool invocation failed for " << result.fileIdentificator->getFile(result.mainFileId) << std::endl;
-
     }
   }
 
@@ -665,11 +643,11 @@ void Scanner::runScanSingleOrMultiThreaded()
   }
 }
 
-void Scanner::generatePrecompiledHeaders(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter)
+void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter)
 {
   assert(d->fileIdentificator);
 
-  clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
+  clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ d->fileManager ? d->fileManager : new clang::FileManager(clang::FileSystemOptions()) };
   IndexingResultQueue results_queue;
   auto index_data_consumer = std::make_shared<Indexer>(arbiter, results_queue);
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
@@ -681,9 +659,10 @@ void Scanner::generatePrecompiledHeaders(const std::vector<ScannerCompileCommand
 
     std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
 
-    assert(pch_output.has_value());
-
-    compilePCH(cc, *pch_output, file_manager.get());
+    if (pch_output.has_value())
+    {
+      compilePCH(cc, *pch_output, file_manager.get());
+    }
 
     clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
 

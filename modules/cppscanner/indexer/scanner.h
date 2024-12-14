@@ -66,7 +66,7 @@ protected:
   void scanSingleThreaded();
   void scanMultiThreaded();
   void runScanSingleOrMultiThreaded();
-  void generatePrecompiledHeaders(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter);
+  void processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter);
   void assimilate(TranslationUnitIndex tuIndex);
   bool fileAlreadyIndexed(FileID f) const;
   void setFileIndexed(FileID f);
