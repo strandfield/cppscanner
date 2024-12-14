@@ -22,6 +22,24 @@
 
 #include <clang/Tooling/JSONCompilationDatabase.h>
 
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/FileManager.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Driver/Compilation.h>
+#include <clang/Driver/Driver.h>
+#include <clang/Driver/Job.h>
+#include <clang/Driver/Options.h>
+#include <clang/Driver/Tool.h>
+#include <clang/Driver/ToolChain.h>
+
+#include <clang/Frontend/CompilerInvocation.h>
+#include <clang/Frontend/CompilerInstance.h>
+#include <clang/Frontend/FrontendActions.h>
+
+#include <llvm/ADT/ArrayRef.h>
+#include <llvm/Option/Option.h>
+#include <llvm/TargetParser/Host.h>
+
 #include <algorithm>
 #include <deque>
 #include <fstream>
@@ -283,6 +301,104 @@ void Scanner::scan(const std::vector<ScannerCompileCommand>& compileCommands)
   runScanSingleOrMultiThreaded();
 }
 
+// converts user-toolchain command line args to clang cc1.
+// code largely stolen from clang/Tooling/Tooling.cpp, with 
+// some minor adaptations.
+class ArgsTranslator
+{
+private:
+  clang::FileManager& m_files;
+  clang::CompilerInstance m_ci;
+
+public:
+  explicit ArgsTranslator(clang::FileManager& files) :
+    m_files(files)
+  {
+    m_ci.createDiagnostics();
+  }
+
+  std::vector<std::string> translateArgs(const std::vector<std::string>& args)
+  {
+    const char* BinaryName = args.front().c_str();
+
+    const auto Driver = newDriver(m_ci.getDiagnostics(), BinaryName, &m_files.getVirtualFileSystem());
+
+    // The "input file not found" diagnostics from the driver are useful.
+    // The driver is only aware of the VFS working directory, but some clients
+    // change this at the FileManager level instead.
+    // In this case the checks have false positives, so skip them.
+    if (!m_files.getFileSystemOpts().WorkingDir.empty())
+      Driver->setCheckInputsExist(false);
+
+    std::vector<const char*> argv;
+    argv.reserve(args.size());
+    for (const std::string& a : args)
+    {
+      argv.push_back(a.c_str());
+    }
+
+    const std::unique_ptr<clang::driver::Compilation> Compilation{
+      Driver->BuildCompilation(argv)
+    };
+    
+    if (!Compilation)
+      return {};
+
+    return getCC1Arguments(*Compilation);
+  }
+
+private:
+  static std::unique_ptr<clang::driver::Driver> newDriver(clang::DiagnosticsEngine& diagnostics, const char *BinaryName,
+    clang::IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS) {
+    auto CompilerDriver =
+      std::make_unique<clang::driver::Driver>(BinaryName, llvm::sys::getDefaultTargetTriple(),
+        diagnostics, "clang LLVM compiler", std::move(VFS));
+    CompilerDriver->setTitle("clang_based_tool");
+    return CompilerDriver;
+  }
+
+
+  std::vector<std::string> getCC1Arguments(clang::driver::Compilation& Compilation) {
+    const clang::driver::JobList &Jobs = Compilation.getJobs();
+    auto IsCC1Command = [](const clang::driver::Command &Cmd) {
+      return llvm::StringRef(Cmd.getCreator().getName()) == "clang";
+      };
+    auto IsSrcFile = [](const clang::driver::InputInfo &II) {
+      return clang::driver::types::isSrcFile(
+        II.getType());
+      };
+    llvm::SmallVector<const clang::driver::Command *, 1> CC1Jobs;
+    for (const clang::driver::Command &Job : Jobs)
+      if (IsCC1Command(Job) && llvm::all_of(Job.getInputInfos(), 
+        IsSrcFile))
+        CC1Jobs.push_back(
+          &Job);
+    // If there are no jobs for source files, try checking again for a single job
+    // with any file type. This accepts a preprocessed file as input.
+    if (CC1Jobs.empty())
+    {
+      for (const clang::driver::Command& Job : Jobs)
+      {
+        if (IsCC1Command(Job)) {
+          CC1Jobs.push_back(&Job);
+        }
+      }
+    }
+
+    if (CC1Jobs.empty()) {
+      return {};
+    }
+
+    const llvm::opt::ArgStringList& args = CC1Jobs[0]->getArguments();
+    std::vector<std::string> result;
+    result.reserve(args.size() + 1);
+    result.push_back("clang");
+    result.insert(result.end(), args.begin(), args.end());
+    return result;
+  }
+
+};
+
 void Scanner::scanSingleThreaded()
 {
   d->fileIdentificator = FileIdentificator::createFileIdentificator();
@@ -293,9 +409,12 @@ void Scanner::scanSingleThreaded()
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
 
+  ArgsTranslator translator{*file_manager};
+
   for (const ScannerCompileCommand& cc : d->compileCommands)
   {
-    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
+    auto args = translator.translateArgs(cc.commandLine);
+    clang::tooling::ToolInvocation invocation{ args, actionfactory.create(), file_manager.get() };
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
 

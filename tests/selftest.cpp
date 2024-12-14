@@ -35,6 +35,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
         "-DCMAKE_PREFIX_PATH=" + std::string(CMAKE_PREFIX_PATH),
         "-DLLVM_DIR=" + std::string(LLVM_DIR), 
         "-DBUILD_TESTS=OFF",
+        "-DSELF_PARSE=ON",
       }
     };
 
