@@ -99,3 +99,37 @@ TEST_CASE("cmake_compile_definitions", "[scanner][cmake]")
 
   //REQUIRE(macro.definition == "1"); // TODO: do that?
 }
+
+TEST_CASE("cmake_precompile_headers", "[scanner][cmake]")
+{
+  CMakeCommandInvocation cmake{
+    { 
+      "-B", CMAKE_PRECOMPILE_HEADERS_BUILD_DIR,
+      "-S", CMAKE_PRECOMPILE_HEADERS_ROOT_DIR 
+    }
+  };
+
+  cmake.exec();
+
+  const std::string snapshot_name = "cmake_precompile_headers.db";
+
+  ScannerInvocation inv{
+    { "--build", CMAKE_PRECOMPILE_HEADERS_BUILD_DIR,
+    "--target", CMakeTarget::all(),
+    "--home", CMAKE_PRECOMPILE_HEADERS_ROOT_DIR,
+    "--overwrite",
+    "-o", snapshot_name }
+  };
+
+  REQUIRE_NOTHROW(inv.run());
+  CHECK(inv.errors().empty());
+
+  SnapshotReader s{ snapshot_name };
+
+  std::vector<File> files = s.getFiles();
+  File srcfile = getFile(files, std::regex("main\\.cpp"));
+  File cmake_pch = getFile(files, std::regex("cmake_pch\\.cxx"));
+
+  std::vector<Diagnostic> diagnostics = s.getDiagnostics();
+  REQUIRE(diagnostics.empty());
+}
