@@ -196,6 +196,28 @@ bool Scanner::passTranslationUnitFilters(const std::string& filename) const
   return true;
 }
 
+static bool isPchCompileCommand(const clang::tooling::CompileCommand& cc)
+{
+#ifdef _WIN32
+  constexpr bool is_windows = true;
+#else
+  constexpr bool is_windows = false;
+#endif // _WIN32
+
+  if constexpr(is_windows)
+  {
+    auto it = std::find_if(cc.CommandLine.begin(), cc.CommandLine.end(), [](const std::string& arg) {
+      return arg.rfind("/Yc", 0) == 0;
+      });
+
+    if (it != cc.CommandLine.end()) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 void Scanner::scanFromCompileCommands(const std::filesystem::path& compileCommandsPath)
 {
   assert(snapshot());
@@ -211,6 +233,7 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
   }
 
   clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
+  clang::tooling::ArgumentsAdjuster pchArgsAdjuster = getPchArgumentsAdjuster();
 
   std::cout << "Processing compile_commands.json..." << std::endl;
 
@@ -222,7 +245,12 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
     }
 
     ScannerCompileCommand scanner_command;
-    scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
+    if (isPchCompileCommand(cc)) {
+      scanner_command.commandLine = pchArgsAdjuster(cc.CommandLine, cc.Filename);
+    } else {
+      scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
+    }
+
     scanner_command.fileName = cc.Filename;
 
     d->compileCommands.push_back(scanner_command);
