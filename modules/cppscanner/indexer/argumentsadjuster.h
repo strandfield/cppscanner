@@ -18,6 +18,13 @@ inline clang::tooling::ArgumentsAdjuster getDefaultArgumentsAdjuster()
   return clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
 }
 
+inline clang::tooling::ArgumentsAdjuster getPchArgumentsAdjuster()
+{
+  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
+  return detailedPreprocRecord;
+}
+
+
 inline const char* getDefaultCompilerExecutableName()
 {
 #ifdef _WIN32

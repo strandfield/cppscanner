@@ -36,84 +36,28 @@ inline void splitInto(const std::string& str, char sep, std::vector<std::string>
   }
 }
 
-inline const CMakeTarget::CompileGroup* getPrecompileHeaderGroup(const CMakeTarget& target)
+inline bool isPrecompileHeaderGroup(const CMakeTarget& target, const CMakeTarget::CompileGroup& group)
 {
-  for (const CMakeTarget::CompileGroup& group : target.compileGroups)
-  {
-    if (group.precompileHeaders.empty()) {
-      continue;
-    }
-
-    if (group.sourceIndexes.size() != 1) {
-      continue;
-    }
-
-    const std::filesystem::path& src = target.sources.at(group.sourceIndexes.front());
-    if (src.filename() == "cmake_pch.cxx")
-    {
-      return &group;
-    }
+  if (group.precompileHeaders.empty()) {
+    return false;
   }
 
-  return nullptr;
-}
-
-inline void generateCommandForPrecompileHeaderGroup(const CMakeIndex& index,
-  const CMakeConfiguration& config, const CMakeTarget& target,const CMakeTarget::CompileGroup& group, std::vector<ScannerCompileCommand>& commands)
-{
-  std::vector<std::string> basecmd;
-
-  const CMakeToolchain* toolchain = index.getToolchainByLanguage(group.language);
-
-  if (!toolchain || toolchain->compiler.path.empty()) {
-    return;
+  if (group.sourceIndexes.size() != 1) {
+    return false;
   }
 
-  basecmd.push_back(toolchain->compiler.path.string());
-
-  for (const CMakeTarget::CompileCommandFragment& fragment : group.compileCommandFragments)
-  {
-    splitInto(fragment.fragment, ' ', basecmd);
-  }
-
-  for (const std::string& define : group.defines)
-  {
-    basecmd.push_back("-D" + define);
-  }
-
-  for (const std::filesystem::path& includePath : group.includes)
-  {
-    basecmd.push_back("-I" + includePath.string());
-  }
-
-  assert(group.sourceIndexes.size() == 1);
-  const int srcIndex = group.sourceIndexes.front();
-
-  ScannerCompileCommand cmd;
-  cmd.fileName = target.sources.at(srcIndex);
-  cmd.commandLine = basecmd;
-  cmd.commandLine.push_back(cmd.fileName);
-
-  commands.push_back(std::move(cmd));
+  const std::filesystem::path& src = target.sources.at(group.sourceIndexes.front());
+  return (src.filename() == "cmake_pch.cxx");
 }
 
 inline void generateCommandsForTarget(const CMakeIndex& index,
   const CMakeConfiguration& config, const CMakeTarget& target, std::vector<ScannerCompileCommand>& commands)
 {
   const clang::tooling::ArgumentsAdjuster& argsadjuster = getDefaultArgumentsAdjuster();
-
-  const CMakeTarget::CompileGroup* pch_group = getPrecompileHeaderGroup(target);
-
-  if (pch_group) {
-    generateCommandForPrecompileHeaderGroup(index, config, target, *pch_group, commands);
-  }
+  const clang::tooling::ArgumentsAdjuster& pch_argsadjuster = getPchArgumentsAdjuster();
 
   for (const CMakeTarget::CompileGroup& group : target.compileGroups)
   {
-    if (&group == pch_group) {
-      continue;
-    }
-
     std::vector<std::string> basecmd;
 
     const CMakeToolchain* toolchain = index.getToolchainByLanguage(group.language);
@@ -139,13 +83,27 @@ inline void generateCommandsForTarget(const CMakeIndex& index,
       basecmd.push_back("-I" + includePath.string());
     }
 
+    const bool is_pch_group = isPrecompileHeaderGroup(target, group);
+
     for (int srcIndex : group.sourceIndexes)
     {
       ScannerCompileCommand cmd;
-      cmd.fileName = (index.paths.source / target.sources.at(srcIndex)).generic_u8string();
+      
+      std::filesystem::path srcpath{ target.sources.at(srcIndex) };
+      if (srcpath.is_absolute()) {
+        cmd.fileName = srcpath.generic_u8string();
+      } else {
+        cmd.fileName = (index.paths.source / srcpath).generic_u8string();
+      }
+
       cmd.commandLine = basecmd;
-      cmd.commandLine = argsadjuster(cmd.commandLine, cmd.fileName);
+      if (is_pch_group) {
+        cmd.commandLine = pch_argsadjuster(cmd.commandLine, cmd.fileName);
+      } else {
+        cmd.commandLine = argsadjuster(cmd.commandLine, cmd.fileName);
+      }
       cmd.commandLine.push_back(cmd.fileName);
+
       commands.push_back(std::move(cmd));
     }
   }
