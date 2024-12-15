@@ -18,17 +18,23 @@ namespace cppscanner
  */
 struct ScannerOptions
 {
-  std::filesystem::path compile_commands;
+  std::vector<std::filesystem::path> inputs;
+  std::optional<std::filesystem::path> compile_commands;
+  std::optional<std::filesystem::path> cmakeBuildDirectory;
+  std::optional<std::string> cmakeConfig;
+  std::vector<std::string> cmakeTargets;
   std::filesystem::path output;
   std::optional<std::filesystem::path> home;
   std::optional<std::filesystem::path> root;
   bool overwrite = false;
   bool index_external_files = false;
   bool index_local_symbols = false;
+  std::optional<int> nb_threads;
   std::vector<std::string> filters;
   std::vector<std::string> translation_unit_filters;
   std::optional<std::string> project_name;
   std::optional<std::string> project_version;
+  std::vector<std::string> compilation_arguments; // arguments passed after --
 };
 
 /**

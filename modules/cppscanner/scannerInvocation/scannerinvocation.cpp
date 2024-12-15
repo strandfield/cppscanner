@@ -1,6 +1,10 @@
 
 #include "scannerinvocation.h"
 
+#include "compilecommandsgenerator.h"
+
+#include <array>
+#include <iostream>
 #include <stdexcept>
 
 namespace cppscanner
@@ -8,6 +12,11 @@ namespace cppscanner
 
 namespace
 {
+
+bool isOption(const std::string& arg)
+{
+  return !arg.empty() && arg.front() == '-';
+}
 
 ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 {
@@ -23,6 +32,37 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
         throw std::runtime_error("missing argument after --compile-commands");
 
       result.compile_commands = args.at(i++);
+    }
+    else if (arg == "--input" || arg == "-i") 
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after " + arg + " command");
+
+      result.inputs.push_back(args.at(i++));
+    }
+    else if (arg == "--build")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --build");
+
+      result.cmakeBuildDirectory = std::filesystem::path(args.at(i++));
+    }
+    else if (arg == "--config")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --config");
+
+      result.cmakeConfig = args.at(i++);
+    }
+    else if (arg == "--target")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --target");
+
+      while (i < args.size() && !isOption(args.at(i)))
+      {
+        result.cmakeTargets.push_back(args.at(i++));
+      }
     }
     else if (arg == "--output" || arg == "-o") 
     {
@@ -71,6 +111,13 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.translation_unit_filters.push_back(args.at(i++));
     }
+    else if (arg == "--threads")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --threads");
+
+      result.nb_threads = std::stoi(args.at(i++));
+    }
     else if (arg == "--project-name")
     {
       if (i >= args.size())
@@ -85,25 +132,38 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.project_version = args.at(i++);
     }
+    else if (arg == "--")
+    {
+      result.compilation_arguments.assign(args.begin() + i, args.end());
+      i = args.size();
+    }
     else
     {
-      throw std::runtime_error("unrecognized command line argument");
+      throw std::runtime_error("unrecognized command line argument: " + arg);
     }
   }
 
-  if (result.compile_commands.empty()) {
-    throw std::runtime_error("missing input file");
+  return result;
+}
+
+void checkConsistency(const ScannerOptions& opts)
+{
+  const std::array<bool, 3> inputTypes = { opts.compile_commands.has_value(),opts.cmakeBuildDirectory.has_value(), !opts.inputs.empty() };
+  const size_t nbInputs = std::count(inputTypes.begin(), inputTypes.end(), true);
+
+  if (nbInputs != 1)
+  {
+    throw std::runtime_error("too many or too few inputs");
   }
 
-  if (result.output.empty()) {
+  if (opts.output.empty()) {
     throw std::runtime_error("missing output file");
   }
 
-  if (result.root.has_value() && !std::filesystem::is_directory(*result.root)) {
+  if (opts.root.has_value() && !std::filesystem::is_directory(*opts.root)) {
     throw std::runtime_error("Root path must be a directory");
   }
 
-  return result;
 }
 
 } // namespace
@@ -111,6 +171,7 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 ScannerInvocation::ScannerInvocation(const std::vector<std::string>& command)
 {
   m_options = parseCommandLine(command);
+  checkConsistency(m_options);
 }
 
 const ScannerOptions& ScannerInvocation::parsedCommandLine() const
@@ -162,6 +223,16 @@ void ScannerInvocation::run()
     scanner.setTranslationUnitFilters(options().translation_unit_filters);
   }
 
+  if (options().nb_threads.has_value())
+  {
+    int n = *options().nb_threads;
+    if (n >= 0) {
+      scanner.setNumberOfParsingThread((size_t)n);
+    }
+  }
+
+  scanner.setCompilationArguments(options().compilation_arguments);
+
   scanner.initSnapshot(options().output);
 
   if (options().project_name.has_value()) {
@@ -172,7 +243,25 @@ void ScannerInvocation::run()
     scanner.snapshot()->setProperty("project.version", *options().project_version);
   }
 
-  scanner.scan(options().compile_commands);
+  if (options().compile_commands.has_value())
+  {
+    scanner.scanFromCompileCommands(*options().compile_commands);
+  }
+  else if (options().cmakeBuildDirectory.has_value())
+  {
+    // TODO: we could use the cmake source directory to set our Home directory
+
+
+    std::vector<ScannerCompileCommand> commands = generateCommands(
+      *options().cmakeBuildDirectory,
+      options().cmakeConfig,
+      options().cmakeTargets);
+    scanner.scan(commands);
+  }
+  else
+  {
+    scanner.scanFromListOfInputs(options().inputs);
+  }
 }
 
 const std::vector<std::string>& ScannerInvocation::errors() const

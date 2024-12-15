@@ -1,0 +1,22 @@
+name: Build
+run-name: ${{ gitea.actor }} is building ${{ gitea.repository.name }}
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: docker-wsl
+    container:
+      image: localhost:5000/cppscanner-build-env:2.0
+    steps:
+      - run: git --version
+      - run: gcc --version
+      - run: g++ --version
+      - run: cmake --version
+      - run: clang-18 --version
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - run: cmake -B ${{ gitea.workspace }}/build
+      - run: make
+        working-directory: ${{ gitea.workspace }}/build
+      - run: ctest .
+        working-directory: ${{ gitea.workspace }}/build

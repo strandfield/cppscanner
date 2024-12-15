@@ -8,6 +8,8 @@
 #include "snapshotwriter.h"
 
 #include <filesystem>
+#include <string>
+#include <vector>
 
 namespace cppscanner
 {
@@ -15,6 +17,12 @@ namespace cppscanner
 class TranslationUnitIndex;
 
 struct ScannerData;
+
+struct ScannerCompileCommand
+{
+  std::string fileName;
+  std::vector<std::string> commandLine;
+};
 
 /**
  * \brief top level class for indexing a C++ project and creating a snapshot 
@@ -41,12 +49,22 @@ public:
   void setFilters(const std::vector<std::string>& filters);
   void setTranslationUnitFilters(const std::vector<std::string>& filters);
 
+  void setNumberOfParsingThread(size_t n);
+
+  void setCompilationArguments(const std::vector<std::string>& args);
+
   void initSnapshot(const std::filesystem::path& p);
   SnapshotWriter* snapshot() const;
 
-  void scan(const std::filesystem::path& compileCommandsPath);
+  void scanFromCompileCommands(const std::filesystem::path& compileCommandsPath);
+  void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs);
+  void scan(const std::vector<ScannerCompileCommand>& compileCommands);
 
 protected:
+  bool passTranslationUnitFilters(const std::string& filename) const;
+  void scanSingleThreaded();
+  void scanMultiThreaded();
+  void runScanSingleOrMultiThreaded();
   void assimilate(TranslationUnitIndex tuIndex);
   bool fileAlreadyIndexed(FileID f) const;
   void setFileIndexed(FileID f);

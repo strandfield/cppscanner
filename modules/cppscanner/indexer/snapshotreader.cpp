@@ -8,6 +8,8 @@
 
 #include "cppscanner/database/readrows.h"
 
+#include <algorithm>
+
 namespace cppscanner
 {
 
@@ -152,6 +154,16 @@ SymbolRecord SnapshotReader::getSymbolByName(const std::vector<std::string>& qua
   return s;
 }
 
+SymbolRecord SnapshotReader::getSymbolByName(std::initializer_list<std::string>&& qualifiedName) const
+{
+  return getSymbolByName(std::vector<std::string>(qualifiedName.begin(), qualifiedName.end()));
+}
+
+SymbolRecord SnapshotReader::getSymbolByName(const std::string& name) const
+{
+  return getChildSymbolByName(name, SymbolID());
+}
+
 std::vector<SymbolRecord> SnapshotReader::getChildSymbols(SymbolID parentID) const
 {
   return fetchAll(*this, SymbolRecordFilter().withParent(parentID));
@@ -262,6 +274,26 @@ std::vector<SymbolReference> SnapshotReader::findReferences(SymbolID symbolID)
   stmt.bind(1, symbolID.rawID());
 
   return sql::readRowsAsVector<SymbolReference>(stmt, readSymbolReference);
+}
+
+inline static Diagnostic readDiagnostic(sql::Statement& row)
+{
+  Diagnostic r;
+  r.level = static_cast<DiagnosticLevel>(row.columnInt(0));
+  r.fileID = row.columnInt(1);
+  r.position = FilePosition(row.columnInt(2), row.columnInt(3));
+  r.message = row.column(4);
+  return r;
+}
+
+std::vector<Diagnostic> SnapshotReader::getDiagnostics() const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT level, fileID, line, column, message FROM diagnostic"
+  };
+
+  return sql::readRowsAsVector<Diagnostic>(stmt, readDiagnostic);
 }
 
 void sort(std::vector<SymbolReference>& refs)

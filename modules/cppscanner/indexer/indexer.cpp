@@ -273,6 +273,7 @@ SymbolCollector::SymbolCollector(Indexer& idxr) :
 void SymbolCollector::reset()
 {
   m_symbolIdCache.clear();
+  m_macroIdCache.clear();
 }
 
 IndexerSymbol* SymbolCollector::process(const clang::Decl* decl)
@@ -316,6 +317,7 @@ IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const
       std::string usr = getUSR(name, macroInfo, m_indexer.getAstContext()->getSourceManager());
       it->second = computeSymbolIdFromUsr(usr);
     } catch (const std::exception&) {
+      m_macroIdCache.erase(it);
       return nullptr;
     }
   };
@@ -326,6 +328,8 @@ IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const
   if (inserted) {
     symbol.id = symid;
     fillSymbol(symbol, name, macroInfo);
+  } else {
+    assert(symbol.id != SymbolID());
   }
 
   // note: it seems we have to delay the call to isUsedForHeaderGuard()
@@ -378,6 +382,8 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
       symbol.kind = SymbolKind::GotoLabel;
     }
   }
+
+  assert(symbol.kind != SymbolKind::Unknown);
 
   if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 
   {
@@ -1046,8 +1052,10 @@ void Indexer::initialize(clang::ASTContext& Ctx)
   m_ShouldIndexFileCache.clear();
   m_symbolCollector.reset();
 
+  resetDidProduceOutput();
   m_index = std::make_unique<TranslationUnitIndex>();
   m_index->fileIdentificator = &m_fileIdentificator;
+  m_index->mainFileId = getFileID(Ctx.getSourceManager().getMainFileID());
 }
 
 void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
@@ -1124,6 +1132,10 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
         symref.flags |= SymbolReference::Implicit;
       }
     } else if (auto* ctorexpr = llvm::dyn_cast<clang::CXXConstructExpr>(astNode.OrigE)) {
+
+      // as of llvm version 18, clang does not seem to set the SymbolRole::Implicit flag
+      // when a constructor is (implicitly) called with a brace-init list.
+      // e.g. manhattanLength({x,y})
       if (ctorexpr->getParenOrBraceRange().getBegin() == ctorexpr->getSourceRange().getBegin()) {
         // the name of the constructor isn't written
         symref.flags |= SymbolReference::Implicit;
@@ -1408,8 +1420,19 @@ void Indexer::finish()
 
   m_resultsQueue.write(std::move(*m_index));
   m_index.reset();
+  m_produced_output = true;
 
   mAstContext = nullptr;
+}
+
+bool Indexer::didProduceOutput() const
+{
+  return m_produced_output;
+}
+
+void Indexer::resetDidProduceOutput()
+{
+  m_produced_output = false;
 }
 
 namespace

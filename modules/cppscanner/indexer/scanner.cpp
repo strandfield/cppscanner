@@ -8,7 +8,9 @@
 
 #include "indexer.h"
 #include "indexingresultqueue.h"
+#include "workqueue.h"
 
+#include "argumentsadjuster.h"
 #include "frontendactionfactory.h"
 #include "fileidentificator.h"
 #include "fileindexingarbiter.h"
@@ -21,9 +23,12 @@
 #include <clang/Tooling/JSONCompilationDatabase.h>
 
 #include <algorithm>
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <thread>
+#include <vector>
 
 namespace cppscanner
 {
@@ -34,8 +39,13 @@ struct ScannerData
   std::optional<std::string> rootDirectory;
   bool indexExternalFiles = false;
   bool indexLocalSymbols = false;
+  size_t nbThreads = 0;
   std::vector<std::string> filters;
   std::vector<std::string> translationUnitFilters;
+  std::vector<std::string> compilationArguments;
+
+  std::vector<ScannerCompileCommand> compileCommands;
+
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
   std::vector<bool> indexedFiles;
@@ -81,7 +91,6 @@ Scanner::Scanner()
 {
   d = std::make_unique<ScannerData>();
   d->homeDirectory = std::filesystem::current_path().generic_u8string();
-  d->fileIdentificator = FileIdentificator::createFileIdentificator();
 }
 
 Scanner::~Scanner() = default;
@@ -116,6 +125,16 @@ void Scanner::setTranslationUnitFilters(const std::vector<std::string>& filters)
   d->translationUnitFilters = filters;
 }
 
+void Scanner::setNumberOfParsingThread(size_t n)
+{
+  d->nbThreads = n;
+}
+
+void Scanner::setCompilationArguments(const std::vector<std::string>& args)
+{
+  d->compilationArguments = args;
+}
+
 /**
  * \brief creates an empty snapshot
  * \param p  the path of the database
@@ -145,13 +164,27 @@ SnapshotWriter* Scanner::snapshot() const
   return m_snapshot.get();
 }
 
-void Scanner::scan(const std::filesystem::path& compileCommandsPath)
+bool Scanner::passTranslationUnitFilters(const std::string& filename) const
+{
+  if (!d->translationUnitFilters.empty())
+  {
+    bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&filename](const std::string& e) {
+      return is_glob_pattern(e) ? glob_match(filename, e) : filename_match(filename, e);
+      });
+
+    return !exclude;
+  }
+
+  return true;
+}
+
+void Scanner::scanFromCompileCommands(const std::filesystem::path& compileCommandsPath)
 {
   assert(snapshot());
 
   std::string error_message;
-  std::unique_ptr<clang::tooling::JSONCompilationDatabase> compile_commands = clang::tooling::JSONCompilationDatabase::loadFromFile(
-      compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
+  auto compile_commands = clang::tooling::JSONCompilationDatabase::loadFromFile(
+    compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
   );
 
   if (!compile_commands) {
@@ -159,6 +192,100 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
     return;
   }
 
+  clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
+
+  std::cout << "Processing compile_commands.json..." << std::endl;
+
+  for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
+  {
+    if (!passTranslationUnitFilters(cc.Filename)) {
+      std::cout << "[SKIPPED] " << cc.Filename << std::endl;
+      continue;
+    }
+
+    ScannerCompileCommand scanner_command;
+    scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
+    scanner_command.fileName = cc.Filename;
+
+    d->compileCommands.push_back(scanner_command);
+  }
+
+  std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
+
+  runScanSingleOrMultiThreaded();
+}
+
+void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs)
+{
+  clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
+
+  // TODO: add support for glob pattern
+  auto queue = std::deque<std::filesystem::path>(inputs.begin(), inputs.end());
+
+  while (!queue.empty())
+  {
+    std::filesystem::path item = queue.front();
+    queue.pop_front();
+
+    const auto input = std::filesystem::absolute(item);
+
+    if (!std::filesystem::is_regular_file(input))
+    {
+      if (std::filesystem::is_directory(input))
+      {
+        for (const auto& dir_entry : std::filesystem::directory_iterator(input))
+        {
+          if (dir_entry.is_directory())
+          {
+            queue.push_back(dir_entry.path());
+          }
+          else if (dir_entry.is_regular_file())
+          {
+            if (dir_entry.path().extension().generic_u8string() == ".cpp")
+            {
+              queue.push_back(dir_entry.path());
+            }
+          }
+        }
+      }
+
+      continue;
+    }
+
+    ScannerCompileCommand scanner_command;
+    scanner_command.fileName = input.generic_u8string();
+
+    if (!passTranslationUnitFilters(scanner_command.fileName)) {
+      std::cout << "[SKIPPED] " << scanner_command.fileName << std::endl;
+      continue;
+    }
+
+    scanner_command.commandLine = { getDefaultCompilerExecutableName() };
+    scanner_command.commandLine.insert(scanner_command.commandLine.end(), d->compilationArguments.begin(), d->compilationArguments.end());
+    scanner_command.commandLine.insert(scanner_command.commandLine.end(), scanner_command.fileName);
+
+    scanner_command.commandLine = argsAdjuster(scanner_command.commandLine, scanner_command.fileName);
+   
+    d->compileCommands.push_back(std::move(scanner_command));
+  }
+
+  if (d->compileCommands.size() > 1)
+  {
+    std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
+  }
+
+  runScanSingleOrMultiThreaded();
+}
+
+void Scanner::scan(const std::vector<ScannerCompileCommand>& compileCommands)
+{
+  d->compileCommands = compileCommands;
+  runScanSingleOrMultiThreaded();
+}
+
+void Scanner::scanSingleThreaded()
+{
+  d->fileIdentificator = FileIdentificator::createFileIdentificator();
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
   IndexingResultQueue results_queue;
@@ -166,32 +293,13 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
 
-  clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
-  clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
-  clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-Xclang", "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
-  clang::tooling::ArgumentsAdjuster argsAdjuster = clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
-
-  for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
+  for (const ScannerCompileCommand& cc : d->compileCommands)
   {
-    if (!d->translationUnitFilters.empty()) {
-      bool exclude = std::none_of(d->translationUnitFilters.begin(), d->translationUnitFilters.end(), [&cc](const std::string& e) {
-        return is_glob_pattern(e) ? glob_match(cc.Filename, e) : filename_match(cc.Filename, e);
-        });
-
-      if (exclude) {
-        std::cout << "[SKIPPED] " << cc.Filename << std::endl;
-        continue;
-      }
-    }
-
-     std::vector<std::string> command = argsAdjuster(cc.CommandLine, cc.Filename);
-    /* std::vector<std::string> command = clang::tooling::getClangSyntaxOnlyAdjuster()(cc.CommandLine, cc.Filename);
-    command = clang::tooling::getClangStripOutputAdjuster()(command, cc.Filename);*/
-    clang::tooling::ToolInvocation invocation{ std::move(command), actionfactory.create(), file_manager.get() };
+    clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), file_manager.get() };
 
     invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
 
-    std::cout << cc.Filename << std::endl;
+    std::cout << cc.fileName << std::endl;
 
     const bool success = invocation.run();
 
@@ -205,6 +313,166 @@ void Scanner::scan(const std::filesystem::path& compileCommandsPath)
     } else {
       std::cout << "error: tool invocation failed" << std::endl;
     }
+  }
+}
+
+void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
+{
+  clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
+  auto index_data_consumer = std::make_shared<Indexer>(*arbiter, *resultQueue);
+  IndexingFrontendActionFactory actionfactory{ index_data_consumer };
+  actionfactory.setIndexLocalSymbols(data->indexLocalSymbols);
+
+  for (;;)
+  {
+    std::optional<WorkQueue::ToolInvocation> item = inputQueue->next();
+
+    if (!item.has_value())
+    {
+      break;
+    }
+
+    std::vector<std::string> command = item->command;
+
+    clang::tooling::ToolInvocation invocation{ std::move(command), actionfactory.create(), file_manager.get() };
+    invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
+
+    //std::cout << item->filename << std::endl;
+
+    bool success = false;
+
+    try {
+      success = invocation.run();
+    }
+    catch (...)
+    {
+      success = false;
+    }
+
+    if (!success || !index_data_consumer->didProduceOutput())
+    {
+      TranslationUnitIndex index;
+      index.mainFileId = arbiter->fileIdentificator().getIdentification(item->filename);
+      index.isError = true;
+      resultQueue->write(std::move(index));
+    }
+
+    index_data_consumer->resetDidProduceOutput();
+  }
+
+  running.fetch_sub(1);
+}
+
+class WorkerThreads
+{
+private:
+  ScannerData* m_data; FileIndexingArbiter* m_arbiter; WorkQueue* m_inputQueue; IndexingResultQueue* m_resultQueue;
+  std::vector<std::thread> m_threads;
+  std::atomic<int> m_running = 0;
+
+public:
+
+  WorkerThreads(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue) :
+    m_data(data), m_arbiter(arbiter), m_inputQueue(inputQueue), m_resultQueue(resultQueue)
+  {
+
+  }
+
+  ~WorkerThreads()
+  {
+    destroy();
+  }
+
+  void addOne()
+  {
+    m_running.fetch_add(1);
+
+    std::thread worker{ parsing_thread_proc, m_data, m_arbiter, m_inputQueue, m_resultQueue, std::ref(m_running) };
+    m_threads.emplace_back(std::move(worker));
+  }
+
+  void add(size_t n)
+  {
+    while (n-- > 0) {
+      addOne();
+    }
+  }
+
+  int nbRunning()
+  {
+    return m_running.load();
+  }
+
+  void destroy()
+  {
+    for (std::thread& worker : m_threads)
+    {
+      worker.join();
+    }
+    m_threads.clear();
+  }
+};
+
+void Scanner::scanMultiThreaded()
+{
+  assert(d->nbThreads > 0);
+
+  d->fileIdentificator = FileIdentificator::createThreadSafeFileIdentificator();
+
+  std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
+
+  if (d->nbThreads > 1)
+  {
+    indexing_arbiter = FileIndexingArbiter::createThreadSafeArbiter(std::move(indexing_arbiter));
+  }
+
+  std::vector<WorkQueue::ToolInvocation> tasks;
+
+  {
+    for (const ScannerCompileCommand& cc : d->compileCommands)
+    {
+      tasks.push_back(WorkQueue::ToolInvocation{ cc.fileName, cc.commandLine });
+    }
+  }
+
+  WorkQueue input_queue{ tasks };
+  IndexingResultQueue results_queue;
+
+
+  WorkerThreads threads{ d.get(), indexing_arbiter.get(), &input_queue, &results_queue };
+  threads.add(d->nbThreads);
+
+  while (threads.nbRunning() > 0)
+  {
+    std::optional<TranslationUnitIndex> item = results_queue.tryRead(std::chrono::milliseconds(250));
+
+    if (!item.has_value())
+      continue;
+
+    TranslationUnitIndex& result = item.value();
+    if (!result.isError)
+    {
+      assimilate(std::move(result));
+    }
+    else 
+    {
+      std::cout << "error: tool invocation failed for " << result.fileIdentificator->getFile(result.mainFileId) << std::endl;
+
+    }
+  }
+
+  threads.destroy();
+}
+
+void Scanner::runScanSingleOrMultiThreaded()
+{
+  if (d->nbThreads == 0)
+  {
+    scanSingleThreaded();
+  }
+  else
+  {
+    scanMultiThreaded();
   }
 }
 
@@ -383,7 +651,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     remapFileIds(tuIndex, *d->fileIdentificator);
   }
 
-  const std::vector<std::string>& known_files = d->fileIdentificator->getFiles();
+  const std::vector<std::string> known_files = d->fileIdentificator->getFiles();
 
   std::vector<File> newfiles;
 
