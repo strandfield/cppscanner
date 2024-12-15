@@ -38,7 +38,7 @@ Some binaries can be downloaded directly from [GitHub](https://github.com/llvm/l
 Note for Windows users: you won't be able to build in debug mode as only the release binaries are
 provided; which will be penalizing if you intend to work on the project rather than just build it.
 
-For all other systems, on for Windows users who want to build in Debug mode, 
+For all other systems, or for Windows users who want to build in Debug mode, 
 the correct way to go seems to be to build LLVM yourself (as I did).
 This may help: [Building LLVM with CMake](https://llvm.org/docs/CMake.html).
 Building LLVM isn't hard, it just takes a lot of time and produces a lot of binaries
