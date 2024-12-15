@@ -352,6 +352,7 @@ void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQu
     if (!success || !index_data_consumer->didProduceOutput())
     {
       TranslationUnitIndex index;
+      index.fileIdentificator = &(arbiter->fileIdentificator());
       index.mainFileId = arbiter->fileIdentificator().getIdentification(item->filename);
       index.isError = true;
       resultQueue->write(std::move(index));
