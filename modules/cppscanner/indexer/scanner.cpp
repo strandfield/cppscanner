@@ -448,9 +448,6 @@ private:
 
 static void compilePCH(const ScannerCompileCommand& cc, const std::filesystem::path& pchOutput, clang::FileManager* fileManager)
 {
-  //args.push_back("-emit-pch");
-  //args.push_back("-o");
-  //args.push_back(cc.pch->generic_u8string());
   std::filesystem::create_directories(pchOutput.parent_path());
 
   auto action = std::make_unique<clang::GeneratePCHAction>();
