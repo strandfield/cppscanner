@@ -115,7 +115,7 @@ void parse_target(CMakeIndex& idx, CMakeTarget& target, const std::string& jsonF
       }
 
       // TODO: ?
-      sourceObj->getBoolean("isGenerated");
+     // sourceObj->getBoolean("isGenerated");
     }
   }
 

@@ -239,11 +239,6 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
 
   for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
   {
-    if (!passTranslationUnitFilters(cc.Filename)) {
-      std::cout << "[SKIPPED] " << cc.Filename << std::endl;
-      continue;
-    }
-
     ScannerCompileCommand scanner_command;
     if (isPchCompileCommand(cc)) {
       scanner_command.commandLine = pchArgsAdjuster(cc.CommandLine, cc.Filename);
@@ -300,11 +295,6 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
 
     ScannerCompileCommand scanner_command;
     scanner_command.fileName = input.generic_u8string();
-
-    if (!passTranslationUnitFilters(scanner_command.fileName)) {
-      std::cout << "[SKIPPED] " << scanner_command.fileName << std::endl;
-      continue;
-    }
 
     scanner_command.commandLine = { getDefaultCompilerExecutableName() };
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), d->compilationArguments.begin(), d->compilationArguments.end());
@@ -620,6 +610,11 @@ void Scanner::scanMultiThreaded()
     }
     else
     {
+      if (!passTranslationUnitFilters(cc.fileName)) {
+        std::cout << "[SKIPPED] " << cc.fileName << std::endl;
+        continue;
+      }
+
       tasks.push_back(WorkQueue::ToolInvocation{ cc.fileName, cc.commandLine });
     }
   }
@@ -680,19 +675,44 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
   for (const ScannerCompileCommand& cc : commands)
   {
-    std::cout << cc.fileName << std::endl;
-
-    if (!std::filesystem::exists(cc.fileName))
-    {
-      std::cout << "error: file does not exist" << std::endl;
-      continue;
-    }
-
+    const bool should_parse = passTranslationUnitFilters(cc.fileName);
     std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
+
+    if (should_parse)
+    {
+      std::cout << cc.fileName << std::endl;
+    
+      if (!std::filesystem::exists(cc.fileName))
+      {
+        std::cout << "error: file does not exist" << std::endl;
+        continue;
+      }
+    }
+    else
+    {
+      if (pch_output.has_value())
+      {
+        std::cout << "[PCH] " << cc.fileName << std::endl;
+
+        if (!std::filesystem::exists(cc.fileName))
+        {
+          std::cout << "error: file does not exist" << std::endl;
+          continue;
+        }
+      }
+      else
+      {
+        std::cout << "[SKIPPED] " << cc.fileName << std::endl;
+      }
+    }
 
     if (pch_output.has_value())
     {
       compilePCH(cc, *pch_output, &fileManager);
+    }
+
+    if (!should_parse) {
+      continue;
     }
 
     clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), &fileManager };
