@@ -488,6 +488,18 @@ void Scanner::scanSingleThreaded()
   processCommands(d->compileCommands, *indexing_arbiter, *file_manager);
 }
 
+static bool run_invocation(const WorkQueue::ToolInvocation& invocation, Indexer& indexer, IndexingFrontendActionFactory& actionfactory, clang::FileManager* fileManager)
+{
+  if (!std::filesystem::exists(invocation.filename))
+  {
+    return false;
+  }
+
+  clang::tooling::ToolInvocation tool_invocation{ invocation.command, actionfactory.create(), fileManager };
+  tool_invocation.setDiagnosticConsumer(indexer.getDiagnosticConsumer());
+  return tool_invocation.run();
+}
+
 void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
 {
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
@@ -504,17 +516,10 @@ void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQu
       break;
     }
 
-    std::vector<std::string> command = item->command;
-
-    clang::tooling::ToolInvocation invocation{ std::move(command), actionfactory.create(), file_manager.get() };
-    invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
-
-    //std::cout << item->filename << std::endl;
-
     bool success = false;
 
     try {
-      success = invocation.run();
+      success = run_invocation(*item, *index_data_consumer, actionfactory, file_manager.get());
     }
     catch (...)
     {
@@ -676,6 +681,12 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
   for (const ScannerCompileCommand& cc : commands)
   {
     std::cout << cc.fileName << std::endl;
+
+    if (!std::filesystem::exists(cc.fileName))
+    {
+      std::cout << "error: file does not exist" << std::endl;
+      continue;
+    }
 
     std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
 
