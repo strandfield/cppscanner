@@ -159,6 +159,11 @@ SymbolRecord SnapshotReader::getSymbolByName(std::initializer_list<std::string>&
   return getSymbolByName(std::vector<std::string>(qualifiedName.begin(), qualifiedName.end()));
 }
 
+SymbolRecord SnapshotReader::getSymbolById(SymbolID id) const
+{
+  return getRecord(*this, SymbolRecordFilter().withId(id));
+}
+
 SymbolRecord SnapshotReader::getSymbolByName(const std::string& name) const
 {
   return getChildSymbolByName(name, SymbolID());

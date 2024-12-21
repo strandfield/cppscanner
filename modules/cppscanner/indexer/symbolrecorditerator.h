@@ -65,7 +65,8 @@ public:
   {
     return !this->symbolKind.has_value() &&
       !this->parentId.has_value() &&
-      !this->name.has_value();
+      !this->name.has_value()  &&
+      !this->symbolId.has_value();
   }
 };
 

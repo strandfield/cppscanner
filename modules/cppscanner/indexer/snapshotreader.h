@@ -52,6 +52,7 @@ public:
   SymbolRecord getChildSymbolByName(const std::string& name, SymbolID parentID) const;
   SymbolRecord getSymbolByName(const std::vector<std::string>& qualifiedName) const;
   SymbolRecord getSymbolByName(std::initializer_list<std::string>&& qualifiedName) const;
+  SymbolRecord getSymbolById(SymbolID id) const;
   SymbolRecord getSymbolByName(const std::string& name) const;
   std::vector<SymbolRecord> getChildSymbols(SymbolID parentID) const;
   std::vector<SymbolRecord> getChildSymbols(SymbolID parentID, SymbolKind kind) const;

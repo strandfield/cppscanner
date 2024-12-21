@@ -38,7 +38,19 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   SymbolRecord init = s.getSymbolByName("init()");
   REQUIRE(init.kind == SymbolKind::Function);
 
-  // TODO: tester que std::string n'a pas le flag FromProject
+  SymbolRecord stdns = s.getSymbolByName("std");
+  REQUIRE(stdns.kind == SymbolKind::Namespace);
+  REQUIRE(!testFlag(stdns, SymbolFlag::FromProject));
+
+  SymbolRecord symbol = s.getSymbolByName("string");
+  REQUIRE((symbol.kind == SymbolKind::TypeAlias || symbol.kind == SymbolKind::Typedef));
+  REQUIRE(!testFlag(symbol, SymbolFlag::FromProject));
+  REQUIRE(symbol.parentId == stdns.id);
+
+  symbol = s.getSymbolByName("basic_string");
+  REQUIRE(symbol.kind == SymbolKind::Class);
+  REQUIRE(!testFlag(symbol, SymbolFlag::FromProject));
+  REQUIRE(symbol.parentId == stdns.id);
 }
 
 TEST_CASE("vector.cpp", "[scanner][stl]")
