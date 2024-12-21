@@ -92,6 +92,9 @@ This command will make the scanner use the CMake file-based API to get informati
 about the build system and targets.
 Ultimately, the `cmake` executable is invoked with the arguments passed as-is.
 
+Projects using precompiled headers (using the `target_precompile_headers()` command)
+are expected to work if you are using the CMake integration.
+
 ### `run` options
 
 The following optional arguments can be passed to the `run` command.
@@ -125,7 +128,5 @@ The recommended minimum when using this option is therefore 2.
 
 ### Unsupported language features & toolchains
 
-Although the parser may be able to process some other C++20 constructs (such as
-the spaceship operator), **C++20 modules** are not supported.
-
-Precompiled headers are not supported.
+The following C++ language features are not supported:
+- **C++20 modules**

@@ -50,29 +50,12 @@ public:
 
   struct CompileGroup
   {
-    //enum Language
-    //{
-    //  LANG_C,
-    //  LANG_CXX
-    //};
-
-    //enum LanguageStandard
-    //{
-    //  STD_CPP11,
-    //  STD_CPP14,
-    //  STD_CPP17,
-    //  STD_CPP20,
-    //  STD_CPP23,
-    //  STD_CPP26,
-    //};
-
-    //Language language = LANG_C;
-    //LanguageStandard languageStandard = STD_CPP17;
     std::string language;
     std::string languageStandard;
     std::vector<CompileCommandFragment> compileCommandFragments;
     std::vector<std::string> defines;
     std::vector<std::filesystem::path> includes;
+    std::vector<std::filesystem::path> precompileHeaders;
     std::vector<int> sourceIndexes;
   };
 

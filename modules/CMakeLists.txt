@@ -35,8 +35,13 @@ target_link_libraries(indexer
   clangLex
   clangTooling
   clangIndex
+  clangDriver
 )
 target_include_directories(indexer SYSTEM PUBLIC ${CLANG_INCLUDE_DIRS})
+if (WIN32 AND NOT SELF_PARSE)
+  # https://github.com/llvm/llvm-project/issues/86028
+  target_compile_options(indexer PRIVATE "/Zc:preprocessor")
+endif()
 
 add_module(cmakeIntegration)
 target_link_libraries(cmakeIntegration 

@@ -11,9 +11,15 @@
 #include <string>
 #include <vector>
 
+namespace clang
+{
+class FileManager;
+} // namespace clang
+
 namespace cppscanner
 {
 
+class FileIndexingArbiter;
 class TranslationUnitIndex;
 
 struct ScannerData;
@@ -65,6 +71,7 @@ protected:
   void scanSingleThreaded();
   void scanMultiThreaded();
   void runScanSingleOrMultiThreaded();
+  void processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter, clang::FileManager& fileManager);
   void assimilate(TranslationUnitIndex tuIndex);
   bool fileAlreadyIndexed(FileID f) const;
   void setFileIndexed(FileID f);
