@@ -47,3 +47,19 @@ TEST_CASE("Matching files", "[glob]")
 #endif // WIN32
 
 }
+
+TEST_CASE("jobs", "[scannerInvocation]")
+{
+  ScannerInvocation inv{
+    { "-i", "test.cpp",
+    "-j8",
+    "--project-name", "cppscanner",
+    "-o", "output.db"}
+  };
+
+  REQUIRE(inv.parsedCommandLine().nb_threads.value_or(-1) == 8);
+  REQUIRE(inv.parsedCommandLine().project_name.value_or("") == "cppscanner");
+  REQUIRE(inv.parsedCommandLine().output == "output.db");
+  REQUIRE(inv.parsedCommandLine().inputs.size() == 1);
+  REQUIRE(inv.parsedCommandLine().inputs.at(0) == "test.cpp");
+}

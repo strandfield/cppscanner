@@ -18,6 +18,27 @@ bool isOption(const std::string& arg)
   return !arg.empty() && arg.front() == '-';
 }
 
+// test if arg is "-j<number>"
+bool isJobsArg(const std::string& arg)
+{
+  if (arg.size() <= 2 || arg.rfind("-j", 0) != 0)
+  {
+    return false;
+  }
+
+  for (size_t i(2); i < arg.size(); ++i)
+  {
+    char c = arg.at(i);
+
+    if (c < '0' || c > '9')
+    {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 {
   ScannerOptions result;
@@ -111,12 +132,19 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.translation_unit_filters.push_back(args.at(i++));
     }
-    else if (arg == "--threads")
+    else if (arg == "--threads" || arg == "-j" || isJobsArg(arg))
     {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --threads");
+      if (arg == "--threads" || arg == "-j")
+      {
+        if (i >= args.size())
+          throw std::runtime_error("missing argument after " + arg);
 
-      result.nb_threads = std::stoi(args.at(i++));
+        result.nb_threads = std::stoi(args.at(i++));
+      }
+      else
+      {
+        result.nb_threads = std::stoi(arg.substr(2));
+      }
     }
     else if (arg == "--project-name")
     {
