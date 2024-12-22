@@ -956,7 +956,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     }
   }
 
-  // insert new new symbols, update the others that need it
+  // insert new symbols, update the others that need it
   {
     std::vector<const IndexerSymbol*> symbols_to_insert;
     std::vector<const IndexerSymbol*> symbols_with_flags_to_update;
@@ -969,14 +969,11 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
         symbols_to_insert.push_back(&newsymbol);
       } else {
         IndexerSymbol& existing_symbol = it->second;
-
-        if (existing_symbol.flags != p.second.flags) {
-          // TODO: this may not be the right way to update the flags
-          existing_symbol.flags |= p.second.flags;
+        int what_updated = update(existing_symbol, p.second);
+        if (what_updated & IndexerSymbol::FlagUpdate)
+        {
           symbols_with_flags_to_update.push_back(&existing_symbol);
         }
-
-        // TODO: there may be other things to update...
       }
     }
 
@@ -1050,7 +1047,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
 
   // Process refargs
   {
-    sql::Transaction transaction{ m_snapshot->database() };
+    sql::TransactionScope transaction{ m_snapshot->database() };
     m_snapshot->insert(tuIndex.fileAnnotations.refargs);
   }
 
@@ -1072,11 +1069,11 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
       if (fileAlreadyIndexed(cur_file_id)) {
         std::vector<SymbolDeclaration> declarations = merge(m_snapshot->loadDeclarationsInFile(cur_file_id), it, end);
 
-        sql::Transaction transaction{ m_snapshot->database() };
+        sql::TransactionScope transaction{ m_snapshot->database() };
         m_snapshot->removeAllDeclarationsInFile(cur_file_id);
         m_snapshot->insert(declarations);
       } else {
-        sql::Transaction transaction{ m_snapshot->database() };
+        sql::TransactionScope transaction{ m_snapshot->database() };
         m_snapshot->insert(std::vector<SymbolDeclaration>(it, end));
       }
 

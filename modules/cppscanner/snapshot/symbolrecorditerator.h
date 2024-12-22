@@ -298,6 +298,7 @@ template<>
 struct record_traits<MacroRecord>
 {
   typedef MacroRecordIterator record_iterator_t;
+  typedef MacroInfo info_t;
 };
 
 
@@ -331,6 +332,7 @@ template<>
 struct record_traits<NamespaceAliasRecord>
 {
   typedef NamespaceAliasRecordIterator record_iterator_t;
+  typedef NamespaceAliasInfo info_t;
 };
 
 
@@ -364,6 +366,7 @@ template<>
 struct record_traits<EnumRecord>
 {
   typedef EnumRecordIterator record_iterator_t;
+  typedef EnumInfo info_t;
 };
 
 
@@ -397,6 +400,7 @@ template<>
 struct record_traits<EnumConstantRecord>
 {
   typedef EnumConstantRecordIterator record_iterator_t;
+  typedef EnumConstantInfo info_t;
 };
 
 
@@ -431,6 +435,7 @@ template<>
 struct record_traits<VariableRecord>
 {
   typedef VariableRecordIterator record_iterator_t;
+  typedef VariableInfo info_t;
 };
 
 
@@ -464,6 +469,7 @@ template<>
 struct record_traits<FunctionRecord>
 {
   typedef FunctionRecordIterator record_iterator_t;
+  typedef FunctionInfo info_t;
 };
 
 
@@ -499,6 +505,7 @@ template<>
 struct record_traits<ParameterRecord>
 {
   typedef ParameterRecordIterator record_iterator_t;
+  typedef ParameterInfo info_t;
 };
 
 

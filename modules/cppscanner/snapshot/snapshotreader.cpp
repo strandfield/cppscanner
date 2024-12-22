@@ -9,20 +9,25 @@
 #include "cppscanner/database/readrows.h"
 
 #include <algorithm>
+#include <cassert>
 
 namespace cppscanner
 {
+
+SnapshotReader::SnapshotReader()
+{
+
+}
 
 SnapshotReader::SnapshotReader(SnapshotReader&&) = default;
 SnapshotReader::~SnapshotReader() = default;
 
 SnapshotReader::SnapshotReader(const std::filesystem::path& databasePath)
-  : m_database(std::make_unique<Database>())
 {
-  m_database->open(databasePath);
-
-  if (!m_database->good())
-    throw std::runtime_error("snapshot constructor expects a good() database");
+  if (!open(databasePath))
+  {
+    throw std::runtime_error("could not open snapshot");
+  }
 }
 
 SnapshotReader::SnapshotReader(Database db) : 
@@ -32,12 +37,96 @@ SnapshotReader::SnapshotReader(Database db) :
     throw std::runtime_error("snapshot constructor expects a good() database");
 }
 
+bool SnapshotReader::open()
+{
+  if (!reopen())
+  {
+    return false;
+  }
+
+  // check that the database is likely a snapshot produced by the scanner
+  {
+    sql::Statement stmt{
+      *m_database,
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='info'"
+    };
+
+    if (!stmt.fetchNextRow())
+    {
+      stmt.finalize();
+      m_database.reset();
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool SnapshotReader::open(const std::filesystem::path& databasePath)
+{
+  m_database_path = databasePath;
+  return open();
+}
+
+bool SnapshotReader::isOpen() const
+{
+  return m_database != nullptr;
+}
+
+
+void SnapshotReader::close()
+{
+  m_database.reset();
+}
+
+bool SnapshotReader::reopen()
+{
+  if (isOpen())
+  {
+    return true;
+  }
+
+  m_database = std::make_unique<Database>();
+  m_database->open(m_database_path);
+
+  if (!m_database->good())
+  {
+    m_database.reset();
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * \brief returns the database associated with the snapshot
  */
 Database& SnapshotReader::database() const
 {
+  assert(isOpen());
   return *m_database;
+}
+
+inline static Snapshot::Property readProperty(sql::Statement& row)
+{
+  Snapshot::Property res;
+  res.name = row.column(0);
+  res.value = row.column(1);
+  return res;
+}
+
+Snapshot::Properties SnapshotReader::readProperties() const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT key, value FROM info"
+  };
+
+  Snapshot::Properties result;
+  sql::readRowsConverted(stmt, &readProperty, [&result](const Snapshot::Property& item) {
+    result[item.name] = item.value;
+    });
+  return result;
 }
 
 inline static File readFileIdAndPath(sql::Statement& row)
@@ -48,14 +137,33 @@ inline static File readFileIdAndPath(sql::Statement& row)
   return f;
 }
 
-std::vector<File> SnapshotReader::getFiles() const
+inline static File readFileWithContent(sql::Statement& row)
 {
-  sql::Statement stmt{ 
-    database(),
-    "SELECT id, path FROM file"
-  };
+  File f = readFileIdAndPath(row);
+  f.content = row.column(2);
+  return f;
+}
 
-  return sql::readRowsAsVector<File>(stmt, readFileIdAndPath);
+std::vector<File> SnapshotReader::getFiles(bool fetchContent) const
+{
+  if (fetchContent)
+  {
+    sql::Statement stmt{ 
+      database(),
+      "SELECT id, path, content FROM file"
+    };
+
+    return sql::readRowsAsVector<File>(stmt, readFileWithContent);
+  }
+  else
+  {
+    sql::Statement stmt{ 
+      database(),
+      "SELECT id, path FROM file"
+    };
+
+    return sql::readRowsAsVector<File>(stmt, readFileIdAndPath);
+  }
 }
 
 inline static Include readInclude(sql::Statement& row)
@@ -65,6 +173,16 @@ inline static Include readInclude(sql::Statement& row)
   i.includedFileID = row.columnInt(1);
   i.line = row.columnInt(2);
   return i;
+}
+
+std::vector<Include> SnapshotReader::getIncludes() const
+{
+  sql::Statement stmt { 
+    database(),
+    "SELECT file_id, included_file_id, line FROM include"
+  };
+
+  return sql::readRowsAsVector<Include>(stmt, readInclude);
 }
 
 std::vector<Include> SnapshotReader::getIncludedFiles(FileID fid) const
@@ -85,6 +203,16 @@ inline static ArgumentPassedByReference readArgumentPassedByReference(sql::State
   ret.fileID = row.columnInt(0);
   ret.position = FilePosition(row.columnInt(1), row.columnInt(2));
   return ret;
+}
+
+std::vector<ArgumentPassedByReference> SnapshotReader::getArgumentsPassedByReference() const
+{
+  sql::Statement stmt { 
+    database(),
+    "SELECT file_id, line, column FROM argumentPassedByReference"
+  };
+
+  return sql::readRowsAsVector<ArgumentPassedByReference>(stmt, readArgumentPassedByReference);
 }
 
 std::vector<ArgumentPassedByReference> SnapshotReader::getArgumentsPassedByReference(FileID file) const
@@ -108,6 +236,16 @@ inline static SymbolDeclaration readSymbolDeclaration(sql::Statement& row)
   ret.endPosition = FilePosition::fromBits(row.columnInt(3));
   ret.isDefinition = (row.columnInt(4) != 0);
   return ret;
+}
+
+std::vector<SymbolDeclaration> SnapshotReader::getSymbolDeclarations() const
+{
+  sql::Statement stmt { 
+    database(),
+    "SELECT symbol_id, file_id, startPosition, endPosition, isDefinition FROM symbolDeclaration"
+  };
+
+  return sql::readRowsAsVector<SymbolDeclaration>(stmt, readSymbolDeclaration);
 }
 
 std::vector<SymbolDeclaration> SnapshotReader::getSymbolDeclarations(SymbolID symbolId) const
@@ -219,6 +357,24 @@ AccessSpecifier sqlColumnAsAccessSpecifier(sql::Statement& row, int col)
   return static_cast<AccessSpecifier>(row.columnInt(col));
 }
 
+std::vector<BaseOf> SnapshotReader::getBases() const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT baseClassID, derivedClassID, access FROM baseOf"
+  };
+
+  auto rr = [](sql::Statement& row) -> BaseOf {
+    BaseOf bof;
+    bof.baseClassID = sqlColumnAsSymbolID(row, 0);
+    bof.derivedClassID = sqlColumnAsSymbolID(row, 1);
+    bof.accessSpecifier = sqlColumnAsAccessSpecifier(row, 2);
+    return bof;
+    };
+
+  return sql::readRowsAsVector<BaseOf>(stmt, rr);
+}
+
 std::vector<BaseOf> SnapshotReader::getBasesOf(SymbolID classID) const
 {
   sql::Statement stmt{ 
@@ -237,6 +393,23 @@ std::vector<BaseOf> SnapshotReader::getBasesOf(SymbolID classID) const
     };
 
   return sql::readRowsAsVector<BaseOf>(stmt, rr);
+}
+
+std::vector<Override> SnapshotReader::getOverrides() const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT baseMethodID, overrideMethodID FROM override"
+  };
+
+  auto rr = [](sql::Statement& row) -> Override {
+    Override ov;
+    ov.baseMethodID = sqlColumnAsSymbolID(row, 0);
+    ov.overrideMethodID = sqlColumnAsSymbolID(row, 1);
+    return ov;
+    };
+
+  return sql::readRowsAsVector<Override>(stmt, rr);
 }
 
 std::vector<Override> SnapshotReader::getOverridesOf(SymbolID methodID) const
@@ -267,6 +440,16 @@ inline static SymbolReference readSymbolReference(sql::Statement& row)
   r.referencedBySymbolID = SymbolID::fromRawID(row.columnInt64(4));
   r.flags = row.columnInt(5);
   return r;
+}
+
+std::vector<SymbolReference> SnapshotReader::getSymbolReferences() const
+{
+  sql::Statement stmt{ 
+    database(),
+    "SELECT symbol_id, file_id, line, col, parent_symbol_id, flags FROM symbolReference"
+  };
+
+  return sql::readRowsAsVector<SymbolReference>(stmt, readSymbolReference);
 }
 
 std::vector<SymbolReference> SnapshotReader::findReferences(SymbolID symbolID) const
