@@ -4,8 +4,8 @@
 
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 #include "cppscanner/index/symbol.h"
-#include "cppscanner/indexer/glob.h"
 #include "cppscanner/indexer/fileindexingarbiter.h"
+#include "cppscanner/base/glob.h"
 
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"

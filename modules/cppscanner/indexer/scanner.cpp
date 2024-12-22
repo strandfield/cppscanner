@@ -4,7 +4,6 @@
 
 #include "scanner.h"
 
-#include "version.h"
 
 #include "indexer.h"
 #include "indexingresultqueue.h"
@@ -16,9 +15,11 @@
 #include "fileindexingarbiter.h"
 #include "translationunitindex.h"
 
-#include "glob.h"
-
 #include "cppscanner/database/transaction.h"
+
+#include "cppscanner/base/glob.h"
+#include "cppscanner/base/os.h"
+#include "cppscanner/base/version.h"
 
 #include <clang/Tooling/JSONCompilationDatabase.h>
 
@@ -162,19 +163,14 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
   m_snapshot = std::make_unique<SnapshotWriter>(p);
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
+  m_snapshot->setProperty("cppscanner.os", cppscanner::system_name());
 
-#ifdef _WIN32
-  m_snapshot->setProperty("cppscanner.os", "windows");
-#else
-  m_snapshot->setProperty("cppscanner.os", "linux");
-#endif // _WIN32
-
-  m_snapshot->setProperty("project.home", SnapshotWriter::Path(d->homeDirectory));
+  m_snapshot->setProperty("project.home", Snapshot::Path(d->homeDirectory));
 
   m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
-  m_snapshot->setProperty("scanner.root", SnapshotWriter::Path(d->rootDirectory.value_or(std::string())));
-  m_snapshot->setProperty("scanner.workingDirectory", SnapshotWriter::Path(std::filesystem::current_path().generic_u8string()));
+  m_snapshot->setProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())));
+  m_snapshot->setProperty("scanner.workingDirectory", Snapshot::Path(std::filesystem::current_path().generic_u8string()));
 }
 
 SnapshotWriter* Scanner::snapshot() const

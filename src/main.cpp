@@ -1,5 +1,5 @@
 
-#include "cppscanner/indexer/version.h"
+#include "cppscanner/base/version.h"
 
 #include <iostream>
 #include <string>

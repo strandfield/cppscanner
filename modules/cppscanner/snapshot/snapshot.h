@@ -17,6 +17,8 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
+#include <string>
 
 namespace cppscanner
 {
@@ -43,7 +45,19 @@ public:
   };
 
   using Properties = std::map<std::string, std::string>;
+
+
 };
+
+inline std::optional<std::string> getProperty(const Snapshot::Properties& props, const std::string& name)
+{
+  auto it = props.find(name);
+  if (it != props.end())
+  {
+    return it->second;
+  }
+  return std::nullopt;
+}
 
 namespace snapshot
 {

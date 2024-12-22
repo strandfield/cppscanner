@@ -5,23 +5,19 @@
 #ifndef CPPSCANNER_SNAPSHOTWRITER_H
 #define CPPSCANNER_SNAPSHOTWRITER_H
 
-#include "cppscanner/database/database.h"
-#include "cppscanner/database/transaction.h"
+#include "snapshot.h"
 
-#include "cppscanner/index/baseof.h"
-#include "cppscanner/index/declaration.h"
-#include "cppscanner/index/diagnostic.h"
-#include "cppscanner/index/file.h"
-#include "cppscanner/index/include.h"
-#include "cppscanner/index/override.h"
-#include "cppscanner/index/refarg.h"
-#include "cppscanner/index/reference.h"
-#include "cppscanner/index/symbol.h"
+#include "cppscanner/database/database.h"
 
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <vector>
+
+namespace sql
+{
+class Transaction;
+}
 
 namespace cppscanner
 {
@@ -52,22 +48,14 @@ public:
 
   static constexpr int DatabaseSchemaVersion = 0;
 
-  class Path
-  {
-  private:
-    std::string m_path;
-  public:
-    explicit Path(std::string p) : m_path(SnapshotWriter::normalizedPath(std::move(p))) { }
-    const std::string& str() const { return m_path; }
-  };
-
   static std::string normalizedPath(std::string p);
 
   void setProperty(const std::string& key, const std::string& value);
   void setProperty(const std::string& key, bool value);
   void setProperty(const std::string& key, int value);
   void setProperty(const std::string& key, const char* value);
-  void setProperty(const std::string& key, const Path& path);
+  void setProperty(const std::string& key, const Snapshot::Path& path);
+  void insert(const Snapshot::Properties& properties);
 
   void insertFilePaths(const std::vector<File>& files);
   void insertFiles(const std::vector<File>& files);

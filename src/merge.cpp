@@ -30,6 +30,7 @@ void runMerge(std::vector<std::string> args)
   try
   {
     MergeCommandInvocation invocation{ args };
+    invocation.readEnv();
     invocation.exec();
 
     for (const std::string& mssg : invocation.errors())

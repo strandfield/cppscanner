@@ -39,8 +39,8 @@ class SnapshotMerger
 public:
 
   void setOutputPath(const std::filesystem::path& outputPath);
-
   void addInputPath(const std::filesystem::path& inputPath);
+  void setProjectHome(const std::filesystem::path& homePath);
 
   void runMerge();
 
@@ -54,23 +54,17 @@ private:
   struct InputSnapshot
   {
     SnapshotReader reader;
+    Snapshot::Properties properties;
     std::vector<FileID> idtable;
   };
 
 private:
   std::vector<std::filesystem::path> m_input_paths;
   std::filesystem::path m_output_path;
-  FileIdTable m_fileid_table;
+  std::optional<std::filesystem::path> m_project_home_path;
   std::vector<InputSnapshot> m_snapshots;
   SnapshotWriter m_writer;
 };
-
-namespace snapshot
-{
-
-void merge();
-
-} // namespace snapshot
 
 } // namespace cppscanner
 

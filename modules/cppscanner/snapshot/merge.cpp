@@ -7,6 +7,9 @@
 #include "cppscanner/snapshot/indexersymbol.h"
 #include "cppscanner/snapshot/symbolrecorditerator.h"
 
+#include "cppscanner/base/os.h"
+#include "cppscanner/base/version.h"
+
 #include <algorithm>
 #include <cassert>
 #include <set>
@@ -100,6 +103,57 @@ void sortAndRemoveDuplicates(std::vector<T>& list)
 
 } // namespace
 
+template<typename T>
+class ValueUpdater
+{
+private:
+  std::optional<T>& m_value;
+  bool m_invalidated = false;
+
+public:
+  explicit ValueUpdater(std::optional<T>& val)
+    : m_value(val)
+  {
+
+  }
+
+  void update(const T& val)
+  {
+    if (m_invalidated)
+    {
+      return;
+    }
+
+    if (m_value.has_value())
+    {
+      if (*m_value != val)
+      {
+        m_value.reset();
+        m_invalidated = true;
+      }
+    }
+    else
+    {
+      m_value = val;
+    }
+  }
+
+  void update(const std::optional<T>& val)
+  {
+    if (val.has_value())
+    {
+      update(*val);
+    }
+  }
+
+  bool valid() const
+  {
+    return m_value.has_value() && !m_invalidated;
+  }
+
+
+};
+
 FileIdTable::FileIdTable()
 {
   m_filesmap[""] = 0;
@@ -167,6 +221,11 @@ void SnapshotMerger::addInputPath(const std::filesystem::path& inputPath)
   m_input_paths.push_back(inputPath);
 }
 
+void SnapshotMerger::setProjectHome(const std::filesystem::path& homePath)
+{
+  m_project_home_path = homePath;
+}
+
 void SnapshotMerger::runMerge()
 {
   // list good snapshots (remove duplicates and non-snapshot files)
@@ -191,12 +250,69 @@ void SnapshotMerger::runMerge()
       filepaths.insert(absolute.generic_u8string());
 
       m_snapshots.emplace_back();
-      m_snapshots.back().reader = std::move(reader);
-      m_snapshots.back().reader.close();
+      InputSnapshot& snapshot = m_snapshots.back();
+      snapshot.reader = std::move(reader);
+      snapshot.properties = snapshot.reader.readProperties();
+      snapshot.reader.close();
     }
   }
 
-  FileIdTable& table = m_fileid_table;
+  writer().open(m_output_path);
+
+  // write "info" table
+  {
+    Snapshot::Properties properties;
+
+    properties["cppscanner.version"] = cppscanner::versioncstr();
+    properties["cppscanner.os"] = cppscanner::system_name();
+
+    if (m_project_home_path.has_value())
+    {
+      properties["project.home"] = Snapshot::normalizedPath(m_project_home_path->generic_u8string());
+    }
+    else
+    {
+      std::optional<std::string> home;
+      ValueUpdater updater{ home };
+
+      for (InputSnapshot& snapshot : m_snapshots)
+      {
+        updater.update(getProperty(snapshot.properties, "project.home"));
+      }
+
+      if (updater.valid())
+      {
+        properties["project.home"] = Snapshot::normalizedPath(home.value());
+      }
+      else
+      {
+        // TODO: print warning ?
+      }
+    }
+
+    const std::vector<std::string> extraProps{ "scanner.indexLocalSymbols", "scanner.indexExternalFiles", "scanner.root" };
+    for (const std::string& key : extraProps)
+    {
+      std::optional<std::string> value;
+      ValueUpdater updater{ value };
+
+      for (InputSnapshot& snapshot : m_snapshots)
+      {
+        updater.update(getProperty(snapshot.properties, key));
+      }
+
+      if (updater.valid())
+      {
+        properties[key] = *value;
+      }
+    }
+
+    writer().beginTransaction();
+    writer().insert(properties);
+    writer().endTransaction();
+  }
+
+  FileIdTable table;
   std::map<FileID, std::string> file_content_map;
 
   // build the file id table
@@ -236,7 +352,6 @@ void SnapshotMerger::runMerge()
     }
   }
 
-  writer().open(m_output_path);
 
   // write "file" table
   {
@@ -281,7 +396,7 @@ void SnapshotMerger::runMerge()
       constexpr bool fetch_content = false;
       std::vector<File> files = snapshot.reader.getFiles(fetch_content);
 
-      snapshot.idtable = createRemapTable(files, m_fileid_table);
+      snapshot.idtable = createRemapTable(files, table);
 
       std::vector<Include> includes = snapshot.reader.getIncludes();
 

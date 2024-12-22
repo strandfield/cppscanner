@@ -18,6 +18,7 @@ struct MergeCommandOptions
 {
   std::vector<std::string> inputs; 
   std::filesystem::path output;
+  std::optional<std::filesystem::path> home;
 };
 
 /**
@@ -26,6 +27,7 @@ struct MergeCommandOptions
 class MergeCommandInvocation
 {
 private:
+  MergeCommandOptions m_cli;
   MergeCommandOptions m_options;
   std::vector<std::string> m_errors;
 
@@ -33,6 +35,9 @@ public:
   explicit MergeCommandInvocation(const std::vector<std::string>& command);
 
   const MergeCommandOptions& parsedCommandLine() const;
+
+  void readEnv();
+
   const MergeCommandOptions& options() const;
 
   bool exec();

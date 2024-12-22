@@ -440,9 +440,26 @@ void SnapshotWriter::setProperty(const std::string& key, const char* value)
   setProperty(key, std::string(value));
 }
 
-void SnapshotWriter::setProperty(const std::string& key, const Path& path)
+void SnapshotWriter::setProperty(const std::string& key, const Snapshot::Path& path)
 {
   return setProperty(key, path.str());
+}
+
+void SnapshotWriter::insert(const Snapshot::Properties& properties)
+{
+  sql::Statement stmt{ database() };
+
+  stmt.prepare("INSERT OR REPLACE INTO info (key, value) VALUES (?,?)");
+
+  for (const auto& elem : properties)
+  {
+    stmt.bind(1, elem.first.c_str());
+    stmt.bind(2, elem.second.c_str());
+
+    stmt.insert();
+  }
+
+  stmt.finalize();
 }
 
 void SnapshotWriter::insertFilePaths(const std::vector<File>& files)
