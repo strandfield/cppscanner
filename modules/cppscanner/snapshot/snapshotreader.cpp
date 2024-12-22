@@ -269,7 +269,7 @@ inline static SymbolReference readSymbolReference(sql::Statement& row)
   return r;
 }
 
-std::vector<SymbolReference> SnapshotReader::findReferences(SymbolID symbolID)
+std::vector<SymbolReference> SnapshotReader::findReferences(SymbolID symbolID) const
 {
   sql::Statement stmt{ 
     database(),

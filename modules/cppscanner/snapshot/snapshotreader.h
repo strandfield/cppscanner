@@ -65,12 +65,12 @@ public:
 
   std::vector<BaseOf> getBasesOf(SymbolID classID) const;
   std::vector<Override> getOverridesOf(SymbolID methodID) const;
-  std::vector<SymbolReference> findReferences(SymbolID symbolID);
+  std::vector<SymbolReference> findReferences(SymbolID symbolID) const;
 
   std::vector<Diagnostic> getDiagnostics() const;
 
 private:
-  std::unique_ptr<Database> m_database; // TODO: why use a unique_ptr here ?
+  std::unique_ptr<Database> m_database;
 };
 
 void sort(std::vector<SymbolReference>& refs);
