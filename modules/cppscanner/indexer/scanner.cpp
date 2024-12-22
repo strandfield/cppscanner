@@ -519,7 +519,6 @@ void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQu
     if (!success || !index_data_consumer->didProduceOutput())
     {
       TranslationUnitIndex index;
-      index.fileIdentificator = &(arbiter->fileIdentificator());
       index.mainFileId = arbiter->fileIdentificator().getIdentification(item->filename);
       index.isError = true;
       resultQueue->write(std::move(index));
@@ -645,7 +644,7 @@ void Scanner::scanMultiThreaded()
     }
     else 
     {
-      std::cout << "error: tool invocation failed for " << result.fileIdentificator->getFile(result.mainFileId) << std::endl;
+      std::cout << "error: tool invocation failed for " << d->fileIdentificator->getFile(result.mainFileId) << std::endl;
     }
   }
 
@@ -736,47 +735,6 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
 namespace
 {
-
-std::vector<FileID> createRemapTable(const std::vector<std::string>& filePaths, FileIdentificator& fIdentificator)
-{
-  std::vector<FileID> result;
-  result.reserve(filePaths.size());
-
-  for (const std::string& file : filePaths) {
-    result.push_back(fIdentificator.getIdentification(file));
-  }
-
-  return result;
-}
-
-void remapFileIds(TranslationUnitIndex& tuIndex, FileIdentificator& targetFileIdentificator)
-{
-  std::vector<FileID> newids = createRemapTable(
-    tuIndex.fileIdentifications,
-    targetFileIdentificator
-  );
-
-  tuIndex.fileIdentifications.clear();
-
-  {
-    decltype(tuIndex.indexedFiles) indexed_files;
-
-    for (FileID fid : tuIndex.indexedFiles) {
-      indexed_files.insert(newids[fid]);
-    }
-
-    std::swap(tuIndex.indexedFiles, indexed_files);
-  }
-
-  for (Include& inc : tuIndex.ppIncludes) {
-    inc.fileID = newids[inc.fileID];
-    inc.includedFileID = newids[inc.includedFileID];
-  }
-
-  for (SymbolReference& ref : tuIndex.symReferences) {
-    ref.fileID = newids[ref.fileID];
-  }
-}
 
 std::set<FileID> listIncludedFiles(const std::vector<Include>& includes)
 {
@@ -905,10 +863,6 @@ std::vector<T> merge(
 
 void Scanner::assimilate(TranslationUnitIndex tuIndex)
 {
-  if (tuIndex.fileIdentificator != d->fileIdentificator.get()) {
-    remapFileIds(tuIndex, *d->fileIdentificator);
-  }
-
   const std::vector<std::string> known_files = d->fileIdentificator->getFiles();
 
   std::vector<File> newfiles;

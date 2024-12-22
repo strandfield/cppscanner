@@ -35,11 +35,6 @@ class FileIdentificator;
 class TranslationUnitIndex
 {
 public:
-  FileIdentificator* fileIdentificator = nullptr;
-
-  // TODO: remove me, currently unused
-  std::vector<std::string> fileIdentifications; // remains empty unless 'fileIdentificator' differs from the one in scanner
-
   FileID mainFileId; // id of the main file of the translation unit
   bool isError = false; // whether this index is empty because an error occurred
 

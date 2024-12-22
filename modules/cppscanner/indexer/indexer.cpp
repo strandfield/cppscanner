@@ -1054,7 +1054,6 @@ void Indexer::initialize(clang::ASTContext& Ctx)
 
   resetDidProduceOutput();
   m_index = std::make_unique<TranslationUnitIndex>();
-  m_index->fileIdentificator = &m_fileIdentificator;
   m_index->mainFileId = getFileID(Ctx.getSourceManager().getMainFileID());
 }
 
@@ -1339,7 +1338,7 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
   // - if only one symbol name matches, we mark all other references
   //   as implicit.
 
-  std::string file = index.fileIdentificator->getFile(begin->fileID);
+  std::string file = indexer.fileIdentificator().getFile(begin->fileID);
   int line = begin->position.line();
   int col = begin->position.column();
 
