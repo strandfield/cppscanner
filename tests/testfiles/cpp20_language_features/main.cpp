@@ -1,4 +1,5 @@
 
+#include "concepts.h"
 #include "spaceship.h"
 
 int ret = 0;
@@ -10,6 +11,8 @@ void check(bool v)
 
 int main()
 {
+  testConcepts();
+
   IntPair a = make_intpair(1, 2);
   IntPair b{ .a = 2, .b = 4, };
 
