@@ -24,8 +24,11 @@ find_package(SQLite3)
 add_module(database)
 target_link_libraries(database SQLite::SQLite3)
 
+add_module(snapshot)
+target_link_libraries(snapshot index database)
+
 add_module(indexer)
-target_link_libraries(indexer index database)
+target_link_libraries(indexer snapshot)
 target_link_libraries(indexer 
   clangFrontend
   clangParse

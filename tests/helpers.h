@@ -5,8 +5,8 @@
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/index/reference.h"
 
-#include "cppscanner/indexer/snapshotreader.h"
-#include "cppscanner/indexer/symbolrecorditerator.h"
+#include "cppscanner/snapshot/snapshotreader.h"
+#include "cppscanner/snapshot/symbolrecorditerator.h"
 
 #include <vector>
 #include <optional>

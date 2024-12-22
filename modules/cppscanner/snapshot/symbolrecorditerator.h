@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_SYMBOLRECORDITERATOR_H
 #define CPPSCANNER_SYMBOLRECORDITERATOR_H
 
-#include "cppscanner/indexer/snapshotreader.h"
+#include "snapshotreader.h"
 
 #include "cppscanner/database/sql.h"
 

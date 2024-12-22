@@ -2,7 +2,7 @@
 #include "helpers.h"
 #include "projects.h"
 
-#include "cppscanner/indexer/symbolrecorditerator.h"
+#include "cppscanner/snapshot/symbolrecorditerator.h"
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 
 #include "catch.hpp"

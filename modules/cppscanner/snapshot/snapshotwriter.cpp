@@ -5,7 +5,8 @@
 #include "snapshotwriter.h"
 
 #include "indexersymbol.h"
-#include "symbolrecorditerator.h"
+
+#include "cppscanner/snapshot/symbolrecorditerator.h"
 
 #include "cppscanner/database/readrows.h"
 #include "cppscanner/database/transaction.h"

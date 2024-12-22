@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_TRANSLATIONUNITINDEX_H
 #define CPPSCANNER_TRANSLATIONUNITINDEX_H
 
-#include "indexersymbol.h"
+#include "cppscanner/snapshot/indexersymbol.h"
 
 #include "cppscanner/index/baseof.h"
 #include "cppscanner/index/declaration.h"

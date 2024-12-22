@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_SCANNER_H
 #define CPPSCANNER_SCANNER_H
 
-#include "snapshotwriter.h"
+#include "cppscanner/snapshot/snapshotwriter.h"
 
 #include <filesystem>
 #include <string>
