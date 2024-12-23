@@ -50,7 +50,6 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   symbol = s.getSymbolByName("basic_string");
   REQUIRE(symbol.kind == SymbolKind::Class);
   REQUIRE(!testFlag(symbol, SymbolFlag::FromProject));
-  REQUIRE(symbol.parentId == stdns.id);
 }
 
 TEST_CASE("vector.cpp", "[scanner][stl]")

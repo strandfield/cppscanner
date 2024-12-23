@@ -2,12 +2,15 @@
 #include "format.h"
 
 #include <algorithm>
-#include <format>
 #include <iomanip>
 #include <iostream>
 #include <numbers>
 #include <sstream>
 #include <string_view>
+
+#ifdef __cpp_lib_format
+#include <format>
+
 
 // the following example is taken from https://en.cppreference.com/w/cpp/utility/format/formatter
 
@@ -62,3 +65,15 @@ void testFormatLibrary()
   QuotableString quotable{ "great" };
   std::cout << std::format("is it {0}, or {0:#}?", quotable) << std::endl;
 }
+
+#else
+
+#define NO_FORMAT_HEADER
+
+void testFormatLibrary()
+{
+  std::cout << "std::format() is not available with your compiler" << std::endl;
+}
+
+#endif
+

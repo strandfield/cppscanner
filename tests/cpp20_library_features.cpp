@@ -34,6 +34,18 @@ TEST_CASE("Formatting library (C++20)", "[scanner][cpp20_library_features]")
   SymbolRecord testfunc = s.getSymbolByName("testFormatLibrary()");
   REQUIRE(testfunc.kind == SymbolKind::Function);
 
+  // check if <format> header is present
+  {
+    std::vector<SymbolRecord> symbols = s.getSymbolsByName("NO_FORMAT_HEADER");
+    REQUIRE(symbols.size() <= 1);
+    if (symbols.size() == 1)
+    {
+      SymbolRecord sym = symbols.front();
+      REQUIRE(sym.kind == SymbolKind::Macro);
+      return;
+    }
+  }
+
   SymbolRecord symbol = s.getSymbolByName("QuotableString");
   REQUIRE(symbol.kind == SymbolKind::Struct);
   
