@@ -5,9 +5,9 @@
 #include "cppscanner/cmakeIntegration/cmakeproject.h"
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 #include "cppscanner/scannerInvocation/cmakeinvocation.h"
-#include "cppscanner/indexer/version.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/database/sql.h"
+#include "cppscanner/base/version.h"
 
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"

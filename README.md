@@ -66,6 +66,13 @@ Syntax for creating a snapshot from a CMake target (see below for prerequisites)
 cppscanner run --build <cmake-build-dir> [--config <cmake-config>] --target <cmake-target-name> --output <snapshot.db> [options]
 ```
 
+The `merge` command can be used to merge two or more snapshots into a single one.
+
+Syntax for merging three snapshots:
+```
+cppscanner merge --output output.db snapshotA.db snapshotB.db snapshotC.db
+```
+
 ### Getting a `compile_commands.json` with CMake
 
 Getting a `compile_commands.json` is relative easy if you are using CMake: set the 

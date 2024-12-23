@@ -18,14 +18,19 @@ macro(add_module folder)
   cppscanner_source_group("${files}")
 endmacro()
 
+add_module(base)
+
 add_module(index)
 
 find_package(SQLite3)
 add_module(database)
 target_link_libraries(database SQLite::SQLite3)
 
+add_module(snapshot)
+target_link_libraries(snapshot base index database)
+
 add_module(indexer)
-target_link_libraries(indexer index database)
+target_link_libraries(indexer snapshot)
 target_link_libraries(indexer 
   clangFrontend
   clangParse

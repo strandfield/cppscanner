@@ -4,7 +4,6 @@
 
 #include "scanner.h"
 
-#include "version.h"
 
 #include "indexer.h"
 #include "indexingresultqueue.h"
@@ -16,9 +15,11 @@
 #include "fileindexingarbiter.h"
 #include "translationunitindex.h"
 
-#include "glob.h"
-
 #include "cppscanner/database/transaction.h"
+
+#include "cppscanner/base/glob.h"
+#include "cppscanner/base/os.h"
+#include "cppscanner/base/version.h"
 
 #include <clang/Tooling/JSONCompilationDatabase.h>
 
@@ -162,19 +163,14 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
   m_snapshot = std::make_unique<SnapshotWriter>(p);
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
+  m_snapshot->setProperty("cppscanner.os", cppscanner::system_name());
 
-#ifdef _WIN32
-  m_snapshot->setProperty("cppscanner.os", "windows");
-#else
-  m_snapshot->setProperty("cppscanner.os", "linux");
-#endif // _WIN32
-
-  m_snapshot->setProperty("project.home", SnapshotWriter::Path(d->homeDirectory));
+  m_snapshot->setProperty("project.home", Snapshot::Path(d->homeDirectory));
 
   m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
   m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
-  m_snapshot->setProperty("scanner.root", SnapshotWriter::Path(d->rootDirectory.value_or(std::string())));
-  m_snapshot->setProperty("scanner.workingDirectory", SnapshotWriter::Path(std::filesystem::current_path().generic_u8string()));
+  m_snapshot->setProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())));
+  m_snapshot->setProperty("scanner.workingDirectory", Snapshot::Path(std::filesystem::current_path().generic_u8string()));
 }
 
 SnapshotWriter* Scanner::snapshot() const
@@ -519,7 +515,6 @@ void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQu
     if (!success || !index_data_consumer->didProduceOutput())
     {
       TranslationUnitIndex index;
-      index.fileIdentificator = &(arbiter->fileIdentificator());
       index.mainFileId = arbiter->fileIdentificator().getIdentification(item->filename);
       index.isError = true;
       resultQueue->write(std::move(index));
@@ -645,7 +640,7 @@ void Scanner::scanMultiThreaded()
     }
     else 
     {
-      std::cout << "error: tool invocation failed for " << result.fileIdentificator->getFile(result.mainFileId) << std::endl;
+      std::cout << "error: tool invocation failed for " << d->fileIdentificator->getFile(result.mainFileId) << std::endl;
     }
   }
 
@@ -736,47 +731,6 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
 namespace
 {
-
-std::vector<FileID> createRemapTable(const std::vector<std::string>& filePaths, FileIdentificator& fIdentificator)
-{
-  std::vector<FileID> result;
-  result.reserve(filePaths.size());
-
-  for (const std::string& file : filePaths) {
-    result.push_back(fIdentificator.getIdentification(file));
-  }
-
-  return result;
-}
-
-void remapFileIds(TranslationUnitIndex& tuIndex, FileIdentificator& targetFileIdentificator)
-{
-  std::vector<FileID> newids = createRemapTable(
-    tuIndex.fileIdentifications,
-    targetFileIdentificator
-  );
-
-  tuIndex.fileIdentifications.clear();
-
-  {
-    decltype(tuIndex.indexedFiles) indexed_files;
-
-    for (FileID fid : tuIndex.indexedFiles) {
-      indexed_files.insert(newids[fid]);
-    }
-
-    std::swap(tuIndex.indexedFiles, indexed_files);
-  }
-
-  for (Include& inc : tuIndex.ppIncludes) {
-    inc.fileID = newids[inc.fileID];
-    inc.includedFileID = newids[inc.includedFileID];
-  }
-
-  for (SymbolReference& ref : tuIndex.symReferences) {
-    ref.fileID = newids[ref.fileID];
-  }
-}
 
 std::set<FileID> listIncludedFiles(const std::vector<Include>& includes)
 {
@@ -905,10 +859,6 @@ std::vector<T> merge(
 
 void Scanner::assimilate(TranslationUnitIndex tuIndex)
 {
-  if (tuIndex.fileIdentificator != d->fileIdentificator.get()) {
-    remapFileIds(tuIndex, *d->fileIdentificator);
-  }
-
   const std::vector<std::string> known_files = d->fileIdentificator->getFiles();
 
   std::vector<File> newfiles;
@@ -1002,7 +952,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
     }
   }
 
-  // insert new new symbols, update the others that need it
+  // insert new symbols, update the others that need it
   {
     std::vector<const IndexerSymbol*> symbols_to_insert;
     std::vector<const IndexerSymbol*> symbols_with_flags_to_update;
@@ -1015,14 +965,11 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
         symbols_to_insert.push_back(&newsymbol);
       } else {
         IndexerSymbol& existing_symbol = it->second;
-
-        if (existing_symbol.flags != p.second.flags) {
-          // TODO: this may not be the right way to update the flags
-          existing_symbol.flags |= p.second.flags;
+        int what_updated = update(existing_symbol, p.second);
+        if (what_updated & IndexerSymbol::FlagUpdate)
+        {
           symbols_with_flags_to_update.push_back(&existing_symbol);
         }
-
-        // TODO: there may be other things to update...
       }
     }
 
@@ -1096,7 +1043,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
 
   // Process refargs
   {
-    sql::Transaction transaction{ m_snapshot->database() };
+    sql::TransactionScope transaction{ m_snapshot->database() };
     m_snapshot->insert(tuIndex.fileAnnotations.refargs);
   }
 
@@ -1118,11 +1065,11 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
       if (fileAlreadyIndexed(cur_file_id)) {
         std::vector<SymbolDeclaration> declarations = merge(m_snapshot->loadDeclarationsInFile(cur_file_id), it, end);
 
-        sql::Transaction transaction{ m_snapshot->database() };
+        sql::TransactionScope transaction{ m_snapshot->database() };
         m_snapshot->removeAllDeclarationsInFile(cur_file_id);
         m_snapshot->insert(declarations);
       } else {
-        sql::Transaction transaction{ m_snapshot->database() };
+        sql::TransactionScope transaction{ m_snapshot->database() };
         m_snapshot->insert(std::vector<SymbolDeclaration>(it, end));
       }
 
