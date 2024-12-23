@@ -410,7 +410,10 @@ void SnapshotMerger::runMerge()
       }
     }
 
-    sortAndRemoveDuplicates(allincludes);
+    if (m_snapshots.size() > 1)
+    {
+      sortAndRemoveDuplicates(allincludes);
+    }
     writer().beginTransaction();
     writer().insertIncludes(allincludes);
     writer().endTransaction();
@@ -435,7 +438,10 @@ void SnapshotMerger::runMerge()
       }
     }
 
-    sortAndRemoveDuplicates(all);
+    if (m_snapshots.size() > 1)
+    {
+      sortAndRemoveDuplicates(all);
+    }
     writer().beginTransaction();
     writer().insert(all);
     writer().endTransaction();
@@ -460,7 +466,10 @@ void SnapshotMerger::runMerge()
       }
     }
 
-    sortAndRemoveDuplicates(all);
+    if (m_snapshots.size() > 1)
+    {
+      sortAndRemoveDuplicates(all);
+    }
     writer().beginTransaction();
     writer().insertDiagnostics(all);
     writer().endTransaction();
@@ -528,7 +537,10 @@ void SnapshotMerger::runMerge()
       }
     }
 
-    sortAndRemoveDuplicates(all);
+    if (m_snapshots.size() > 1)
+    {
+      sortAndRemoveDuplicates(all);
+    }
     writer().beginTransaction();
     writer().insert(all);
     writer().endTransaction();
@@ -553,7 +565,10 @@ void SnapshotMerger::runMerge()
       }
     }
 
-    sortAndRemoveDuplicates(all);
+    if (m_snapshots.size() > 1)
+    {
+      sortAndRemoveDuplicates(all);
+    }
     writer().beginTransaction();
     writer().insert(all);
     writer().endTransaction();
@@ -574,7 +589,10 @@ void SnapshotMerger::runMerge()
       all.insert(all.end(), entries.begin(), entries.end());
     }
 
-    sortAndRemoveDuplicates(all);
+    if (m_snapshots.size() > 1)
+    {
+      sortAndRemoveDuplicates(all);
+    }
     writer().beginTransaction();
     writer().insertBaseOfs(all);
     writer().endTransaction();
@@ -595,7 +613,10 @@ void SnapshotMerger::runMerge()
       all.insert(all.end(), entries.begin(), entries.end());
     }
 
-    sortAndRemoveDuplicates(all);
+    if (m_snapshots.size() > 1)
+    {
+      sortAndRemoveDuplicates(all);
+    }
     writer().beginTransaction();
     writer().insertOverrides(all);
     writer().endTransaction();
