@@ -21,6 +21,7 @@ extern void runCMake(std::vector<std::string> args);
   std::cout << std::endl;
   std::cout << "Commands:" << std::endl;
   std::cout << "  run: runs the scanner to create a snapshot" << std::endl;
+  std::cout << "  merge: merge two or more snapshots" << std::endl;
   std::cout << "  cmake: generates a cmake project through the scanner" << std::endl;
   std::cout << std::endl;
   std::cout << "Use the '-h' option to get more information about each command." << std::endl;
