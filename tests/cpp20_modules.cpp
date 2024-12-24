@@ -54,7 +54,15 @@ TEST_CASE("modules", "[scanner][cpp20_modules]")
   TemporarySnapshot s{ snapshot_name };
   s.delete_on_close = false;
 
-  SymbolRecord mymodule = s.getSymbolByName("Hello");
+  std::vector<File> files = s.getFiles();
+  File maincpp = getFile(files, std::regex("main\\.cpp"));
 
+  SymbolRecord mymodule = s.getSymbolByName("Hello");
   REQUIRE(mymodule.kind == SymbolKind::Module);
+
+  std::vector<SymbolReference> refs = s.findReferences(mymodule.id);
+  REQUIRE(refs.size() == 1);
+  SymbolReference r = refs.at(0);
+  REQUIRE(r.fileID == maincpp.id);
+  REQUIRE(r.position.line() == 2);
 }
