@@ -14,11 +14,11 @@ static const std::string HOME_DIR = TESTFILES_DIRECTORY + std::string("/cpp20_li
 TEST_CASE("Formatting library (C++20)", "[scanner][cpp20_library_features]")
 {
   const std::string snapshot_name = "cpp20_library_features-format.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "-i", HOME_DIR + std::string("/format.cpp"),
     "--home", HOME_DIR,
-    "--overwrite",
     "-o", snapshot_name,
     "--", "-std=c++20"}
   };

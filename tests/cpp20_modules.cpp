@@ -12,6 +12,7 @@ using namespace cppscanner;
 TEST_CASE("modules", "[scanner][cpp20_modules]")
 {
   const std::string snapshot_name = "cpp20_modules.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   constexpr const char* cpp20_modules_dir = "cpp20_modules";
   const auto maincppPath = std::filesystem::path(TESTFILES_DIRECTORY) / cpp20_modules_dir / "main.cpp";
@@ -24,10 +25,6 @@ TEST_CASE("modules", "[scanner][cpp20_modules]")
     scanner.setHomeDir(std::filesystem::path(TESTFILES_DIRECTORY) / cpp20_modules_dir);
     scanner.setIndexLocalSymbols(true);
 
-    if (std::filesystem::exists(snapshot_name))
-    {
-      std::filesystem::remove(snapshot_name);
-    }
     scanner.initSnapshot(snapshot_name);
 
     std::vector<ScannerCompileCommand> commands;

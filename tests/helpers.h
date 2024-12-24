@@ -8,6 +8,8 @@
 #include "cppscanner/snapshot/snapshotreader.h"
 #include "cppscanner/snapshot/symbolrecorditerator.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <vector>
 #include <optional>
 #include <regex>
@@ -72,50 +74,49 @@ inline void filterRefs(std::vector<cppscanner::SymbolReference>& refs, const Sym
   refs.erase(it, refs.end());
 }
 
-class [[deprecated]] TemporarySnapshot : public cppscanner::SnapshotReader
+class SnapshotDeleter
 {
 private:
   std::filesystem::path m_db_path;
-public:
-  bool delete_on_close = true;
 
-public:
-  explicit TemporarySnapshot(const std::filesystem::path& p)
-    : SnapshotReader(p),
-    m_db_path(p)
+  void remove()
   {
-
-  }
-
-  ~TemporarySnapshot()
-  {
-    database().close();
-    if (delete_on_close) {
+    if (std::filesystem::exists(m_db_path))
+    {
       std::filesystem::remove(m_db_path);
     }
   }
-};
-
-class TestSnapshotReader : public cppscanner::SnapshotReader
-{
-private:
-  std::filesystem::path m_db_path;
-public:
-  bool delete_on_close = false;
 
 public:
-  explicit TestSnapshotReader(const std::filesystem::path& p)
-    : SnapshotReader(p),
-    m_db_path(p)
+  explicit SnapshotDeleter(const std::filesystem::path& p)
+    : m_db_path(p)
   {
-
+    remove();
   }
 
-  ~TestSnapshotReader()
+  SnapshotDeleter(const SnapshotDeleter&) = delete;
+
+  ~SnapshotDeleter()
   {
-    database().close();
-    if (delete_on_close) {
-      std::filesystem::remove(m_db_path);
+    bool doRemove = true;
+
+    if (const char* value = std::getenv("CPPSCANNER_TESTS_KEEP_SNAPSHOTS"))
+    {
+      if (std::strcmp(value, "0") == 0 || std::strcmp(value, "OFF") == 0)
+      {
+        doRemove = false;
+      }
+    }
+    else
+    {
+#if defined(CPPSCANNER_TESTS_KEEP_SNAPSHOTS)
+      doRemove = false;
+#endif
+    }
+
+    if (doRemove)
+    {
+      remove();
     }
   }
 };

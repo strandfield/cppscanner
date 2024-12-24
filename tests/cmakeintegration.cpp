@@ -27,12 +27,12 @@ TEST_CASE("includedir", "[scanner][cmake]")
   REQUIRE(cmkindex.read(INCLUDEDIR_BUILD_DIR));
 
   const std::string snapshot_name = "includedir.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "--build", INCLUDEDIR_BUILD_DIR,
     "--target", CMakeTarget::all(),
     "--home", INCLUDEDIR_ROOT_DIR,
-    "--overwrite",
     "-o", snapshot_name }
   };
 
@@ -72,12 +72,12 @@ TEST_CASE("cmake_compile_definitions", "[scanner][cmake]")
   cmake.exec();
 
   const std::string snapshot_name = "cmake_compile_definitions.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "--build", CMAKE_COMPILE_DEFINITIONS_BUILD_DIR,
     "--target", CMakeTarget::all(),
     "--home", CMAKE_COMPILE_DEFINITIONS_ROOT_DIR,
-    "--overwrite",
     "-o", snapshot_name }
   };
 
@@ -112,12 +112,12 @@ TEST_CASE("cmake_precompile_headers", "[scanner][cmake]")
   cmake.exec();
 
   const std::string snapshot_name = "cmake_precompile_headers.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "--build", CMAKE_PRECOMPILE_HEADERS_BUILD_DIR,
     "--target", CMakeTarget::all(),
     "--home", CMAKE_PRECOMPILE_HEADERS_ROOT_DIR,
-    "--overwrite",
     "-o", snapshot_name }
   };
 
