@@ -398,6 +398,11 @@ bool SnapshotWriter::isOpen() const
   return m_database != nullptr;
 }
 
+const std::filesystem::path& SnapshotWriter::filePath() const
+{
+  return m_database_path;
+}
+
 /**
  * \brief returns the database associated with the snapshot
  */

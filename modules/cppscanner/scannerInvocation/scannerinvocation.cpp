@@ -118,6 +118,10 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
     {
       result.ignore_file_content = true;
     }
+    else if (arg == "--remap-file-ids")
+    {
+      result.remap_file_ids = true;
+    }
     else if (arg == "--overwrite" || arg == "-y") 
     {
       result.overwrite = true;
@@ -249,6 +253,10 @@ void ScannerInvocation::run()
 
   if (options().ignore_file_content) {
     scanner.setCaptureFileContent(false);
+  }
+
+  if (options().remap_file_ids) {
+    scanner.setRemapFileIds(true);
   }
 
   if (!options().filters.empty()) {

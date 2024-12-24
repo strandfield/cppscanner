@@ -15,6 +15,8 @@
 #include "fileindexingarbiter.h"
 #include "translationunitindex.h"
 
+#include "cppscanner/snapshot/merge.h"
+
 #include "cppscanner/database/transaction.h"
 
 #include "cppscanner/base/glob.h"
@@ -65,6 +67,9 @@ struct ScannerData
   std::vector<std::string> translationUnitFilters;
   std::vector<std::string> compilationArguments;
   bool captureFileContent = true;
+  bool remapFileIds = false;
+
+  std::filesystem::path outputPath;
 
   std::vector<ScannerCompileCommand> compileCommands;
 
@@ -157,6 +162,11 @@ void Scanner::setCaptureFileContent(bool on)
   d->captureFileContent = on;
 }
 
+void Scanner::setRemapFileIds(bool on)
+{
+  d->remapFileIds = on;
+}
+
 void Scanner::setCompilationArguments(const std::vector<std::string>& args)
 {
   d->compilationArguments = args;
@@ -168,7 +178,11 @@ void Scanner::setCompilationArguments(const std::vector<std::string>& args)
  */
 void Scanner::initSnapshot(const std::filesystem::path& p)
 {
-  m_snapshot = std::make_unique<SnapshotWriter>(p);
+  d->outputPath = p;
+
+  std::filesystem::path dbPath = d->remapFileIds ? (p.generic_u8string() + ".tmp") : p;
+
+  m_snapshot = std::make_unique<SnapshotWriter>(dbPath);
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
   m_snapshot->setProperty("cppscanner.os", cppscanner::system_name());
@@ -710,6 +724,22 @@ void Scanner::runScanSingleOrMultiThreaded()
   else
   {
     scanMultiThreaded();
+  }
+
+  if (d->remapFileIds)
+  {
+    const std::filesystem::path tmp_path = m_snapshot->filePath();
+
+    SnapshotMerger merger;
+    merger.setOutputPath(d->outputPath);
+    merger.setProjectHome(d->homeDirectory);
+    merger.addInputPath(tmp_path);
+
+    m_snapshot.reset();
+
+    merger.runMerge();
+
+    std::filesystem::remove(tmp_path);
   }
 }
 

@@ -30,6 +30,7 @@ struct ScannerOptions
   bool index_external_files = false;
   bool index_local_symbols = false;
   bool ignore_file_content = false;
+  bool remap_file_ids = false;
   std::optional<int> nb_threads;
   std::vector<std::string> filters;
   std::vector<std::string> translation_unit_filters;

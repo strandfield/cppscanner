@@ -44,6 +44,7 @@ public:
   bool open(const std::filesystem::path& p);
   bool isOpen() const;
 
+  const std::filesystem::path& filePath() const;
   Database& database() const;
 
   static constexpr int DatabaseSchemaVersion = 0;

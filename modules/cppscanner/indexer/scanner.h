@@ -58,6 +58,7 @@ public:
   void setNumberOfParsingThread(size_t n);
 
   void setCaptureFileContent(bool on = true);
+  void setRemapFileIds(bool on);
 
   void setCompilationArguments(const std::vector<std::string>& args);
 
