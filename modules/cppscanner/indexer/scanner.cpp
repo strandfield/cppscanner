@@ -946,9 +946,10 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
       newfiles.push_back(std::move(f));
     }
 
-    sql::runTransacted(m_snapshot->database(), [this, &newfiles]() {
-      snapshot::insertFiles(*m_snapshot, newfiles);
-      });
+    {
+      sql::TransactionScope transaction{ m_snapshot->database() };
+      m_snapshot->insertFiles(newfiles);
+    }
 
     for (const File& f : newfiles) {
       set_flag(d->filePathsInserted, f.id);
@@ -1053,18 +1054,21 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
         }
       );
 
-      if (fileAlreadyIndexed(cur_file_id)) {
+      if (fileAlreadyIndexed(cur_file_id)) 
+      {
         std::vector<SymbolReference> references = m_snapshot->loadSymbolReferencesInFile(cur_file_id);
         insertOrIgnore(references, it, end);
 
-        sql::runTransacted(m_snapshot->database(), [this, cur_file_id, &references]() {
+        {
+          sql::TransactionScope transaction{ m_snapshot->database() };
           m_snapshot->removeAllSymbolReferencesInFile(cur_file_id);
-          snapshot::insertSymbolReferences(*m_snapshot, references);
-          });
-      } else {
-        sql::runTransacted(m_snapshot->database(), [this, it, end]() {
-          snapshot::insertSymbolReferences(*m_snapshot, std::vector<SymbolReference>(it, end));
-          });
+          m_snapshot->insert(references);
+        }
+      } 
+      else 
+      {
+        sql::TransactionScope transaction{ m_snapshot->database() };
+        m_snapshot->insert(std::vector<SymbolReference>(it, end));
       }
 
       it = end;

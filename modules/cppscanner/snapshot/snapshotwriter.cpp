@@ -1089,16 +1089,6 @@ const char* db_init_statements()
   return SQL_CREATE_STATEMENTS;
 }
 
-void insertFiles(SnapshotWriter& snapshot, const std::vector<File>& files)
-{
-  snapshot.insertFiles(files);
-}
-
-void insertSymbolReferences(SnapshotWriter& snapshot, const std::vector<SymbolReference>& references)
-{
-  snapshot.insert(references);
-}
-
 } // namespace snapshot
 
 } // namespace cppscanner

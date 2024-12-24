@@ -104,9 +104,6 @@ namespace snapshot
 
 const char* db_init_statements();
 
-[[deprecated]] void insertFiles(SnapshotWriter& snapshot, const std::vector<File>& files);
-[[deprecated]] void insertSymbolReferences(SnapshotWriter& snapshot, const std::vector<SymbolReference>& references);
-
 } // namespace snapshot
 
 } // namespace cppscanner
