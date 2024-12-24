@@ -180,7 +180,8 @@ void Scanner::initSnapshot(const std::filesystem::path& p)
 {
   d->outputPath = p;
 
-  std::filesystem::path dbPath = d->remapFileIds ? (p.generic_u8string() + ".tmp") : p;
+  const std::filesystem::path dbPath = d->remapFileIds ? 
+    std::filesystem::path(p.generic_u8string() + ".tmp") : p;
 
   m_snapshot = std::make_unique<SnapshotWriter>(dbPath);
 
