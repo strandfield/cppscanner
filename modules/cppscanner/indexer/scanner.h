@@ -68,6 +68,8 @@ public:
   void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs);
   void scan(const std::vector<ScannerCompileCommand>& compileCommands);
 
+  static void fillContent(File& file);
+
 protected:
   bool passTranslationUnitFilters(const std::string& filename) const;
   void scanSingleThreaded();

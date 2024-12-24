@@ -948,6 +948,26 @@ std::string computeSha1(const std::string& text)
 
 } // namespace
 
+void Scanner::fillContent(File& f)
+{
+  {
+    std::ifstream stream{ f.path };
+    if (stream.good()) 
+    {
+      stream.seekg(0, std::ios::end);
+      f.content.reserve(stream.tellg());
+      stream.seekg(0, std::ios::beg);
+      f.content.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    }
+  }
+
+  if (!f.content.empty())
+  {
+    removeCarriageReturns(f.content);
+    f.sha1 = computeSha1(f.content);
+  }
+}
+
 void Scanner::assimilate(TranslationUnitIndex tuIndex)
 {
   const std::vector<std::string> known_files = d->fileIdentificator->getFiles();
@@ -967,17 +987,7 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
 
       if (d->captureFileContent)
       {
-        std::ifstream file{ f.path };
-        if (file.good()) 
-        {
-          file.seekg(0, std::ios::end);
-          f.content.reserve(file.tellg());
-          file.seekg(0, std::ios::beg);
-          f.content.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        }
-
-        removeCarriageReturns(f.content);
-        f.sha1 = computeSha1(f.content);
+        fillContent(f);
       }
 
       newfiles.push_back(std::move(f));

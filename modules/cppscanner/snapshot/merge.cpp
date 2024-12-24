@@ -228,6 +228,11 @@ void SnapshotMerger::setProjectHome(const std::filesystem::path& homePath)
   m_project_home_path = homePath;
 }
 
+void SnapshotMerger::setFileContentWriter(std::unique_ptr<FileContentWriter> contentWriter)
+{
+  m_file_content_writer = std::move(contentWriter);
+}
+
 void SnapshotMerger::runMerge()
 {
   // list good snapshots (remove duplicates and non-snapshot files)
@@ -323,7 +328,7 @@ void SnapshotMerger::runMerge()
       std::string sha1;
       std::string text;
     };
-    std::map<FileID, FileContent> file_content_map;
+    std::map<FileID, FileContent> file_content_map; // content of files belonging to the project
 
     // build the file id table
     {
@@ -361,6 +366,25 @@ void SnapshotMerger::runMerge()
       for (const std::string& path : external_files)
       {
         table.insert(path);
+      }
+    }
+
+    if (m_file_content_writer)
+    {
+      for (auto& element : file_content_map)
+      {
+        if (!element.second.text.empty()) {
+          continue;
+        }
+
+        File f;
+        f.id = element.first;
+        f.path = table.getFile(f.id);
+        
+        m_file_content_writer->fill(f);
+
+        element.second.sha1 = f.sha1;
+        element.second.text = std::move(f.content);
       }
     }
 

@@ -19,6 +19,7 @@ struct MergeCommandOptions
   std::vector<std::string> inputs; 
   std::filesystem::path output;
   std::optional<std::filesystem::path> home;
+  bool captureMissingFileContent = false;
 };
 
 /**
