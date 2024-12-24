@@ -64,6 +64,7 @@ struct ScannerData
   std::vector<std::string> filters;
   std::vector<std::string> translationUnitFilters;
   std::vector<std::string> compilationArguments;
+  bool captureFileContent = true;
 
   std::vector<ScannerCompileCommand> compileCommands;
 
@@ -149,6 +150,11 @@ void Scanner::setTranslationUnitFilters(const std::vector<std::string>& filters)
 void Scanner::setNumberOfParsingThread(size_t n)
 {
   d->nbThreads = n;
+}
+
+void Scanner::setCaptureFileContent(bool on)
+{
+  d->captureFileContent = on;
 }
 
 void Scanner::setCompilationArguments(const std::vector<std::string>& args)
@@ -959,16 +965,20 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
       f.id = fid;
       f.path = known_files.at(fid);
 
-      std::ifstream file{ f.path };
-      if (file.good()) {
-        file.seekg(0, std::ios::end);
-        f.content.reserve(file.tellg());
-        file.seekg(0, std::ios::beg);
-        f.content.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-      }
+      if (d->captureFileContent)
+      {
+        std::ifstream file{ f.path };
+        if (file.good()) 
+        {
+          file.seekg(0, std::ios::end);
+          f.content.reserve(file.tellg());
+          file.seekg(0, std::ios::beg);
+          f.content.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        }
 
-      removeCarriageReturns(f.content);
-      f.sha1 = computeSha1(f.content);
+        removeCarriageReturns(f.content);
+        f.sha1 = computeSha1(f.content);
+      }
 
       newfiles.push_back(std::move(f));
     }

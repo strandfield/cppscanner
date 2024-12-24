@@ -114,6 +114,10 @@ ScannerOptions parseCommandLine(const std::vector<std::string>& args)
     {
       result.index_local_symbols = true;
     }
+    else if (arg == "--ignore-file-content")
+    {
+      result.ignore_file_content = true;
+    }
     else if (arg == "--overwrite" || arg == "-y") 
     {
       result.overwrite = true;
@@ -241,6 +245,10 @@ void ScannerInvocation::run()
 
   if (options().index_local_symbols) {
     scanner.setIndexLocalSymbols();
+  }
+
+  if (options().ignore_file_content) {
+    scanner.setCaptureFileContent(false);
   }
 
   if (!options().filters.empty()) {

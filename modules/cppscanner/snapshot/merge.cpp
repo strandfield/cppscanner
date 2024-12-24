@@ -20,10 +20,12 @@ namespace cppscanner
 namespace
 {
 
-std::vector<File>::const_iterator partitionByProjectStatus(std::vector<File>& files)
+std::vector<File>::const_iterator partitionByProjectStatus(std::vector<File>& files, const std::string& homePath)
 {
-  return std::partition(files.begin(), files.end(), [](const File& f) {
-    return !f.content.empty();
+  const std::string prefix = homePath + "/";
+
+  return std::partition(files.begin(), files.end(), [&prefix](const File& f) {
+    return f.path.rfind(prefix, 0) == 0;
     });
 }
 
@@ -277,7 +279,7 @@ void SnapshotMerger::runMerge()
 
       for (InputSnapshot& snapshot : m_snapshots)
       {
-        updater.update(getProperty(snapshot.properties, "project.home"));
+        updater.update(snapshot.properties.at("project.home"));
       }
 
       if (updater.valid())
@@ -336,7 +338,7 @@ void SnapshotMerger::runMerge()
 
         snapshot.reader.close();
 
-        auto outside_project_it = partitionByProjectStatus(files);
+        auto outside_project_it = partitionByProjectStatus(files, snapshot.properties.at("project.home"));
 
         for (auto it = files.begin(); it != outside_project_it; ++it)
         {

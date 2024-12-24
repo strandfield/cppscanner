@@ -57,6 +57,8 @@ public:
 
   void setNumberOfParsingThread(size_t n);
 
+  void setCaptureFileContent(bool on = true);
+
   void setCompilationArguments(const std::vector<std::string>& args);
 
   void initSnapshot(const std::filesystem::path& p);
