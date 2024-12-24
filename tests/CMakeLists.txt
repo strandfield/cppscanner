@@ -64,6 +64,7 @@ add_executable(TEST_cppscanner "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "${CMAKE_
   "cxx_language_features.cpp"
   "cpp20_language_features.cpp"
   "cpp20_library_features.cpp"
+  "cpp20_modules.cpp"
   "stl.cpp"
   "cmakeintegration.cpp"
 )

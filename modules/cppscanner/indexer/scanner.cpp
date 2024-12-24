@@ -214,6 +214,18 @@ static bool isPchCompileCommand(const clang::tooling::CompileCommand& cc)
   return false;
 }
 
+static bool isPcmCompileCommand(const clang::tooling::CompileCommand& cc)
+{
+  if (cc.CommandLine.at(1) == "-cc1")
+  {
+    return std::find(cc.CommandLine.begin(), cc.CommandLine.end(), "-emit-module-interface") != cc.CommandLine.end();
+  }
+  else
+  {
+    return std::find(cc.CommandLine.begin(), cc.CommandLine.end(), "--precompile") != cc.CommandLine.end();
+  }
+}
+
 void Scanner::scanFromCompileCommands(const std::filesystem::path& compileCommandsPath)
 {
   assert(snapshot());
@@ -236,7 +248,7 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
   for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
   {
     ScannerCompileCommand scanner_command;
-    if (isPchCompileCommand(cc)) {
+    if (isPchCompileCommand(cc) || isPcmCompileCommand(cc)) {
       scanner_command.commandLine = pchArgsAdjuster(cc.CommandLine, cc.Filename);
     } else {
       scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
@@ -434,8 +446,10 @@ private:
 
 static void compilePCH(const ScannerCompileCommand& cc, const std::filesystem::path& pchOutput, clang::FileManager* fileManager)
 {
-  std::filesystem::create_directories(pchOutput.parent_path());
-
+  if (!pchOutput.parent_path().empty())
+  {
+    std::filesystem::create_directories(pchOutput.parent_path());
+  }
   auto action = std::make_unique<clang::GeneratePCHAction>();
   clang::tooling::ToolInvocation invocation{ cc.commandLine, std::move(action), fileManager};
   const bool success = invocation.run();
@@ -443,6 +457,33 @@ static void compilePCH(const ScannerCompileCommand& cc, const std::filesystem::p
   {
     std::cerr << "pch compilation failed: " << cc.fileName << std::endl;
   }
+}
+
+static void compilePCM(const ScannerCompileCommand& cc, const std::filesystem::path& pcmOutput, clang::FileManager* fileManager)
+{
+  if (!pcmOutput.parent_path().empty())
+  {
+    std::filesystem::create_directories(pcmOutput.parent_path());
+  }
+
+  auto action = std::make_unique<clang::GenerateModuleInterfaceAction>();
+  clang::tooling::ToolInvocation invocation{ cc.commandLine, std::move(action), fileManager};
+  const bool success = invocation.run();
+  if (!success)
+  {
+    std::cerr << "pcm compilation failed: " << cc.fileName << std::endl;
+  }
+}
+
+static std::optional<std::filesystem::path> findOutput(const ScannerCompileCommand& cc)
+{
+  auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-o");
+
+  if (it == cc.commandLine.end()) {
+    return std::nullopt;
+  }
+
+  return std::filesystem::path(*std::next(it));
 }
 
 static std::optional<std::filesystem::path> findPchOutput(const ScannerCompileCommand& cc)
@@ -453,13 +494,18 @@ static std::optional<std::filesystem::path> findPchOutput(const ScannerCompileCo
     return std::nullopt;
   }
 
-  it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-o");
+  return findOutput(cc);
+}
+
+static std::optional<std::filesystem::path> findPcmOutput(const ScannerCompileCommand& cc)
+{
+  auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-emit-module-interface");
 
   if (it == cc.commandLine.end()) {
     return std::nullopt;
   }
 
-  return std::filesystem::path(*std::next(it));
+  return findOutput(cc);
 }
 
 void Scanner::scanSingleThreaded()
@@ -672,6 +718,7 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
   {
     const bool should_parse = passTranslationUnitFilters(cc.fileName);
     std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
+    std::optional<std::filesystem::path> pcm_output = findPcmOutput(cc);
 
     if (should_parse)
     {
@@ -695,6 +742,16 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
           continue;
         }
       }
+      else if (pcm_output.has_value())
+      {
+        std::cout << "[PCM] " << cc.fileName << std::endl;
+
+        if (!std::filesystem::exists(cc.fileName))
+        {
+          std::cout << "error: file does not exist" << std::endl;
+          continue;
+        }
+      }
       else
       {
         std::cout << "[SKIPPED] " << cc.fileName << std::endl;
@@ -704,6 +761,10 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
     if (pch_output.has_value())
     {
       compilePCH(cc, *pch_output, &fileManager);
+    }
+    else if (pcm_output.has_value())
+    {
+      compilePCM(cc, *pcm_output, &fileManager);
     }
 
     if (!should_parse) {
