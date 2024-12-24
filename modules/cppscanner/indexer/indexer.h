@@ -48,6 +48,7 @@ private:
   Indexer& m_indexer;
   std::map<const clang::Decl*, SymbolID> m_symbolIdCache;
   std::map<const clang::MacroInfo*, SymbolID> m_macroIdCache;
+  std::map<const clang::Module*, SymbolID> m_moduleIdCache;
 
 public:
   explicit SymbolCollector(Indexer& idxr);
@@ -56,6 +57,7 @@ public:
 
   IndexerSymbol* process(const clang::Decl* decl);
   IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
+  IndexerSymbol* process(const clang::Module* moduleInfo);
 
   SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
 
@@ -65,6 +67,7 @@ protected:
   std::string getDeclSpelling(const clang::Decl* decl);
   void fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl);
   void fillSymbol(IndexerSymbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
+  void fillSymbol(IndexerSymbol& symbol, const clang::Module* moduleInfo);
   IndexerSymbol* getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl);
 };
 
