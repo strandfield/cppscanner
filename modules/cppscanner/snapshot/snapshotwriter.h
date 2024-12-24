@@ -44,6 +44,7 @@ public:
   bool open(const std::filesystem::path& p);
   bool isOpen() const;
 
+  const std::filesystem::path& filePath() const;
   Database& database() const;
 
   static constexpr int DatabaseSchemaVersion = 0;
@@ -103,9 +104,6 @@ namespace snapshot
 {
 
 const char* db_init_statements();
-
-[[deprecated]] void insertFiles(SnapshotWriter& snapshot, const std::vector<File>& files);
-[[deprecated]] void insertSymbolReferences(SnapshotWriter& snapshot, const std::vector<SymbolReference>& references);
 
 } // namespace snapshot
 

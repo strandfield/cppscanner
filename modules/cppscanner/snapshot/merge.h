@@ -8,6 +8,7 @@
 #include "snapshotreader.h"
 #include "snapshotwriter.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -34,6 +35,14 @@ public:
   std::string_view getFile(FileID fid) const;
 };
 
+class FileContentWriter
+{
+public:
+  virtual ~FileContentWriter() = default;
+
+  virtual void fill(File& file) = 0;
+};
+
 class SnapshotMerger
 {
 public:
@@ -41,6 +50,7 @@ public:
   void setOutputPath(const std::filesystem::path& outputPath);
   void addInputPath(const std::filesystem::path& inputPath);
   void setProjectHome(const std::filesystem::path& homePath);
+  void setFileContentWriter(std::unique_ptr<FileContentWriter> contentWriter);
 
   void runMerge();
 
@@ -64,6 +74,7 @@ private:
   std::optional<std::filesystem::path> m_project_home_path;
   std::vector<InputSnapshot> m_snapshots;
   SnapshotWriter m_writer;
+  std::unique_ptr<FileContentWriter> m_file_content_writer;
 };
 
 } // namespace cppscanner

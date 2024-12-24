@@ -45,6 +45,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
       { "--build", build_dir,
       "--target", CMakeTarget::all(),
       "--home", CMAKE_SOURCE_DIR,
+      "--remap-file-ids",
       "--threads", "2",
       "--project-name", "cppscanner",
       "--project-version", cppscanner::versioncstr(),

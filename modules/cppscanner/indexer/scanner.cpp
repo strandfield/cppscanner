@@ -15,6 +15,8 @@
 #include "fileindexingarbiter.h"
 #include "translationunitindex.h"
 
+#include "cppscanner/snapshot/merge.h"
+
 #include "cppscanner/database/transaction.h"
 
 #include "cppscanner/base/glob.h"
@@ -38,7 +40,9 @@
 #include <clang/Frontend/FrontendActions.h>
 
 #include <llvm/ADT/ArrayRef.h>
+#include <llvm/ADT/StringExtras.h>
 #include <llvm/Option/Option.h>
+#include <llvm/Support/SHA1.h>
 #include <llvm/TargetParser/Host.h>
 
 #include <algorithm>
@@ -62,6 +66,10 @@ struct ScannerData
   std::vector<std::string> filters;
   std::vector<std::string> translationUnitFilters;
   std::vector<std::string> compilationArguments;
+  bool captureFileContent = true;
+  bool remapFileIds = false;
+
+  std::filesystem::path outputPath;
 
   std::vector<ScannerCompileCommand> compileCommands;
 
@@ -149,6 +157,16 @@ void Scanner::setNumberOfParsingThread(size_t n)
   d->nbThreads = n;
 }
 
+void Scanner::setCaptureFileContent(bool on)
+{
+  d->captureFileContent = on;
+}
+
+void Scanner::setRemapFileIds(bool on)
+{
+  d->remapFileIds = on;
+}
+
 void Scanner::setCompilationArguments(const std::vector<std::string>& args)
 {
   d->compilationArguments = args;
@@ -160,7 +178,12 @@ void Scanner::setCompilationArguments(const std::vector<std::string>& args)
  */
 void Scanner::initSnapshot(const std::filesystem::path& p)
 {
-  m_snapshot = std::make_unique<SnapshotWriter>(p);
+  d->outputPath = p;
+
+  const std::filesystem::path dbPath = d->remapFileIds ? 
+    std::filesystem::path(p.generic_u8string() + ".tmp") : p;
+
+  m_snapshot = std::make_unique<SnapshotWriter>(dbPath);
 
   m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
   m_snapshot->setProperty("cppscanner.os", cppscanner::system_name());
@@ -703,6 +726,22 @@ void Scanner::runScanSingleOrMultiThreaded()
   {
     scanMultiThreaded();
   }
+
+  if (d->remapFileIds)
+  {
+    const std::filesystem::path tmp_path = m_snapshot->filePath();
+
+    SnapshotMerger merger;
+    merger.setOutputPath(d->outputPath);
+    merger.setProjectHome(d->homeDirectory);
+    merger.addInputPath(tmp_path);
+
+    m_snapshot.reset();
+
+    merger.runMerge();
+
+    std::filesystem::remove(tmp_path);
+  }
 }
 
 void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter, clang::FileManager& fileManager)
@@ -916,7 +955,49 @@ std::vector<T> merge(
   return existingElements;
 }
 
+void removeCarriageReturns(std::string& text)
+{
+#ifndef _WIN32
+  return;
+#endif // !_WIN32
+
+  auto it = std::remove_if(text.begin(), text.end(), [](char c) {
+    return c == '\r';
+    });
+
+  text.erase(it, text.end());
+}
+
+std::string computeSha1(const std::string& text)
+{
+  llvm::SHA1 hasher;
+  hasher.update(text);
+  std::array<uint8_t, 20> result = hasher.final();
+  constexpr bool to_lower_case = true;
+  return llvm::toHex(result, to_lower_case);
+}
+
 } // namespace
+
+void Scanner::fillContent(File& f)
+{
+  {
+    std::ifstream stream{ f.path };
+    if (stream.good()) 
+    {
+      stream.seekg(0, std::ios::end);
+      f.content.reserve(stream.tellg());
+      stream.seekg(0, std::ios::beg);
+      f.content.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    }
+  }
+
+  if (!f.content.empty())
+  {
+    removeCarriageReturns(f.content);
+    f.sha1 = computeSha1(f.content);
+  }
+}
 
 void Scanner::assimilate(TranslationUnitIndex tuIndex)
 {
@@ -935,20 +1016,18 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
       f.id = fid;
       f.path = known_files.at(fid);
 
-      std::ifstream file{ f.path };
-      if (file.good()) {
-        file.seekg(0, std::ios::end);
-        f.content.reserve(file.tellg());
-        file.seekg(0, std::ios::beg);
-        f.content.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+      if (d->captureFileContent)
+      {
+        fillContent(f);
       }
 
       newfiles.push_back(std::move(f));
     }
 
-    sql::runTransacted(m_snapshot->database(), [this, &newfiles]() {
-      snapshot::insertFiles(*m_snapshot, newfiles);
-      });
+    {
+      sql::TransactionScope transaction{ m_snapshot->database() };
+      m_snapshot->insertFiles(newfiles);
+    }
 
     for (const File& f : newfiles) {
       set_flag(d->filePathsInserted, f.id);
@@ -1053,18 +1132,21 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
         }
       );
 
-      if (fileAlreadyIndexed(cur_file_id)) {
+      if (fileAlreadyIndexed(cur_file_id)) 
+      {
         std::vector<SymbolReference> references = m_snapshot->loadSymbolReferencesInFile(cur_file_id);
         insertOrIgnore(references, it, end);
 
-        sql::runTransacted(m_snapshot->database(), [this, cur_file_id, &references]() {
+        {
+          sql::TransactionScope transaction{ m_snapshot->database() };
           m_snapshot->removeAllSymbolReferencesInFile(cur_file_id);
-          snapshot::insertSymbolReferences(*m_snapshot, references);
-          });
-      } else {
-        sql::runTransacted(m_snapshot->database(), [this, it, end]() {
-          snapshot::insertSymbolReferences(*m_snapshot, std::vector<SymbolReference>(it, end));
-          });
+          m_snapshot->insert(references);
+        }
+      } 
+      else 
+      {
+        sql::TransactionScope transaction{ m_snapshot->database() };
+        m_snapshot->insert(std::vector<SymbolReference>(it, end));
       }
 
       it = end;

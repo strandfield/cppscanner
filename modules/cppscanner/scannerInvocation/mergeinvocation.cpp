@@ -35,6 +35,10 @@ MergeCommandOptions parseCommandLine(const std::vector<std::string>& args)
 
       result.home = args.at(i++);
     }
+    else if (arg == "--capture-missing-file-content") 
+    {
+      result.captureMissingFileContent = true;
+    }
     else if (arg.rfind('-', 0) != 0)
     {
       result.inputs.push_back(arg);
@@ -52,8 +56,43 @@ void checkConsistency(const MergeCommandOptions& opts)
 {
 
 }
+#ifdef _WIN32
+void convertToLocalPath(std::string& path)
+{
+  if (path.length() < 3 || path.at(0) != '/' || path.at(2) != '/') {
+    return;
+  }
+
+  path[0] = std::toupper(path.at(1));
+  path[1] = ':';
+
+  for (char& c : path)
+  {
+    if (c == '/')
+    {
+      c = '\\';
+    }
+  }
+}
+#else
+void convertToLocalPath(std::string& path)
+{
+  // no-op
+}
+#endif // _WIN32
+
 
 } // namespace
+
+class FileContentWriterImpl : public FileContentWriter
+{
+public:
+  void fill(File& file) override
+  {
+    convertToLocalPath(file.path);
+    Scanner::fillContent(file);
+  }
+};
 
 MergeCommandInvocation::MergeCommandInvocation(const std::vector<std::string>& command)
 {
@@ -93,6 +132,11 @@ bool MergeCommandInvocation::exec()
 
   SnapshotMerger merger;
   merger.setOutputPath(options().output);
+
+  if (options().captureMissingFileContent)
+  {
+    merger.setFileContentWriter(std::make_unique<FileContentWriterImpl>());
+  }
   
   for (const std::string& input : options().inputs)
   {

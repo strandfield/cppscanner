@@ -19,6 +19,7 @@ struct File
 {
   FileID id;
   std::string path;
+  std::string sha1;
   std::string content;
 };
 

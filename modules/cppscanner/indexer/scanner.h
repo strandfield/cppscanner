@@ -57,6 +57,9 @@ public:
 
   void setNumberOfParsingThread(size_t n);
 
+  void setCaptureFileContent(bool on = true);
+  void setRemapFileIds(bool on);
+
   void setCompilationArguments(const std::vector<std::string>& args);
 
   void initSnapshot(const std::filesystem::path& p);
@@ -65,6 +68,8 @@ public:
   void scanFromCompileCommands(const std::filesystem::path& compileCommandsPath);
   void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs);
   void scan(const std::vector<ScannerCompileCommand>& compileCommands);
+
+  static void fillContent(File& file);
 
 protected:
   bool passTranslationUnitFilters(const std::string& filename) const;

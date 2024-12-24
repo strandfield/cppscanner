@@ -97,6 +97,7 @@ CREATE TABLE "accessSpecifier" (
 CREATE TABLE "file" (
   "id"      INTEGER NOT NULL PRIMARY KEY UNIQUE,
   "path"    TEXT NOT NULL,
+  "sha1"    TEXT,
   "content" TEXT
 );
 
@@ -397,6 +398,11 @@ bool SnapshotWriter::isOpen() const
   return m_database != nullptr;
 }
 
+const std::filesystem::path& SnapshotWriter::filePath() const
+{
+  return m_database_path;
+}
+
 /**
  * \brief returns the database associated with the snapshot
  */
@@ -478,14 +484,15 @@ void SnapshotWriter::insertFilePaths(const std::vector<File>& files)
 
 void SnapshotWriter::insertFiles(const std::vector<File>& files)
 {
-  sql::Statement stmt{ database(), "INSERT OR REPLACE INTO file(id, path, content) VALUES(?,?,?)"};
+  sql::Statement stmt{ database(), "INSERT OR REPLACE INTO file(id, path, sha1, content) VALUES(?,?,?,?)"};
 
   for (const File& f : files) 
   {
     const std::string& fpath = normalizedPath(f.path);
     stmt.bind(1, (int)f.id);
     stmt.bind(2, fpath.c_str());
-    stmt.bind(3, f.content.c_str());
+    stmt.bind(3, f.sha1.c_str());
+    stmt.bind(4, f.content.c_str());
     stmt.insert();
   }
 
@@ -1087,16 +1094,6 @@ namespace snapshot
 const char* db_init_statements()
 {
   return SQL_CREATE_STATEMENTS;
-}
-
-void insertFiles(SnapshotWriter& snapshot, const std::vector<File>& files)
-{
-  snapshot.insertFiles(files);
-}
-
-void insertSymbolReferences(SnapshotWriter& snapshot, const std::vector<SymbolReference>& references)
-{
-  snapshot.insert(references);
 }
 
 } // namespace snapshot
