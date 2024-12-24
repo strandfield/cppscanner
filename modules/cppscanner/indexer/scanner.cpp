@@ -38,7 +38,9 @@
 #include <clang/Frontend/FrontendActions.h>
 
 #include <llvm/ADT/ArrayRef.h>
+#include <llvm/ADT/StringExtras.h>
 #include <llvm/Option/Option.h>
+#include <llvm/Support/SHA1.h>
 #include <llvm/TargetParser/Host.h>
 
 #include <algorithm>
@@ -916,6 +918,28 @@ std::vector<T> merge(
   return existingElements;
 }
 
+void removeCarriageReturns(std::string& text)
+{
+#ifndef _WIN32
+  return;
+#endif // !_WIN32
+
+  auto it = std::remove_if(text.begin(), text.end(), [](char c) {
+    return c == '\r';
+    });
+
+  text.erase(it, text.end());
+}
+
+std::string computeSha1(const std::string& text)
+{
+  llvm::SHA1 hasher;
+  hasher.update(text);
+  std::array<uint8_t, 20> result = hasher.final();
+  constexpr bool to_lower_case = true;
+  return llvm::toHex(result, to_lower_case);
+}
+
 } // namespace
 
 void Scanner::assimilate(TranslationUnitIndex tuIndex)
@@ -942,6 +966,9 @@ void Scanner::assimilate(TranslationUnitIndex tuIndex)
         file.seekg(0, std::ios::beg);
         f.content.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
       }
+
+      removeCarriageReturns(f.content);
+      f.sha1 = computeSha1(f.content);
 
       newfiles.push_back(std::move(f));
     }

@@ -313,76 +313,90 @@ void SnapshotMerger::runMerge()
   }
 
   FileIdTable table;
-  std::map<FileID, std::string> file_content_map;
 
-  // build the file id table
+  // process files from all snapshots: build 'table' and fill "file" table
   {
-    std::set<std::string> external_files;
-
-    for (InputSnapshot& snapshot : m_snapshots)
+    struct FileContent
     {
-      snapshot.reader.reopen();
+      std::string sha1;
+      std::string text;
+    };
+    std::map<FileID, FileContent> file_content_map;
 
-      constexpr bool fetch_content = true;
-      std::vector<File> files = snapshot.reader.getFiles(fetch_content);
+    // build the file id table
+    {
+      std::set<std::string> external_files;
 
-      snapshot.reader.close();
-
-      auto outside_project_it = partitionByProjectStatus(files);
-
-      for (auto it = files.begin(); it != outside_project_it; ++it)
+      for (InputSnapshot& snapshot : m_snapshots)
       {
-        std::optional<FileID> fileid = table.insert(it->path);
+        snapshot.reader.reopen();
 
-        if (fileid.has_value())
+        constexpr bool fetch_content = true;
+        std::vector<File> files = snapshot.reader.getFiles(fetch_content);
+
+        snapshot.reader.close();
+
+        auto outside_project_it = partitionByProjectStatus(files);
+
+        for (auto it = files.begin(); it != outside_project_it; ++it)
         {
-          file_content_map[*fileid] = std::move(it->content);
+          std::optional<FileID> fileid = table.insert(it->path);
+
+          if (fileid.has_value())
+          {
+            FileContent& content = file_content_map[*fileid];
+            content.text = std::move(it->content);
+            content.sha1 = std::move(it->sha1);
+          }
+        }
+
+        for (auto it = outside_project_it; it != files.end(); ++it)
+        {
+          external_files.insert(it->path);
         }
       }
 
-      for (auto it = outside_project_it; it != files.end(); ++it)
+      for (const std::string& path : external_files)
       {
-        external_files.insert(it->path);
+        table.insert(path);
       }
     }
 
-    for (const std::string& path : external_files)
+    // write "file" table
     {
-      table.insert(path);
+      std::vector<File> files;
+      files.reserve(table.size());
+
+      for (size_t i(1); i < table.size(); ++i)
+      {
+        File f;
+        f.id = static_cast<FileID>(i);
+        f.path = table.getFile(f.id);
+        files.push_back(f);
+      }
+
+      writer().beginTransaction();
+      writer().insertFilePaths(files);
+      writer().endTransaction();
+
+      files.clear();
+      for (auto& p : file_content_map)
+      {
+        File f;
+        f.id = p.first;
+        f.path = table.getFile(f.id);
+        f.sha1 = std::move(p.second.sha1);
+        f.content = std::move(p.second.text);
+        files.push_back(f);
+      }
+
+
+      writer().beginTransaction();
+      writer().insertFiles(files);
+      writer().endTransaction();
     }
-  }
 
-
-  // write "file" table
-  {
-    std::vector<File> files;
-    files.reserve(table.size());
-
-    for (size_t i(1); i < table.size(); ++i)
-    {
-      File f;
-      f.id = static_cast<FileID>(i);
-      f.path = table.getFile(f.id);
-      files.push_back(f);
-    }
-
-    writer().beginTransaction();
-    writer().insertFilePaths(files);
-    writer().endTransaction();
-
-    files.clear();
-    for (const auto& p : file_content_map)
-    {
-      File f;
-      f.id = p.first;
-      f.path = table.getFile(f.id);
-      f.content = p.second;
-      files.push_back(f);
-    }
-
-    writer().beginTransaction();
-    writer().insertFiles(files);
-    writer().endTransaction();
+    file_content_map.clear();
   }
 
   // write "include" table

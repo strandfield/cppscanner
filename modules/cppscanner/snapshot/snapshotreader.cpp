@@ -129,18 +129,19 @@ Snapshot::Properties SnapshotReader::readProperties() const
   return result;
 }
 
-inline static File readFileIdAndPath(sql::Statement& row)
+inline static File readFileNoContent(sql::Statement& row)
 {
   File f;
   f.id = row.columnInt(0);
   f.path = row.column(1);
+  f.sha1 = row.column(2);
   return f;
 }
 
 inline static File readFileWithContent(sql::Statement& row)
 {
-  File f = readFileIdAndPath(row);
-  f.content = row.column(2);
+  File f = readFileNoContent(row);
+  f.content = row.column(3);
   return f;
 }
 
@@ -150,7 +151,7 @@ std::vector<File> SnapshotReader::getFiles(bool fetchContent) const
   {
     sql::Statement stmt{ 
       database(),
-      "SELECT id, path, content FROM file"
+      "SELECT id, path, sha1, content FROM file"
     };
 
     return sql::readRowsAsVector<File>(stmt, readFileWithContent);
@@ -159,10 +160,10 @@ std::vector<File> SnapshotReader::getFiles(bool fetchContent) const
   {
     sql::Statement stmt{ 
       database(),
-      "SELECT id, path FROM file"
+      "SELECT id, path, sha1 FROM file"
     };
 
-    return sql::readRowsAsVector<File>(stmt, readFileIdAndPath);
+    return sql::readRowsAsVector<File>(stmt, readFileNoContent);
   }
 }
 
