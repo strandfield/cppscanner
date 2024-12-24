@@ -51,8 +51,7 @@ TEST_CASE("modules", "[scanner][cpp20_modules]")
     scanner.scan(commands);
   }
 
-  TemporarySnapshot s{ snapshot_name };
-  s.delete_on_close = false;
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   File maincpp = getFile(files, std::regex("main\\.cpp"));
