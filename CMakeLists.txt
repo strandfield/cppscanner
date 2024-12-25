@@ -15,8 +15,7 @@ find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG HINTS "${LLVM_INSTALL_PREFIX}/lib/cmake/clang")
 
 add_subdirectory(modules)
-add_subdirectory(src)
-add_subdirectory(tools)
+add_subdirectory(apps)
 
 if (NOT DEFINED BUILD_TESTS)
   set(BUILD_TESTS ON CACHE BOOL "whether building tests is enabled")
