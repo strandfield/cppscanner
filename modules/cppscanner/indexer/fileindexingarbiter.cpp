@@ -5,7 +5,8 @@
 #include "fileindexingarbiter.h"
 
 #include "fileidentificator.h"
-#include "glob.h"
+
+#include "cppscanner/base/glob.h"
 
 #include <algorithm>
 #include <cassert>

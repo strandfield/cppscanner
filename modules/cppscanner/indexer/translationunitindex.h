@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_TRANSLATIONUNITINDEX_H
 #define CPPSCANNER_TRANSLATIONUNITINDEX_H
 
-#include "indexersymbol.h"
+#include "cppscanner/snapshot/indexersymbol.h"
 
 #include "cppscanner/index/baseof.h"
 #include "cppscanner/index/declaration.h"
@@ -35,11 +35,6 @@ class FileIdentificator;
 class TranslationUnitIndex
 {
 public:
-  FileIdentificator* fileIdentificator = nullptr;
-
-  // TODO: remove me, currently unused
-  std::vector<std::string> fileIdentifications; // remains empty unless 'fileIdentificator' differs from the one in scanner
-
   FileID mainFileId; // id of the main file of the translation unit
   bool isError = false; // whether this index is empty because an error occurred
 

@@ -66,6 +66,13 @@ Syntax for creating a snapshot from a CMake target (see below for prerequisites)
 cppscanner run --build <cmake-build-dir> [--config <cmake-config>] --target <cmake-target-name> --output <snapshot.db> [options]
 ```
 
+The `merge` command can be used to merge two or more snapshots into a single one.
+
+Syntax for merging three snapshots:
+```
+cppscanner merge --output output.db snapshotA.db snapshotB.db snapshotC.db
+```
+
 ### Getting a `compile_commands.json` with CMake
 
 Getting a `compile_commands.json` is relative easy if you are using CMake: set the 
@@ -91,6 +98,9 @@ cppscanner cmake -B <cmake-build-dir> -S <cmake-source-dir> [cmake-options]
 This command will make the scanner use the CMake file-based API to get information 
 about the build system and targets.
 Ultimately, the `cmake` executable is invoked with the arguments passed as-is.
+
+Projects using precompiled headers (using the `target_precompile_headers()` command)
+are expected to work if you are using the CMake integration.
 
 ### `run` options
 
@@ -122,10 +132,3 @@ A value of 1 means that all the parsing is done in a (single) secondary thread w
 the output database is written in the main thread. The performance benefit should be
 small because parsing takes most of the time.
 The recommended minimum when using this option is therefore 2.
-
-### Unsupported language features & toolchains
-
-Although the parser may be able to process some other C++20 constructs (such as
-the spaceship operator), **C++20 modules** are not supported.
-
-Precompiled headers are not supported.

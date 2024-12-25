@@ -69,6 +69,20 @@ std::string getUSR(const clang::IdentifierInfo* name, const clang::MacroInfo* ma
   return std::string(chars.data(), chars.size());
 }
 
+std::string getUSR(const clang::Module* moduleInfo)
+{
+  llvm::SmallVector<char> chars;
+  llvm::raw_svector_ostream stream{ chars };
+
+  bool ignore = clang::index::generateFullUSRForModule(moduleInfo, stream);
+
+  if (ignore) {
+    throw std::runtime_error("could not generate usr");
+  }
+
+  return std::string(chars.data(), chars.size());
+}
+
 SymbolKind tr(const clang::index::SymbolKind k)
 {
   switch (k)
@@ -274,6 +288,7 @@ void SymbolCollector::reset()
 {
   m_symbolIdCache.clear();
   m_macroIdCache.clear();
+  m_moduleIdCache.clear();
 }
 
 IndexerSymbol* SymbolCollector::process(const clang::Decl* decl)
@@ -345,6 +360,33 @@ IndexerSymbol* SymbolCollector::process(const clang::IdentifierInfo* name, const
   return &symbol;
 }
 
+IndexerSymbol* SymbolCollector::process(const clang::Module* moduleInfo)
+{
+  auto [it, inserted] = m_moduleIdCache.try_emplace(moduleInfo, SymbolID());
+
+  if (inserted) {
+    try {
+      std::string usr = getUSR(moduleInfo);
+      it->second = computeSymbolIdFromUsr(usr);
+    } catch (const std::exception&) {
+      m_moduleIdCache.erase(it);
+      return nullptr;
+    }
+  };
+
+  SymbolID symid = it->second;
+  IndexerSymbol& symbol = m_indexer.getCurrentIndex()->symbols[symid];
+
+  if (inserted) {
+    symbol.id = symid;
+    fillSymbol(symbol, moduleInfo);
+  } else {
+    assert(symbol.id != SymbolID());
+  }
+
+  return &symbol;
+}
+
 SymbolID SymbolCollector::getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const
 {
   auto it = m_macroIdCache.find(macroInfo);
@@ -407,7 +449,7 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   }
 
 
-  // j'imagine qu'au moment de récupérer le parent on peut savoir si le symbol est exporté
+  // j'imagine qu'au moment de rï¿½cupï¿½rer le parent on peut savoir si le symbol est exportï¿½
   // en regardant si l'un des parents est un ExportDecl.
   IndexerSymbol* parent_symbol = getParentSymbol(symbol, decl); 
   if (parent_symbol) {
@@ -688,6 +730,12 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::IdentifierI
   symbol.kind = SymbolKind::Macro;
 }
 
+void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Module* moduleInfo)
+{
+  symbol.kind = SymbolKind::Module;
+  symbol.name = moduleInfo->Name;
+}
+
 IndexerSymbol* SymbolCollector::getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl)
 {
   if (!decl->getDeclContext()) {
@@ -696,7 +744,12 @@ IndexerSymbol* SymbolCollector::getParentSymbol(const IndexerSymbol& symbol, con
 
   const clang::DeclContext* ctx = decl->getDeclContext();
 
-  while (ctx && ctx->getDeclKind() == clang::Decl::LinkageSpec) {
+  auto skip_decl = [](const clang::DeclContext& decl) {
+    return decl.getDeclKind() == clang::Decl::LinkageSpec
+      || decl.getDeclKind() == clang::Decl::Export;
+    };
+
+  while (ctx && skip_decl(*ctx)) {
     ctx = ctx->getParent();
   }
 
@@ -1054,7 +1107,6 @@ void Indexer::initialize(clang::ASTContext& Ctx)
 
   resetDidProduceOutput();
   m_index = std::make_unique<TranslationUnitIndex>();
-  m_index->fileIdentificator = &m_fileIdentificator;
   m_index->mainFileId = getFileID(Ctx.getSourceManager().getMainFileID());
 }
 
@@ -1212,11 +1264,29 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
   return true;
 }
 
-bool Indexer::handleModuleOccurrence(const clang::ImportDecl *ImportD,
-  const clang::Module *Mod, clang::index::SymbolRoleSet Roles,
-  clang::SourceLocation Loc) 
+bool Indexer::handleModuleOccurrence(const clang::ImportDecl *importD,
+  const clang::Module *moduleInfo, clang::index::SymbolRoleSet roles,
+  clang::SourceLocation loc) 
 {
-  // TODO: handle module occurrence
+  if (!shouldIndexFile(getSourceManager().getFileID(loc))) {
+    return true;
+  }
+
+  IndexerSymbol* symbol = m_symbolCollector.process(moduleInfo);
+
+  if (!symbol)
+    return true;
+
+  int line = getSourceManager().getSpellingLineNumber(loc);
+  int col = getSourceManager().getSpellingColumnNumber(loc);
+
+  SymbolReference symref;
+  symref.fileID = getFileID(getSourceManager().getFileID(loc));
+  symref.symbolID = symbol->id;
+  symref.position = FilePosition(line, col);
+
+  getCurrentIndex()->add(symref);
+
   return true;
 }
 
@@ -1339,7 +1409,7 @@ static void markImplicitReferences(TranslationUnitIndex& index, std::vector<Symb
   // - if only one symbol name matches, we mark all other references
   //   as implicit.
 
-  std::string file = index.fileIdentificator->getFile(begin->fileID);
+  std::string file = indexer.fileIdentificator().getFile(begin->fileID);
   int line = begin->position.line();
   int col = begin->position.column();
 

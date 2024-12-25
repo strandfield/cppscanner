@@ -22,6 +22,7 @@ TEST_CASE("hello_world test project", "[scanner][hello_world]")
     ScannerInvocation inv{
       { "--compile-commands", HELLO_WORLD_BUILD_DIR + std::string("/compile_commands.json"),
       "--home", HELLO_WORLD_ROOT_DIR,
+      "--remap-file-ids",
       "--overwrite",
       "-o", snapshot_name }
     };

@@ -5,7 +5,8 @@
 #include "snapshotwriter.h"
 
 #include "indexersymbol.h"
-#include "symbolrecorditerator.h"
+
+#include "cppscanner/snapshot/symbolrecorditerator.h"
 
 #include "cppscanner/database/readrows.h"
 #include "cppscanner/database/transaction.h"
@@ -13,6 +14,7 @@
 #include "cppscanner/index/symbol.h"
 
 #include <algorithm>
+#include <cassert>
 
 namespace cppscanner
 {
@@ -95,6 +97,7 @@ CREATE TABLE "accessSpecifier" (
 CREATE TABLE "file" (
   "id"      INTEGER NOT NULL PRIMARY KEY UNIQUE,
   "path"    TEXT NOT NULL,
+  "sha1"    TEXT,
   "content" TEXT
 );
 
@@ -310,27 +313,6 @@ CREATE TABLE "argumentPassedByReference" (
 COMMIT;
 )";
 
-#ifdef _WIN32
-std::string NormalizedPath(std::string path)
-{
-  if (path.length() >= 2 && path.at(1) == ':') {
-    path[1] = std::tolower(path[0]);
-    path[0] = '/';
-  }
-  for (char& c : path) {
-    if (c == '\\') {
-      c = '/';
-    }
-  }
-  return path;
-}
-#else
-const std::string& NormalizedPath(const std::string& p)
-{
-  return p;
-}
-#endif // _WIN32
-
 static void insert_enum_values(Database& db)
 {
   sql::Statement stmt{ db };
@@ -370,22 +352,55 @@ static void insert_enum_values(Database& db)
   }
 }
 
+SnapshotWriter::SnapshotWriter()
+{
+
+}
+
 SnapshotWriter::SnapshotWriter(SnapshotWriter&&) = default;
 SnapshotWriter::~SnapshotWriter() = default;
 
-SnapshotWriter::SnapshotWriter(const std::filesystem::path& databasePath) :
-  m_database(std::make_unique<Database>())
-
+SnapshotWriter::SnapshotWriter(const std::filesystem::path& databasePath)
 {
-  database().create(databasePath);
+  if (!open(databasePath))
+  {
+    throw std::runtime_error("failed to create snapshot database");
+  }
+}
+
+bool SnapshotWriter::open()
+{
+  m_database = std::make_unique<Database>();
+  database().create(m_database_path);
 
   if (!sql::exec(database(), snapshot::db_init_statements()))
-    throw std::runtime_error("failed to create snapshot database");
-
+  {
+    m_database.reset();
+    return false;
+  }
+    
   sql::runTransacted(database(), [this]() {
     insert_enum_values(database());
     setProperty("database.schema.version", DatabaseSchemaVersion);
     });
+
+  return true;
+}
+
+bool SnapshotWriter::open(const std::filesystem::path& p)
+{
+  m_database_path = p;
+  return open();
+}
+
+bool SnapshotWriter::isOpen() const
+{
+  return m_database != nullptr;
+}
+
+const std::filesystem::path& SnapshotWriter::filePath() const
+{
+  return m_database_path;
 }
 
 /**
@@ -393,12 +408,13 @@ SnapshotWriter::SnapshotWriter(const std::filesystem::path& databasePath) :
  */
 Database& SnapshotWriter::database() const
 {
+  assert(isOpen());
   return *m_database;
 }
 
 std::string SnapshotWriter::normalizedPath(std::string p)
 {
-  return cppscanner::NormalizedPath(std::move(p));
+  return Snapshot::normalizedPath(p);
 }
 
 void SnapshotWriter::setProperty(const std::string& key, const std::string& value)
@@ -430,9 +446,26 @@ void SnapshotWriter::setProperty(const std::string& key, const char* value)
   setProperty(key, std::string(value));
 }
 
-void SnapshotWriter::setProperty(const std::string& key, const Path& path)
+void SnapshotWriter::setProperty(const std::string& key, const Snapshot::Path& path)
 {
   return setProperty(key, path.str());
+}
+
+void SnapshotWriter::insert(const Snapshot::Properties& properties)
+{
+  sql::Statement stmt{ database() };
+
+  stmt.prepare("INSERT OR REPLACE INTO info (key, value) VALUES (?,?)");
+
+  for (const auto& elem : properties)
+  {
+    stmt.bind(1, elem.first.c_str());
+    stmt.bind(2, elem.second.c_str());
+
+    stmt.insert();
+  }
+
+  stmt.finalize();
 }
 
 void SnapshotWriter::insertFilePaths(const std::vector<File>& files)
@@ -440,9 +473,26 @@ void SnapshotWriter::insertFilePaths(const std::vector<File>& files)
   sql::Statement stmt{ database(), "INSERT OR IGNORE INTO file(id, path) VALUES(?,?)"};
 
   for (const File& f : files) {
-    const std::string& fpath = NormalizedPath(f.path);
+    const std::string& fpath = normalizedPath(f.path);
     stmt.bind(1, (int)f.id);
     stmt.bind(2, fpath.c_str());
+    stmt.insert();
+  }
+
+  stmt.finalize();
+}
+
+void SnapshotWriter::insertFiles(const std::vector<File>& files)
+{
+  sql::Statement stmt{ database(), "INSERT OR REPLACE INTO file(id, path, sha1, content) VALUES(?,?,?,?)"};
+
+  for (const File& f : files) 
+  {
+    const std::string& fpath = normalizedPath(f.path);
+    stmt.bind(1, (int)f.id);
+    stmt.bind(2, fpath.c_str());
+    stmt.bind(3, f.sha1.c_str());
+    stmt.bind(4, f.content.c_str());
     stmt.insert();
   }
 
@@ -481,7 +531,7 @@ private:
   sql::Statement m_functionInfo;
   sql::Statement m_parameterInfo;
   sql::Statement m_variableInfo;
-  const IndexerSymbol* m_currentSymbol = nullptr;
+  SymbolID m_currentSymbolId;
 
 public:
   explicit SymbolExtraInfoInserter(Database& db) : 
@@ -506,8 +556,24 @@ public:
   {
     for (auto sptr : symbols)
     {
-      m_currentSymbol = sptr;
-      std::visit(*this, m_currentSymbol->extraInfo);
+      m_currentSymbolId = sptr->id;
+      std::visit(*this, sptr->extraInfo);
+    }
+  }
+
+  template<typename T>
+  void process(SymbolID id, const T& info)
+  {
+    m_currentSymbolId = id;
+    (*this)(info);
+  }
+
+  template<typename T>
+  void process(const std::map<SymbolID, T>& infomap)
+  {
+    for (const auto& p : infomap)
+    {
+      process(p.first, p.second);
     }
   }
 
@@ -518,7 +584,7 @@ public:
 
   void operator()(const MacroInfo& info)
   {
-    m_macroInfo.bind(1, m_currentSymbol->id.rawID());
+    m_macroInfo.bind(1, m_currentSymbolId.rawID());
     m_macroInfo.bind(2, std::string_view(info.definition));
 
     m_macroInfo.insert();
@@ -526,7 +592,7 @@ public:
 
   void operator()(const FunctionInfo& info)
   {
-    m_functionInfo.bind(1, m_currentSymbol->id.rawID());
+    m_functionInfo.bind(1, m_currentSymbolId.rawID());
     m_functionInfo.bind(2, std::string_view(info.returnType));
 
     m_functionInfo.insert();
@@ -534,7 +600,7 @@ public:
 
   void operator()(const ParameterInfo& info)
   {
-    m_parameterInfo.bind(1, m_currentSymbol->id.rawID());
+    m_parameterInfo.bind(1, m_currentSymbolId.rawID());
     m_parameterInfo.bind(2, info.parameterIndex);
     m_parameterInfo.bind(3, std::string_view(info.type));
 
@@ -548,7 +614,7 @@ public:
 
   void operator()(const EnumInfo& info)
   {
-    m_enumInfo.bind(1, m_currentSymbol->id.rawID());
+    m_enumInfo.bind(1, m_currentSymbolId.rawID());
     m_enumInfo.bind(2, std::string_view(info.underlyingType));
 
     m_enumInfo.insert();
@@ -556,7 +622,7 @@ public:
 
   void operator()(const EnumConstantInfo& info)
   {
-    m_enumConstantInfo.bind(1, m_currentSymbol->id.rawID());
+    m_enumConstantInfo.bind(1, m_currentSymbolId.rawID());
     m_enumConstantInfo.bind(2, info.value);
 
     if (!info.expression.empty()) {
@@ -570,7 +636,7 @@ public:
 
   void operator()(const VariableInfo& info)
   {
-    m_variableInfo.bind(1, m_currentSymbol->id.rawID());
+    m_variableInfo.bind(1, m_currentSymbolId.rawID());
     m_variableInfo.bind(2, std::string_view(info.type));
 
     if (!info.init.empty())
@@ -583,7 +649,7 @@ public:
 
   void operator()(const NamespaceAliasInfo& info)
   {
-    m_namespaceAliasInfo.bind(1, m_currentSymbol->id.rawID());
+    m_namespaceAliasInfo.bind(1, m_currentSymbolId.rawID());
     m_namespaceAliasInfo.bind(2, std::string_view(info.value));
 
     m_namespaceAliasInfo.insert();
@@ -740,6 +806,37 @@ void SnapshotWriter::insert(const std::vector<ArgumentPassedByReference>& refarg
   }
 }
 
+void SnapshotWriter::insert(const std::vector<SymbolReference>& refs)
+{
+  if (refs.empty()) {
+    return;
+  }
+
+  sql::Statement stmt{
+    database(),
+    "INSERT INTO symbolReference (symbol_id, file_id, line, col, parent_symbol_id, flags) VALUES (?,?,?,?,?,?)"
+  };
+
+  for (const SymbolReference& ref : refs)
+  {
+    stmt.bind(1, ref.symbolID.rawID());
+    stmt.bind(2, (int)ref.fileID);
+    stmt.bind(3, ref.position.line());
+    stmt.bind(4, ref.position.column());
+
+    if (ref.referencedBySymbolID.isValid())
+      stmt.bind(5, ref.referencedBySymbolID.rawID());
+    else 
+      stmt.bind(5, nullptr);
+
+    stmt.bind(6, ref.flags);
+
+    stmt.insert();
+  }
+
+  stmt.finalize();
+}
+
 void SnapshotWriter::insert(const std::vector<SymbolDeclaration>& declarations)
 {
   if (declarations.empty()) {
@@ -763,6 +860,84 @@ void SnapshotWriter::insert(const std::vector<SymbolDeclaration>& declarations)
     stmt.insert();
   }
 }
+
+void SnapshotWriter::insert(const std::map<SymbolID, EnumConstantInfo>& infomap)
+{
+  if (infomap.empty())
+  {
+    return;
+  }
+
+  SymbolExtraInfoInserter inserter{ database() };
+  inserter.process(infomap);
+}
+
+void SnapshotWriter::insert(const std::map<SymbolID, EnumInfo>& infomap)
+{
+  if (infomap.empty())
+  {
+    return;
+  }
+
+  SymbolExtraInfoInserter inserter{ database() };
+  inserter.process(infomap);
+}
+
+void SnapshotWriter::insert(const std::map<SymbolID, FunctionInfo>& infomap)
+{
+  if (infomap.empty())
+  {
+    return;
+  }
+
+  SymbolExtraInfoInserter inserter{ database() };
+  inserter.process(infomap);
+}
+
+void SnapshotWriter::insert(const std::map<SymbolID, MacroInfo>& infomap)
+{
+  if (infomap.empty())
+  {
+    return;
+  }
+
+  SymbolExtraInfoInserter inserter{ database() };
+  inserter.process(infomap);
+}
+
+void SnapshotWriter::insert(const std::map<SymbolID, NamespaceAliasInfo>& infomap)
+{
+  if (infomap.empty())
+  {
+    return;
+  }
+
+  SymbolExtraInfoInserter inserter{ database() };
+  inserter.process(infomap);
+}
+
+void SnapshotWriter::insert(const std::map<SymbolID, ParameterInfo>& infomap)
+{
+  if (infomap.empty())
+  {
+    return;
+  }
+
+  SymbolExtraInfoInserter inserter{ database() };
+  inserter.process(infomap);
+}
+
+void SnapshotWriter::insert(const std::map<SymbolID, VariableInfo>& infomap)
+{
+  if (infomap.empty())
+  {
+    return;
+  }
+
+  SymbolExtraInfoInserter inserter{ database() };
+  inserter.process(infomap);
+}
+
 
 std::vector<Include> SnapshotWriter::loadAllIncludesInFile(FileID fid)
 {
@@ -897,55 +1072,28 @@ void SnapshotWriter::removeAllDeclarationsInFile(FileID fid)
   stmt.step();
 }
 
+void SnapshotWriter::beginTransaction()
+{
+  if (m_transaction)
+  {
+    endTransaction();
+  }
+
+  m_transaction = std::make_unique<sql::Transaction>(database());
+}
+
+void SnapshotWriter::endTransaction()
+{
+  m_transaction->commit();
+  m_transaction.reset();
+}
+
 namespace snapshot
 {
 
 const char* db_init_statements()
 {
   return SQL_CREATE_STATEMENTS;
-}
-
-void insertFiles(SnapshotWriter& snapshot, const std::vector<File>& files)
-{
-  sql::Statement stmt{ snapshot.database(), "INSERT OR REPLACE INTO file(id, path, content) VALUES(?,?,?)"};
-
-  for (const File& f : files) 
-  {
-    const std::string& fpath = NormalizedPath(f.path);
-    stmt.bind(1, (int)f.id);
-    stmt.bind(2, fpath.c_str());
-    stmt.bind(3, f.content.c_str());
-    stmt.insert();
-  }
-
-  stmt.finalize();
-}
-
-void insertSymbolReferences(SnapshotWriter& snapshot, const std::vector<SymbolReference>& references)
-{
-  sql::Statement stmt{
-    snapshot.database(),
-    "INSERT INTO symbolReference (symbol_id, file_id, line, col, parent_symbol_id, flags) VALUES (?,?,?,?,?,?)"
-  };
-
-  for (const SymbolReference& ref : references)
-  {
-    stmt.bind(1, ref.symbolID.rawID());
-    stmt.bind(2, (int)ref.fileID);
-    stmt.bind(3, ref.position.line());
-    stmt.bind(4, ref.position.column());
-
-    if (ref.referencedBySymbolID.isValid())
-      stmt.bind(5, ref.referencedBySymbolID.rawID());
-    else 
-      stmt.bind(5, nullptr);
-
-    stmt.bind(6, ref.flags);
-
-    stmt.insert();
-  }
-
-  stmt.finalize();
 }
 
 } // namespace snapshot

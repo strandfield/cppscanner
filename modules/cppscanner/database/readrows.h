@@ -31,6 +31,15 @@ T readUniqueRow(sql::Statement& stmt, F&& func)
 }
 
 
+template<typename ConvFunc, typename ProcessFunc>
+void readRowsConverted(sql::Statement& stmt, ConvFunc&& conv, ProcessFunc&& process)
+{
+  while (stmt.fetchNextRow())
+  {
+    process(conv(stmt));
+  }
+}
+
 template<typename T, typename F>
 std::vector<T> readRowsAsVector(sql::Statement& stmt, F&& func)
 {

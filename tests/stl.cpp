@@ -13,12 +13,12 @@ static const std::string HOME_DIR = TESTFILES_DIRECTORY + std::string("/stl");
 TEST_CASE("string.cpp", "[scanner][stl]")
 {
   const std::string snapshot_name = "stl-string.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "-i", HOME_DIR + std::string("/string.cpp"),
       "--home", HOME_DIR,
       "--index-local-symbols",
-      "--overwrite",
       "-o", snapshot_name }
   };
 
@@ -28,7 +28,7 @@ TEST_CASE("string.cpp", "[scanner][stl]")
     REQUIRE(inv.errors().empty());
   }
 
-  TestSnapshotReader s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() > 0);
@@ -38,18 +38,29 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   SymbolRecord init = s.getSymbolByName("init()");
   REQUIRE(init.kind == SymbolKind::Function);
 
-  // TODO: tester que std::string n'a pas le flag FromProject
+  SymbolRecord stdns = s.getSymbolByName("std");
+  REQUIRE(stdns.kind == SymbolKind::Namespace);
+  REQUIRE(!testFlag(stdns, SymbolFlag::FromProject));
+
+  SymbolRecord symbol = s.getSymbolByName("string");
+  REQUIRE((symbol.kind == SymbolKind::TypeAlias || symbol.kind == SymbolKind::Typedef));
+  REQUIRE(!testFlag(symbol, SymbolFlag::FromProject));
+  REQUIRE(symbol.parentId == stdns.id);
+
+  symbol = s.getSymbolByName("basic_string");
+  REQUIRE(symbol.kind == SymbolKind::Class);
+  REQUIRE(!testFlag(symbol, SymbolFlag::FromProject));
 }
 
 TEST_CASE("vector.cpp", "[scanner][stl]")
 {
   const std::string snapshot_name = "stl-vector.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "-i", HOME_DIR + std::string("/vector.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
-    "--overwrite",
     "-o", snapshot_name }
   };
 
@@ -59,7 +70,7 @@ TEST_CASE("vector.cpp", "[scanner][stl]")
     REQUIRE(inv.errors().empty());
   }
 
-  TestSnapshotReader s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() > 0);
@@ -73,12 +84,12 @@ TEST_CASE("vector.cpp", "[scanner][stl]")
 TEST_CASE("tuple.cpp", "[scanner][stl]")
 {
   const std::string snapshot_name = "stl-tuple.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "-i", HOME_DIR + std::string("/tuple.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
-    "--overwrite",
     "-o", snapshot_name,
     "--", "-std=c++17" }
   };
@@ -108,12 +119,12 @@ TEST_CASE("tuple.cpp", "[scanner][stl]")
 TEST_CASE("optional.cpp", "[scanner][stl]")
 {
   const std::string snapshot_name = "stl-optional.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "-i", HOME_DIR + std::string("/optional.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
-    "--overwrite",
     "-o", snapshot_name,
     "--", "-std=c++17" }
   };
@@ -124,7 +135,7 @@ TEST_CASE("optional.cpp", "[scanner][stl]")
     REQUIRE(inv.errors().empty());
   }
 
-  TestSnapshotReader s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() > 0);
@@ -144,12 +155,12 @@ TEST_CASE("optional.cpp", "[scanner][stl]")
 TEST_CASE("variant.cpp", "[scanner][stl]")
 {
   const std::string snapshot_name = "stl-variant.db";
+  SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
     { "-i", HOME_DIR + std::string("/variant.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
-    "--overwrite",
     "-o", snapshot_name,
     "--", "-std=c++17" }
   };
@@ -160,7 +171,7 @@ TEST_CASE("variant.cpp", "[scanner][stl]")
     REQUIRE(inv.errors().empty());
   }
 
-  TestSnapshotReader s{ snapshot_name };
+  SnapshotReader s{ snapshot_name };
 
   std::vector<File> files = s.getFiles();
   REQUIRE(files.size() > 0);

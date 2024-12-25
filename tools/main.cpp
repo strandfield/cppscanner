@@ -1,5 +1,5 @@
 
-#include "cppscanner/indexer/snapshotwriter.h"
+#include "cppscanner/snapshot/snapshotwriter.h"
 
 #include "cppscanner/index/reference.h"
 #include "cppscanner/index/symbolrecords.h"

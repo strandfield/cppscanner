@@ -5,15 +5,21 @@
 #ifndef CPPSCANNER_SCANNER_H
 #define CPPSCANNER_SCANNER_H
 
-#include "snapshotwriter.h"
+#include "cppscanner/snapshot/snapshotwriter.h"
 
 #include <filesystem>
 #include <string>
 #include <vector>
 
+namespace clang
+{
+class FileManager;
+} // namespace clang
+
 namespace cppscanner
 {
 
+class FileIndexingArbiter;
 class TranslationUnitIndex;
 
 struct ScannerData;
@@ -51,6 +57,9 @@ public:
 
   void setNumberOfParsingThread(size_t n);
 
+  void setCaptureFileContent(bool on = true);
+  void setRemapFileIds(bool on);
+
   void setCompilationArguments(const std::vector<std::string>& args);
 
   void initSnapshot(const std::filesystem::path& p);
@@ -60,11 +69,14 @@ public:
   void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs);
   void scan(const std::vector<ScannerCompileCommand>& compileCommands);
 
+  static void fillContent(File& file);
+
 protected:
   bool passTranslationUnitFilters(const std::string& filename) const;
   void scanSingleThreaded();
   void scanMultiThreaded();
   void runScanSingleOrMultiThreaded();
+  void processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter, clang::FileManager& fileManager);
   void assimilate(TranslationUnitIndex tuIndex);
   bool fileAlreadyIndexed(FileID f) const;
   void setFileIndexed(FileID f);

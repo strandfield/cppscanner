@@ -113,6 +113,9 @@ void parse_target(CMakeIndex& idx, CMakeTarget& target, const std::string& jsonF
       if (path.has_value()) {
         target.sources.push_back(path->str());
       }
+
+      // TODO: ?
+     // sourceObj->getBoolean("isGenerated");
     }
   }
 
@@ -130,43 +133,9 @@ void parse_target(CMakeIndex& idx, CMakeTarget& target, const std::string& jsonF
 
       compileGroup.language = compileGroupObj->getString("language").value_or(std::string()).str();
 
-      //if (lang == "CXX")
-      //{
-      //  compileGroup.language = CMakeTarget::CompileGroup::LANG_CXX;
-      //}
-      //else if (lang == "C")
-      //{
-      //  compileGroup.language = CMakeTarget::CompileGroup::LANG_C;
-      //}
-
       if (const llvm::json::Object* languageStandardObj = compileGroupObj->getObject("languageStandard"))
       {
         compileGroup.languageStandard = languageStandardObj->getString("standard").value_or(std::string()).str();
-        
-        /*if (standard == "14")
-        {
-          compileGroup.languageStandard = CMakeTarget::CompileGroup::STD_CPP14;
-        }
-        else if (standard == "17")
-        {
-          compileGroup.languageStandard = CMakeTarget::CompileGroup::STD_CPP17;
-        }
-        else if (standard == "20")
-        {
-          compileGroup.languageStandard = CMakeTarget::CompileGroup::STD_CPP20;
-        }
-        else if (standard == "23")
-        {
-          compileGroup.languageStandard = CMakeTarget::CompileGroup::STD_CPP23;
-        }
-        else if (standard == "26")
-        {
-          compileGroup.languageStandard = CMakeTarget::CompileGroup::STD_CPP26;
-        }
-        else
-        {
-          compileGroup.languageStandard = CMakeTarget::CompileGroup::STD_CPP11;
-        }*/
       }
 
       if (const llvm::json::Array* compileCommandFragments = compileGroupObj->getArray("compileCommandFragments"))
@@ -222,6 +191,25 @@ void parse_target(CMakeIndex& idx, CMakeTarget& target, const std::string& jsonF
           if (!path.empty())
           {
             compileGroup.includes.push_back(std::move(path));
+          }
+        }
+      }
+
+      if (const llvm::json::Array* precompileHeaders = compileGroupObj->getArray("precompileHeaders"))
+      {
+        for (const llvm::json::Value& pchValue : *precompileHeaders)
+        {
+          const llvm::json::Object* pchObj = pchValue.getAsObject();
+
+          if (!pchObj) {
+            continue;
+          }
+
+          std::string path = pchObj->getString("header").value_or(std::string()).str();
+
+          if (!path.empty())
+          {
+            compileGroup.precompileHeaders.push_back(std::move(path));
           }
         }
       }

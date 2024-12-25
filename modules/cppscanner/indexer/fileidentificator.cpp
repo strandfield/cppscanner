@@ -10,6 +10,7 @@
 namespace cppscanner
 {
 
+// TODO: use FileIdTable ?
 class BasicFileIdentificator : public FileIdentificator
 {
 private:

@@ -45,7 +45,27 @@ public:
   {
     setFlag(SymbolFlag::Local, on);
   }
+
+  enum Update
+  {
+    FlagUpdate
+  };
 };
+
+inline int update(IndexerSymbol& symbol, const SymbolRecord& other)
+{
+  int what = 0;
+
+  if (symbol.flags != other.flags) {
+    // TODO: this may not be the right way to update the flags
+    symbol.flags |= other.flags;
+    what |= IndexerSymbol::FlagUpdate;
+  }
+
+  // TODO: there may be other things to update...
+
+  return  what;
+}
 
 } // namespace cppscanner
 

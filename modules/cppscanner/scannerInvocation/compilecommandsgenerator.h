@@ -31,8 +31,81 @@ inline void splitInto(const std::string& str, char sep, std::vector<std::string>
       auto item = std::string(it, end);
       output.push_back(std::move(item));
     }
-    
+
     it = end == str.end() ? end : std::next(end);
+  }
+}
+
+inline bool isPrecompileHeaderGroup(const CMakeTarget& target, const CMakeTarget::CompileGroup& group)
+{
+  if (group.precompileHeaders.empty()) {
+    return false;
+  }
+
+  if (group.sourceIndexes.size() != 1) {
+    return false;
+  }
+
+  const std::filesystem::path& src = target.sources.at(group.sourceIndexes.front());
+  return (src.filename() == "cmake_pch.cxx");
+}
+
+inline void generateCommandsForTarget(const CMakeIndex& index,
+  const CMakeConfiguration& config, const CMakeTarget& target, std::vector<ScannerCompileCommand>& commands)
+{
+  const clang::tooling::ArgumentsAdjuster& argsadjuster = getDefaultArgumentsAdjuster();
+  const clang::tooling::ArgumentsAdjuster& pch_argsadjuster = getPchArgumentsAdjuster();
+
+  for (const CMakeTarget::CompileGroup& group : target.compileGroups)
+  {
+    std::vector<std::string> basecmd;
+
+    const CMakeToolchain* toolchain = index.getToolchainByLanguage(group.language);
+
+    if (!toolchain || toolchain->compiler.path.empty()) {
+      continue;
+    }
+
+    basecmd.push_back(toolchain->compiler.path.string());
+
+    for (const CMakeTarget::CompileCommandFragment& fragment : group.compileCommandFragments)
+    {
+      splitInto(fragment.fragment, ' ', basecmd);
+    }
+
+    for (const std::string& define : group.defines)
+    {
+      basecmd.push_back("-D" + define);
+    }
+
+    for (const std::filesystem::path& includePath : group.includes)
+    {
+      basecmd.push_back("-I" + includePath.string());
+    }
+
+    const bool is_pch_group = isPrecompileHeaderGroup(target, group);
+
+    for (int srcIndex : group.sourceIndexes)
+    {
+      ScannerCompileCommand cmd;
+      
+      std::filesystem::path srcpath{ target.sources.at(srcIndex) };
+      if (srcpath.is_absolute()) {
+        cmd.fileName = srcpath.generic_u8string();
+      } else {
+        cmd.fileName = (index.paths.source / srcpath).generic_u8string();
+      }
+
+      cmd.commandLine = basecmd;
+      if (is_pch_group) {
+        cmd.commandLine = pch_argsadjuster(cmd.commandLine, cmd.fileName);
+      } else {
+        cmd.commandLine = argsadjuster(cmd.commandLine, cmd.fileName);
+      }
+      cmd.commandLine.push_back(cmd.fileName);
+
+      commands.push_back(std::move(cmd));
+    }
   }
 }
 
@@ -43,49 +116,12 @@ inline std::vector<ScannerCompileCommand> generateCommandsForTargets(
 {
   std::vector<ScannerCompileCommand> commands;
 
-  const clang::tooling::ArgumentsAdjuster& argsadjuster = getDefaultArgumentsAdjuster();
 
   for (const CMakeTarget* target : targets)
   {
     assert(target);
 
-    for (const CMakeTarget::CompileGroup& group : target->compileGroups)
-    {
-      std::vector<std::string> basecmd;
-     
-      const CMakeToolchain* toolchain = index.getToolchainByLanguage(group.language);
-
-      if (!toolchain || toolchain->compiler.path.empty()) {
-        continue;
-      }
-
-      basecmd.push_back(toolchain->compiler.path.string());
-
-      for (const CMakeTarget::CompileCommandFragment& fragment : group.compileCommandFragments)
-      {
-        splitInto(fragment.fragment, ' ', basecmd);
-      }
-
-      for (const std::string& define : group.defines)
-      {
-        basecmd.push_back("-D" + define);
-      }
-
-      for (const std::filesystem::path& includePath : group.includes)
-      {
-        basecmd.push_back("-I" + includePath.string());
-      }
-
-      for (int srcIndex : group.sourceIndexes)
-      {
-        ScannerCompileCommand cmd;
-        cmd.fileName = (index.paths.source / target->sources.at(srcIndex)).generic_u8string();
-        cmd.commandLine = basecmd;
-        cmd.commandLine = argsadjuster(cmd.commandLine, cmd.fileName);
-        cmd.commandLine.push_back(cmd.fileName);
-        commands.push_back(std::move(cmd));
-      }
-    }
+    generateCommandsForTarget(index, config, *target, commands);
   }
 
   return commands;
@@ -193,7 +229,7 @@ inline std::vector<ScannerCompileCommand> generateCommands(
   const std::vector<std::string>& cmakeTargets)
 {
   CMakeIndex index;
-  
+
   if (!index.read(cmakeBuildDirectory)) {
     return {};
   }

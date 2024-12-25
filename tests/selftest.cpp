@@ -5,9 +5,9 @@
 #include "cppscanner/cmakeIntegration/cmakeproject.h"
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 #include "cppscanner/scannerInvocation/cmakeinvocation.h"
-#include "cppscanner/indexer/version.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/database/sql.h"
+#include "cppscanner/base/version.h"
 
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
@@ -35,6 +35,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
         "-DCMAKE_PREFIX_PATH=" + std::string(CMAKE_PREFIX_PATH),
         "-DLLVM_DIR=" + std::string(LLVM_DIR), 
         "-DBUILD_TESTS=OFF",
+        "-DSELF_PARSE=ON",
       }
     };
 
@@ -44,6 +45,7 @@ TEST_CASE("Self parsing test", "[scanner][self]")
       { "--build", build_dir,
       "--target", CMakeTarget::all(),
       "--home", CMAKE_SOURCE_DIR,
+      "--remap-file-ids",
       "--threads", "2",
       "--project-name", "cppscanner",
       "--project-version", cppscanner::versioncstr(),
