@@ -288,6 +288,7 @@ void SymbolCollector::reset()
 {
   m_symbolIdCache.clear();
   m_macroIdCache.clear();
+  m_moduleIdCache.clear();
 }
 
 IndexerSymbol* SymbolCollector::process(const clang::Decl* decl)

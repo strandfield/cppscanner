@@ -9,7 +9,7 @@
 #define CPPSCANNER_VERSION_MINOR 4
 #define CPPSCANNER_VERSION_PATCH 0
 
-#define CPPSCANNER_VERSION_STRING "0.4.0-dev"
+#define CPPSCANNER_VERSION_STRING "0.4.0"
 
 namespace cppscanner
 {
