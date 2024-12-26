@@ -4,7 +4,6 @@
 
 #include "scanner.h"
 
-
 #include "indexer.h"
 #include "indexingresultqueue.h"
 #include "workqueue.h"
@@ -77,23 +76,12 @@ struct ScannerData
 
 static std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
 {
-  std::vector<std::unique_ptr<FileIndexingArbiter>> arbiters;
-
-  arbiters.push_back(std::make_unique<IndexOnceFileIndexingArbiter>(*d.fileIdentificator));
-
-  if (d.indexExternalFiles) {
-    if (d.rootDirectory.has_value()) {
-      arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, *d.rootDirectory));
-    }
-  } else {
-    arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, d.homeDirectory));
-  }
-
-  if (!d.filters.empty()) {
-    arbiters.push_back(std::make_unique<IndexFilesMatchingPatternIndexingArbiter>(*d.fileIdentificator, d.filters));
-  }
-
-  return FileIndexingArbiter::createCompositeArbiter(std::move(arbiters));
+  CreateIndexingArbiterOptions opts;
+  opts.filters = d.filters;
+  opts.homeDirectory = d.homeDirectory;
+  opts.rootDirectory = d.rootDirectory.value_or(std::string());
+  opts.indexExternalFiles = d.indexExternalFiles;
+  return createIndexingArbiter(*d.fileIdentificator, opts);
 }
 
 class ScannerIndexer : public Indexer

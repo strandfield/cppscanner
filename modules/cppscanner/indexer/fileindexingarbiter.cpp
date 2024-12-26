@@ -204,4 +204,25 @@ bool IndexFilesMatchingPatternIndexingArbiter::shouldIndex(FileID file, const Tr
     });
 }
 
+std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(FileIdentificator& fileIdentificator, const CreateIndexingArbiterOptions& opts)
+{
+  std::vector<std::unique_ptr<FileIndexingArbiter>> arbiters;
+
+  arbiters.push_back(std::make_unique<IndexOnceFileIndexingArbiter>(fileIdentificator));
+
+  if (opts.indexExternalFiles) {
+    if (!opts.rootDirectory.empty()) {
+      arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(fileIdentificator, opts.rootDirectory));
+    }
+  } else {
+    arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(fileIdentificator, opts.homeDirectory));
+  }
+
+  if (!opts.filters.empty()) {
+    arbiters.push_back(std::make_unique<IndexFilesMatchingPatternIndexingArbiter>(fileIdentificator, opts.filters));
+  }
+
+  return FileIndexingArbiter::createCompositeArbiter(std::move(arbiters));
+}
+
 } // namespace cppscanner
