@@ -144,7 +144,7 @@ private:
   FileIndexingArbiter& m_fileIndexingArbiter;
   FileIdentificator& m_fileIdentificator;
   SymbolCollector m_symbolCollector;
-  IdxrDiagnosticConsumer m_diagnosticConsumer;
+  std::unique_ptr<IdxrDiagnosticConsumer> m_diagnosticConsumer;
   clang::ASTContext* mAstContext = nullptr;
   std::shared_ptr<clang::Preprocessor> m_pp;
   std::unique_ptr<TranslationUnitIndex> m_index;
@@ -159,7 +159,7 @@ public:
   FileIdentificator& fileIdentificator();
 
   SymbolCollector& symbolCollector();
-  clang::DiagnosticConsumer* getDiagnosticConsumer();
+  clang::DiagnosticConsumer* getOrCreateDiagnosticConsumer();
 
   TranslationUnitIndex* getCurrentIndex() const;
   void resetCurrentIndex();

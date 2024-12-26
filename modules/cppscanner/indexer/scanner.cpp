@@ -573,7 +573,7 @@ static bool run_invocation(const WorkQueue::ToolInvocation& invocation, Indexer&
   }
 
   clang::tooling::ToolInvocation tool_invocation{ invocation.command, actionfactory.create(), fileManager };
-  tool_invocation.setDiagnosticConsumer(indexer.getDiagnosticConsumer());
+  tool_invocation.setDiagnosticConsumer(indexer.getOrCreateDiagnosticConsumer());
   return tool_invocation.run();
 }
 
@@ -845,7 +845,7 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
     clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), &fileManager };
 
-    invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
+    invocation.setDiagnosticConsumer(index_data_consumer->getOrCreateDiagnosticConsumer());
 
     const bool success = invocation.run();
 

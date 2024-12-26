@@ -966,8 +966,7 @@ void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter) :
   m_fileIndexingArbiter(fileIndexingArbiter),
   m_fileIdentificator(fileIndexingArbiter.fileIdentificator()),
-  m_symbolCollector(*this),
-  m_diagnosticConsumer(*this)
+  m_symbolCollector(*this)
 {
 
 }
@@ -984,9 +983,14 @@ SymbolCollector& Indexer::symbolCollector()
   return m_symbolCollector;
 }
 
-clang::DiagnosticConsumer* Indexer::getDiagnosticConsumer()
+clang::DiagnosticConsumer* Indexer::getOrCreateDiagnosticConsumer()
 {
-  return &m_diagnosticConsumer;
+  if (!m_diagnosticConsumer)
+  {
+    m_diagnosticConsumer = std::make_unique<IdxrDiagnosticConsumer>(*this);
+  }
+
+  return m_diagnosticConsumer.get();
 }
 
 TranslationUnitIndex* Indexer::getCurrentIndex() const
