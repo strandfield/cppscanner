@@ -22,10 +22,9 @@ TEST_CASE("modules", "[scanner][cpp20_modules]")
 
   {
     Scanner scanner;
+    scanner.setOutputPath(snapshot_name);
     scanner.setHomeDir(std::filesystem::path(TESTFILES_DIRECTORY) / cpp20_modules_dir);
     scanner.setIndexLocalSymbols(true);
-
-    scanner.initSnapshot(snapshot_name);
 
     std::vector<ScannerCompileCommand> commands;
     {

@@ -237,6 +237,8 @@ void ScannerInvocation::run()
 
   Scanner scanner;
 
+  scanner.setOutputPath(options().output);
+
   if (options().home.has_value()) {
     scanner.setHomeDir(*options().home);
   }
@@ -275,16 +277,12 @@ void ScannerInvocation::run()
     }
   }
 
-  scanner.setCompilationArguments(options().compilation_arguments);
-
-  scanner.initSnapshot(options().output);
-
   if (options().project_name.has_value()) {
-    scanner.snapshot()->setProperty("project.name", *options().project_name);
+    scanner.setExtraProperty("project.name", *options().project_name);
   }
 
   if (options().project_version.has_value()) {
-    scanner.snapshot()->setProperty("project.version", *options().project_version);
+    scanner.setExtraProperty("project.version", *options().project_version);
   }
 
   if (options().compile_commands.has_value())
@@ -294,8 +292,6 @@ void ScannerInvocation::run()
   else if (options().cmakeBuildDirectory.has_value())
   {
     // TODO: we could use the cmake source directory to set our Home directory
-
-
     std::vector<ScannerCompileCommand> commands = generateCommands(
       *options().cmakeBuildDirectory,
       options().cmakeConfig,
@@ -304,7 +300,7 @@ void ScannerInvocation::run()
   }
   else
   {
-    scanner.scanFromListOfInputs(options().inputs);
+    scanner.scanFromListOfInputs(options().inputs, options().compilation_arguments);
   }
 }
 
