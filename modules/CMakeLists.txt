@@ -48,6 +48,11 @@ if (WIN32 AND NOT SELF_PARSE)
   target_compile_options(indexer PRIVATE "/Zc:preprocessor")
 endif()
 
+set_property(TARGET base PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET indexer PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET snapshot PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET database PROPERTY POSITION_INDEPENDENT_CODE ON)
+
 add_module(cmakeIntegration)
 target_link_libraries(cmakeIntegration 
   LLVMSupport

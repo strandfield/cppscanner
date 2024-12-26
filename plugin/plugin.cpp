@@ -49,6 +49,10 @@ public:
 
     m_snapshot_creator.setHomeDir(m_homePath);
     m_snapshot_creator.setCaptureFileContent(false);
+    if (std::filesystem::exists(m_dbPath))
+    {
+      std::filesystem::remove(m_dbPath);
+    }
     m_snapshot_creator.init(m_dbPath);
   }
 
@@ -63,6 +67,78 @@ public:
 
     m_snapshot_creator.close();
   }
+
+  SnapshotCreator& snapshotCreator()
+  {
+    return m_snapshot_creator;
+  }
+};
+
+class MyIndexDataConsumer : public clang::index::IndexDataConsumer
+{
+private:
+  std::unique_ptr<cppscanner::FileIdentificator> m_identificator;
+  std::unique_ptr<cppscanner::FileIndexingArbiter> m_arbiter;
+  std::unique_ptr<PluginIndexer> m_indexer;
+  bool m_indexLocalSymbols;
+public:
+
+  MyIndexDataConsumer (std::string dbPath, std::string homePath, bool indexLocalSymbols)
+  {
+    m_identificator = cppscanner::FileIdentificator::createFileIdentificator();
+    cppscanner::CreateIndexingArbiterOptions opts;
+    opts.homeDirectory = homePath;
+    opts.indexExternalFiles = false;
+    m_arbiter = cppscanner::createIndexingArbiter(*m_identificator, opts);
+
+    m_indexer = std::make_unique<PluginIndexer>(dbPath, homePath, *m_arbiter);
+
+    m_indexLocalSymbols = indexLocalSymbols;
+  }
+
+  void initialize(clang::ASTContext& Ctx) override
+  {
+    m_indexer->initialize(Ctx);
+
+    m_indexer->snapshotCreator().writeProperty("scanner.indexLocalSymbols", m_indexLocalSymbols ? "true" : "false");
+
+  }
+
+  void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP) final
+  {
+    m_indexer->setPreprocessor(PP);
+
+  }
+
+  bool handleDeclOccurrence(const clang::Decl* D, clang::index::SymbolRoleSet Roles,
+    llvm::ArrayRef<clang::index::SymbolRelation> relations,
+    clang::SourceLocation Loc, ASTNodeInfo ASTNode) final
+  {
+    return m_indexer->handleDeclOccurrence(D, Roles, relations, Loc, ASTNode);
+  }
+
+  bool handleMacroOccurrence(const clang::IdentifierInfo* Name,
+    const clang::MacroInfo* MI, clang::index::SymbolRoleSet Roles,
+    clang::SourceLocation Loc)  final
+  {
+    return m_indexer->handleMacroOccurrence(Name, MI, Roles, Loc);
+  }
+
+  bool handleModuleOccurrence(const clang::ImportDecl* ImportD,
+    const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
+    clang::SourceLocation Loc)  final
+  {
+    return m_indexer->handleModuleOccurrence(ImportD, Mod, Roles, Loc);
+  }
+
+  void finish() override
+  {
+    m_indexer->finish();
+  }
+
+
+  bool ShouldTraverseDecl(const clang::Decl* decl) const{return m_indexer->ShouldTraverseDecl(decl);}
+
 };
 
 } // namespace cppscanner
@@ -80,16 +156,17 @@ public:
 
   bool BeginSourceFileAction(clang::CompilerInstance &CI) final;
   void EndSourceFileAction() final;
-  
+
 private:
   bool m_indexLocalSymbols = false;
   std::string m_homePath;
-  std::unique_ptr<cppscanner::FileIdentificator> m_identificator;
-  std::unique_ptr<cppscanner::FileIndexingArbiter> m_arbiter;
+  // std::unique_ptr<cppscanner::FileIdentificator> m_identificator;
+  // std::unique_ptr<cppscanner::FileIndexingArbiter> m_arbiter;
 };
 
 TakeSnapshotPluginASTAction::TakeSnapshotPluginASTAction()
 {
+  std::cout << "TakeSnapshotPluginASTAction()" << std::endl;
 
 }
 
@@ -104,7 +181,8 @@ std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsum
 
   std::cout << "inFile = " << inFile.str() << std::endl;
 
-  auto indexer = std::make_shared<cppscanner::PluginIndexer>(inFile.str() + ".cppscanner.db", m_homePath, *m_arbiter);
+  //auto indexer = std::make_shared<cppscanner::PluginIndexer>(inFile.str() + ".cppscanner.db", m_homePath, *m_arbiter);
+  auto indexer = std::make_shared<cppscanner::MyIndexDataConsumer>(inFile.str() + ".cppscanner.db", m_homePath, m_indexLocalSymbols);
 
   // TODO: see how we can handle diagnostics
   //constexpr bool should_own_client = false;
@@ -150,11 +228,11 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
 
   std::cout << "m_homePath = " << m_homePath << std::endl;
 
-  m_identificator = cppscanner::FileIdentificator::createFileIdentificator();
-  cppscanner::CreateIndexingArbiterOptions opts;
-  opts.homeDirectory = m_homePath;
-  opts.indexExternalFiles = false;
-  m_arbiter = cppscanner::createIndexingArbiter(*m_identificator, opts);
+  // m_identificator = cppscanner::FileIdentificator::createFileIdentificator();
+  // cppscanner::CreateIndexingArbiterOptions opts;
+  // opts.homeDirectory = m_homePath;
+  // opts.indexExternalFiles = false;
+  // m_arbiter = cppscanner::createIndexingArbiter(*m_identificator, opts);
   return true;
 }
 
