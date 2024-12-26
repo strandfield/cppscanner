@@ -8,7 +8,6 @@
 
 #include "cppscanner/indexer/astvisitor.h"
 #include "cppscanner/indexer/fileindexingarbiter.h"
-#include "cppscanner/indexer/indexingresultqueue.h"
 #include "cppscanner/index/symbolid.h"
 
 #include <clang/AST/ASTContext.h>
@@ -964,9 +963,8 @@ void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
   (void)macroExpansion;
 }
 
-Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
+Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter) :
   m_fileIndexingArbiter(fileIndexingArbiter),
-  m_resultsQueue(resultsQueue),
   m_fileIdentificator(fileIndexingArbiter.fileIdentificator()),
   m_symbolCollector(*this),
   m_diagnosticConsumer(*this)
@@ -994,6 +992,11 @@ clang::DiagnosticConsumer* Indexer::getDiagnosticConsumer()
 TranslationUnitIndex* Indexer::getCurrentIndex() const
 {
   return m_index.get();
+}
+
+void Indexer::resetCurrentIndex()
+{
+  m_index.reset();
 }
 
 clang::SourceManager& Indexer::getSourceManager() const
@@ -1105,7 +1108,6 @@ void Indexer::initialize(clang::ASTContext& Ctx)
   m_ShouldIndexFileCache.clear();
   m_symbolCollector.reset();
 
-  resetDidProduceOutput();
   m_index = std::make_unique<TranslationUnitIndex>();
   m_index->mainFileId = getFileID(Ctx.getSourceManager().getMainFileID());
 }
@@ -1488,21 +1490,7 @@ void Indexer::finish()
 
   recordSymbolDeclarations();
 
-  m_resultsQueue.write(std::move(*m_index));
-  m_index.reset();
-  m_produced_output = true;
-
   mAstContext = nullptr;
-}
-
-bool Indexer::didProduceOutput() const
-{
-  return m_produced_output;
-}
-
-void Indexer::resetDidProduceOutput()
-{
-  m_produced_output = false;
 }
 
 namespace

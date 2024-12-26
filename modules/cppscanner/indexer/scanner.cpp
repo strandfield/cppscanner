@@ -79,7 +79,7 @@ struct ScannerData
   std::map<SymbolID, IndexerSymbol> symbols;
 };
 
-void set_flag(std::vector<bool>& flags, size_t i)
+inline void set_flag(std::vector<bool>& flags, size_t i)
 {
   if (flags.size() <= i) {
     flags.resize(i + 1, false);
@@ -88,12 +88,12 @@ void set_flag(std::vector<bool>& flags, size_t i)
   flags[i] = true;
 }
 
-bool test_flag(const std::vector<bool>& flags, size_t i)
+inline bool test_flag(const std::vector<bool>& flags, size_t i)
 {
   return i < flags.size() && flags.at(i);
 }
 
-std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
+static std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
 {
   std::vector<std::unique_ptr<FileIndexingArbiter>> arbiters;
 
@@ -113,6 +113,48 @@ std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
 
   return FileIndexingArbiter::createCompositeArbiter(std::move(arbiters));
 }
+
+class ScannerIndexer : public Indexer
+{
+private:
+  IndexingResultQueue& m_resultsQueue;
+  bool m_produced_output = false;
+
+public:
+  ScannerIndexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) : Indexer(fileIndexingArbiter),
+    m_resultsQueue(resultsQueue)
+  {
+
+  }
+
+  bool didProduceOutput() const
+  {
+    return m_produced_output;
+  }
+
+  void resetDidProduceOutput()
+  {
+    m_produced_output = false;
+  }
+
+protected:
+  void initialize(clang::ASTContext& ctx) final
+  {
+    Indexer::initialize(ctx);
+
+    resetDidProduceOutput();
+  }
+
+  void finish() final
+  {
+    Indexer::finish();
+
+    m_resultsQueue.write(std::move(*getCurrentIndex()));
+    resetCurrentIndex();
+    m_produced_output = true;
+  }
+
+};
 
 Scanner::Scanner()
 {
@@ -558,7 +600,7 @@ static bool run_invocation(const WorkQueue::ToolInvocation& invocation, Indexer&
 void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
 {
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
-  auto index_data_consumer = std::make_shared<Indexer>(*arbiter, *resultQueue);
+  auto index_data_consumer = std::make_shared<ScannerIndexer>(*arbiter, *resultQueue);
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(data->indexLocalSymbols);
 
@@ -748,8 +790,7 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 {
   assert(d->fileIdentificator);
 
-  IndexingResultQueue results_queue;
-  auto index_data_consumer = std::make_shared<Indexer>(arbiter, results_queue);
+  auto index_data_consumer = std::make_shared<Indexer>(arbiter);
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
 
@@ -817,11 +858,10 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
     const bool success = invocation.run();
 
     if (success) {
-      std::optional<TranslationUnitIndex> result = results_queue.readSync();
-      // "result" may be std::nullopt if a fatal error occured while parsing
-      // the translation unit.
-      if (result.has_value()) {
-        assimilate(std::move(result.value()));
+      // can getCurrentIndex() return nullptr if the "invocation" was a success ?
+      if (index_data_consumer->getCurrentIndex()) {
+        assimilate(std::move(*index_data_consumer->getCurrentIndex()));
+        index_data_consumer->resetCurrentIndex();
       }
     } else {
       std::cout << "error: tool invocation failed" << std::endl;

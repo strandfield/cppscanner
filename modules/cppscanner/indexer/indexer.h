@@ -28,7 +28,6 @@ namespace cppscanner
 
 class FileIndexingArbiter;
 class FileIdentificator;
-class IndexingResultQueue;
 
 class Indexer;
 
@@ -143,7 +142,6 @@ class Indexer : public clang::index::IndexDataConsumer
 {
 private:
   FileIndexingArbiter& m_fileIndexingArbiter;
-  IndexingResultQueue& m_resultsQueue;
   FileIdentificator& m_fileIdentificator;
   SymbolCollector m_symbolCollector;
   IdxrDiagnosticConsumer m_diagnosticConsumer;
@@ -152,11 +150,10 @@ private:
   std::unique_ptr<TranslationUnitIndex> m_index;
   std::map<clang::FileID, bool> m_ShouldIndexFileCache;
   std::map<clang::FileID, cppscanner::FileID> m_FileIdCache;
-  bool m_produced_output = false;
 
 public:
 
-  Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue);
+  explicit Indexer(FileIndexingArbiter& fileIndexingArbiter);
   ~Indexer();
 
   FileIdentificator& fileIdentificator();
@@ -165,6 +162,7 @@ public:
   clang::DiagnosticConsumer* getDiagnosticConsumer();
 
   TranslationUnitIndex* getCurrentIndex() const;
+  void resetCurrentIndex();
 
   bool shouldIndexFile(clang::FileID fileId);
   bool ShouldTraverseDecl(const clang::Decl* decl);
@@ -176,7 +174,7 @@ public:
   clang::Preprocessor* getPreprocessor() const;
   bool initialized() const;
 
-  void initialize(clang::ASTContext& Ctx) final;
+  void initialize(clang::ASTContext& Ctx) override;
   void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP) final;
   bool handleDeclOccurrence(const clang::Decl* D, clang::index::SymbolRoleSet Roles,
     llvm::ArrayRef<clang::index::SymbolRelation> relations,
@@ -187,10 +185,7 @@ public:
   bool handleModuleOccurrence(const clang::ImportDecl* ImportD,
     const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
     clang::SourceLocation Loc)  final;
-  void finish() final;
-
-  bool didProduceOutput() const;
-  void resetDidProduceOutput();
+  void finish() override;
 
 protected:
   friend IdxrDiagnosticConsumer;
