@@ -31,6 +31,78 @@
 namespace cppscanner
 {
 
+/**
+* \brief a class for collecting C++ symbols while indexing a translation unit
+* 
+* This class creates an IndexerSymbol for each C++ symbol encountered while 
+* indexing a translation unit. Macros are also handled by this class.
+* 
+* Because all declarations go through this class, it is also used by the 
+* Indexer class for post-processing purposes: the location of some declarations 
+* that went thought the SymbolCollector are recorded in the output TranslationUnitIndex.
+*/
+class SymbolCollector
+{
+private:
+  Indexer& m_indexer;
+  std::map<const clang::Decl*, SymbolID> m_symbolIdCache;
+  std::map<const clang::MacroInfo*, SymbolID> m_macroIdCache;
+  std::map<const clang::Module*, SymbolID> m_moduleIdCache;
+
+public:
+  explicit SymbolCollector(Indexer& idxr);
+
+  void reset();
+
+  IndexerSymbol* process(const clang::Decl* decl);
+  IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
+  IndexerSymbol* process(const clang::Module* moduleInfo);
+
+  SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
+
+  const std::map<const clang::Decl*, SymbolID>& declarations() const;
+
+protected:
+  std::string getDeclSpelling(const clang::Decl* decl);
+  void fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl);
+  void fillSymbol(IndexerSymbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
+  void fillSymbol(IndexerSymbol& symbol, const clang::Module* moduleInfo);
+  IndexerSymbol* getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl);
+};
+
+/**
+* \brief class for collecting information from a PreprocessingRecord
+* 
+* This class is used by the Indexer class for listing files that were #included 
+* in the translation unit and for checking if macros were used as header guards.
+*/
+class PreprocessingRecordIndexer
+{
+private:
+  Indexer& m_indexer;
+public:
+  explicit PreprocessingRecordIndexer(Indexer& idxr);
+
+  void process(clang::PreprocessingRecord* ppRecord);
+
+protected:
+  clang::SourceManager& getSourceManager() const;
+  bool shouldIndexFile(const clang::FileID fileId) const;
+  TranslationUnitIndex& currentIndex() const;
+  cppscanner::FileID idFile(const clang::FileID& fileId) const;
+  cppscanner::FileID idFile(const std::string& filePath) const;
+
+protected:
+  void process(clang::InclusionDirective& inclusionDirective);
+  void process(clang::MacroDefinitionRecord& mdr);
+  void process(clang::MacroExpansion& macroExpansion);
+};
+
+} // namespace cppscanner
+
+namespace cppscanner
+{
+
 SymbolID usr2symid(const std::string& usr)
 {
   std::array<uint8_t, 20> sha1 = llvm::SHA1::hash(llvm::arrayRefFromStringRef(usr));
@@ -933,7 +1005,7 @@ void PreprocessingRecordIndexer::process(clang::MacroDefinitionRecord& mdr)
   // If everything worked fine, the macro definition should already have been 
   // handled by handleMacroOccurrence(), so we should be able to get its id
   // from the cache.
-  SymbolID symid = m_indexer.symbolCollector().getMacroSymbolIdFromCache(macro_info);
+  SymbolID symid = m_indexer.getMacroSymbolIdFromCache(macro_info);
 
   if (!symid) {
     return;
@@ -1018,7 +1090,7 @@ void ForwardingIndexDataConsumer::finish()
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter) :
   m_fileIndexingArbiter(fileIndexingArbiter),
   m_fileIdentificator(fileIndexingArbiter.fileIdentificator()),
-  m_symbolCollector(*this)
+  m_symbolCollector(std::make_unique<SymbolCollector>(*this))
 {
 
 }
@@ -1030,9 +1102,9 @@ FileIdentificator& Indexer::fileIdentificator()
   return m_fileIdentificator;
 }
 
-SymbolCollector& Indexer::symbolCollector()
+SymbolCollector& Indexer::symbolCollector() const
 {
-  return m_symbolCollector;
+  return *m_symbolCollector;
 }
 
 clang::DiagnosticConsumer* Indexer::getOrCreateDiagnosticConsumer()
@@ -1162,7 +1234,7 @@ void Indexer::initialize(clang::ASTContext& Ctx)
   mAstContext = &Ctx;
   m_FileIdCache.clear();
   m_ShouldIndexFileCache.clear();
-  m_symbolCollector.reset();
+  symbolCollector().reset();
 
   m_index = std::make_unique<TranslationUnitIndex>();
   m_index->mainFileId = getFileID(Ctx.getSourceManager().getMainFileID());
@@ -1189,7 +1261,7 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
     return true;
   }
 
-  IndexerSymbol* symbol = m_symbolCollector.process(decl);
+  IndexerSymbol* symbol = symbolCollector().process(decl);
 
   if (!symbol)
     return true;
@@ -1200,7 +1272,7 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
 
   if (astNode.Parent) {
     if (auto* fndecl = llvm::dyn_cast<clang::FunctionDecl>(astNode.Parent)) {
-      IndexerSymbol* function_symbol = m_symbolCollector.process(fndecl);
+      IndexerSymbol* function_symbol = symbolCollector().process(fndecl);
       if (function_symbol) {
         symref.referencedBySymbolID = function_symbol->id;
       }
@@ -1276,7 +1348,7 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
     return true;
   }
 
-  IndexerSymbol* symbol = m_symbolCollector.process(name, macroInfo);
+  IndexerSymbol* symbol = symbolCollector().process(name, macroInfo);
 
   if (!symbol)
     return true;
@@ -1330,7 +1402,7 @@ bool Indexer::handleModuleOccurrence(const clang::ImportDecl *importD,
     return true;
   }
 
-  IndexerSymbol* symbol = m_symbolCollector.process(moduleInfo);
+  IndexerSymbol* symbol = symbolCollector().process(moduleInfo);
 
   if (!symbol)
     return true;
@@ -1593,6 +1665,11 @@ void Indexer::HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang
   getCurrentIndex()->add(std::move(d));
 }
 
+SymbolID Indexer::getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const
+{
+  return symbolCollector().getMacroSymbolIdFromCache(macroInfo);
+}
+
 namespace
 {
 
@@ -1641,7 +1718,7 @@ void Indexer::processRelations(std::pair<const clang::Decl*, IndexerSymbol*> dec
     {
     case RelationKind::BaseOf:
     {
-      IndexerSymbol* derived = m_symbolCollector.process(rel.RelatedSymbol);
+      IndexerSymbol* derived = symbolCollector().process(rel.RelatedSymbol);
 
       if (!derived)
         break;
@@ -1667,7 +1744,7 @@ void Indexer::processRelations(std::pair<const clang::Decl*, IndexerSymbol*> dec
     break;
     case RelationKind::OverriddenBy:
     {
-      IndexerSymbol* base_function = m_symbolCollector.process(rel.RelatedSymbol);
+      IndexerSymbol* base_function = symbolCollector().process(rel.RelatedSymbol);
 
       if (!base_function)
         break;
@@ -1693,7 +1770,7 @@ void Indexer::indexPreprocessingRecord(clang::Preprocessor& pp)
 
 void Indexer::recordSymbolDeclarations()
 {
-  for (const auto& p : m_symbolCollector.declarations())
+  for (const auto& p : symbolCollector().declarations())
   {
     const IndexerSymbol* symbol = getCurrentIndex()->getSymbolById(p.second);
 

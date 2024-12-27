@@ -16,13 +16,6 @@
 #include <memory>
 #include <utility>
 
-namespace clang
-{
-class InclusionDirective;
-class MacroDefinitionRecord;
-class MacroExpansion;
-} // namespace clang
-
 namespace cppscanner
 {
 
@@ -30,73 +23,6 @@ class FileIndexingArbiter;
 class FileIdentificator;
 
 class Indexer;
-
-/**
- * \brief a class for collecting C++ symbols while indexing a translation unit
- * 
- * This class creates an IndexerSymbol for each C++ symbol encountered while 
- * indexing a translation unit. Macros are also handled by this class.
- * 
- * Because all declarations go through this class, it is also used by the 
- * Indexer class for post-processing purposes: the location of some declarations 
- * that went thought the SymbolCollector are recorded in the output TranslationUnitIndex.
- */
-class SymbolCollector // TODO: move to private header file?
-{
-private:
-  Indexer& m_indexer;
-  std::map<const clang::Decl*, SymbolID> m_symbolIdCache;
-  std::map<const clang::MacroInfo*, SymbolID> m_macroIdCache;
-  std::map<const clang::Module*, SymbolID> m_moduleIdCache;
-
-public:
-  explicit SymbolCollector(Indexer& idxr);
-
-  void reset();
-
-  IndexerSymbol* process(const clang::Decl* decl);
-  IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
-  IndexerSymbol* process(const clang::Module* moduleInfo);
-
-  SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
-
-  const std::map<const clang::Decl*, SymbolID>& declarations() const;
-
-protected:
-  std::string getDeclSpelling(const clang::Decl* decl);
-  void fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl);
-  void fillSymbol(IndexerSymbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
-  void fillSymbol(IndexerSymbol& symbol, const clang::Module* moduleInfo);
-  IndexerSymbol* getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl);
-};
-
-/**
- * \brief class for collecting information from a PreprocessingRecord
- * 
- * This class is used by the Indexer class for listing files that were #included 
- * in the translation unit and for checking if macros were used as header guards.
- */
-class PreprocessingRecordIndexer // TODO: move to private header file?
-{
-private:
-  Indexer& m_indexer;
-public:
-  explicit PreprocessingRecordIndexer(Indexer& idxr);
-
-  void process(clang::PreprocessingRecord* ppRecord);
-
-protected:
-  clang::SourceManager& getSourceManager() const;
-  bool shouldIndexFile(const clang::FileID fileId) const;
-  TranslationUnitIndex& currentIndex() const;
-  cppscanner::FileID idFile(const clang::FileID& fileId) const;
-  cppscanner::FileID idFile(const std::string& filePath) const;
-
-protected:
-  void process(clang::InclusionDirective& inclusionDirective);
-  void process(clang::MacroDefinitionRecord& mdr);
-  void process(clang::MacroExpansion& macroExpansion);
-};
 
 /**
  * \brief an index data consumer that forwards data to an indexer 
@@ -128,6 +54,7 @@ private:
 };
 
 class IdxrDiagnosticConsumer;
+class SymbolCollector;
 
 /**
  * \brief class for indexing translation units
@@ -156,7 +83,7 @@ class Indexer
 private:
   FileIndexingArbiter& m_fileIndexingArbiter;
   FileIdentificator& m_fileIdentificator;
-  SymbolCollector m_symbolCollector;
+  std::unique_ptr<SymbolCollector> m_symbolCollector;
   std::unique_ptr<IdxrDiagnosticConsumer> m_diagnosticConsumer;
   clang::ASTContext* mAstContext = nullptr;
   std::shared_ptr<clang::Preprocessor> m_pp;
@@ -171,7 +98,6 @@ public:
 
   FileIdentificator& fileIdentificator();
 
-  SymbolCollector& symbolCollector(); // TODO: make protected?
   clang::DiagnosticConsumer* getOrCreateDiagnosticConsumer();
 
   TranslationUnitIndex* getCurrentIndex() const;
@@ -206,8 +132,10 @@ public:
   void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo);
   // end clang::DiagnosticConsumer
 
+  SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
+
 protected:
-  friend IdxrDiagnosticConsumer;
+  SymbolCollector& symbolCollector() const;
   clang::SourceManager& getSourceManager() const;
 
 protected:
