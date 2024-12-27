@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "cppscanner/base/env.h"
 #include "cppscanner/index/file.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/index/reference.h"
@@ -8,8 +9,6 @@
 #include "cppscanner/snapshot/snapshotreader.h"
 #include "cppscanner/snapshot/symbolrecorditerator.h"
 
-#include <cstdlib>
-#include <cstring>
 #include <vector>
 #include <optional>
 #include <regex>
@@ -100,9 +99,9 @@ public:
   {
     bool doRemove = true;
 
-    if (const char* value = std::getenv("CPPSCANNER_TESTS_KEEP_SNAPSHOTS"))
+    if (std::optional<std::string> val = cppscanner::readEnv("CPPSCANNER_TESTS_KEEP_SNAPSHOTS"))
     {
-      if (std::strcmp(value, "0") == 0 || std::strcmp(value, "OFF") == 0)
+      if (*val == "0" || *val == "OFF")
       {
         doRemove = false;
       }

@@ -1,4 +1,6 @@
 
+#include "cppscanner/base/config.h"
+#include "cppscanner/base/env.h"
 #include "cppscanner/indexer/fileidentificator.h"
 #include "cppscanner/indexer/fileindexingarbiter.h"
 #include "cppscanner/indexer/indexer.h"
@@ -10,7 +12,6 @@
 
 #include <clang/Index/IndexingAction.h>
 
-#include <cstdlib> // getenv()
 #include <cstring> // strcmp(), strlen()
 #include <filesystem>
 #include <iostream>
@@ -65,10 +66,10 @@ public:
 
     const std::string filename = std::filesystem::path(m_inFile).filename().string();
     int n = 1;
-    std::filesystem::path db_path = m_outDir / (filename + ".1.aba");
+    std::filesystem::path db_path = m_outDir / (filename + std::string(".1") + PLUGIN_SNAPSHOT_EXTENSION);
     while (std::filesystem::exists(db_path))
     {
-      db_path = m_outDir / (filename + "." + std::to_string(++n) + ".aba");
+      db_path = m_outDir / (filename + "." + std::to_string(++n) + PLUGIN_SNAPSHOT_EXTENSION);
     }
 
     m_snapshot_creator.init(db_path);
@@ -275,9 +276,9 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
   }
   else
   {
-    if (const char* val = std::getenv("CPPSCANNER_INDEX_LOCAL_SYMBOLS"))
+    if (std::optional<std::string> val = cppscanner::readEnv(cppscanner::ENV_INDEX_LOCAL_SYMBOLS))
     {
-      m_indexLocalSymbols = std::strcmp(val, "0") != 0;
+      m_indexLocalSymbols = (*val != "0");
     }
   }
 
@@ -287,9 +288,9 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
   }
   else
   {
-    if (const char* val = std::getenv("CPPSCANNER_HOME_DIR"))
+    if (std::optional<std::string> val = cppscanner::readEnv(cppscanner::ENV_HOME_DIR))
     {
-      m_homePath = val;
+      m_homePath = *val;
     }
     else
     {
@@ -303,13 +304,13 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
   }
   else
   {
-    if (const char* val = std::getenv("CPPSCANNER_OUTPUT_DIR"))
+    if (std::optional<std::string> val = cppscanner::readEnv(cppscanner::ENV_PLUGIN_OUTPUT_DIR))
     {
-      m_outDir = val;
+      m_outDir = *val;
     }
     else
     {
-      m_outDir = (std::filesystem::current_path() / ".cppscanner").generic_u8string();
+      m_outDir = (std::filesystem::current_path() / cppscanner::PLUGIN_OUTPUT_FOLDER_NAME).generic_u8string();
     }
   }
   

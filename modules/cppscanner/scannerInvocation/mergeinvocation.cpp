@@ -1,6 +1,8 @@
 
 #include "mergeinvocation.h"
 
+#include "cppscanner/base/config.h"
+#include "cppscanner/base/env.h"
 #include "cppscanner/snapshot/merge.h"
 
 #include <filesystem>
@@ -91,7 +93,7 @@ void addInputFilesFromFolder(std::vector<std::filesystem::path>&output, const st
 {
   for (const std::filesystem::directory_entry& e : std::filesystem::directory_iterator(scannerFolderPath))
   {
-    if (e.is_regular_file() && e.path().extension() == ".aba")
+    if (e.is_regular_file() && e.path().extension() == PLUGIN_SNAPSHOT_EXTENSION)
     {
       output.push_back(e.path());
     }
@@ -100,7 +102,7 @@ void addInputFilesFromFolder(std::vector<std::filesystem::path>&output, const st
 
 void searchInputFilesRecursively(std::vector<std::filesystem::path>&output, const std::filesystem::path& folderPath)
 {
-  if (folderPath.filename() == ".cppscanner")
+  if (folderPath.filename() == PLUGIN_OUTPUT_FOLDER_NAME)
   {
     addInputFilesFromFolder(output, folderPath);
   }
@@ -108,7 +110,7 @@ void searchInputFilesRecursively(std::vector<std::filesystem::path>&output, cons
   {
     for (const std::filesystem::directory_entry& e : std::filesystem::recursive_directory_iterator(folderPath))
     {
-      if (e.is_directory() && e.path().filename() == ".cppscanner")
+      if (e.is_directory() && e.path().filename() == PLUGIN_OUTPUT_FOLDER_NAME)
       {
         addInputFilesFromFolder(output, e.path());
       }
@@ -129,10 +131,10 @@ std::vector<std::filesystem::path> searchInputFilesRecursively(const std::vector
   }
   else
   {    
-    const char* outDir = std::getenv("CPPSCANNER_OUTPUT_DIR");
+    std::optional<std::string> outDir = readEnv(ENV_PLUGIN_OUTPUT_DIR);
     if (outDir)
     {
-      searchInputFilesRecursively(result, std::string(outDir));
+      searchInputFilesRecursively(result, *outDir);
     }
 
     if(!outDir || result.empty())
@@ -184,10 +186,10 @@ void MergeCommandInvocation::readEnv()
 {
   if (!m_options.home.has_value())
   {
-    const char* text = std::getenv("CPPSCANNER_HOME_DIR");
+    std::optional<std::string> dir = cppscanner::readEnv(ENV_HOME_DIR);
 
-    if (text) {
-      m_options.home = std::string(text);
+    if (dir) {
+      m_options.home = *dir;
     }
   }
 }
