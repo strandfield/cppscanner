@@ -49,8 +49,11 @@ public:
 
   void setOutputPath(const std::filesystem::path& outputPath);
   void addInputPath(const std::filesystem::path& inputPath);
+  void setInputs(const std::vector<std::filesystem::path>& inputPaths);
   void setProjectHome(const std::filesystem::path& homePath);
   void setFileContentWriter(std::unique_ptr<FileContentWriter> contentWriter);
+
+  const std::vector<std::filesystem::path>& inputPaths() const;
 
   void runMerge();
 

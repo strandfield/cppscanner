@@ -20,6 +20,7 @@ struct MergeCommandOptions
   std::filesystem::path output;
   std::optional<std::filesystem::path> home;
   bool captureMissingFileContent = false;
+  bool linkMode = false;
 };
 
 /**
@@ -34,6 +35,8 @@ private:
 
 public:
   explicit MergeCommandInvocation(const std::vector<std::string>& command);
+
+  static void printHelp();
 
   const MergeCommandOptions& parsedCommandLine() const;
 

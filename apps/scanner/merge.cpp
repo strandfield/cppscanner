@@ -4,17 +4,9 @@
 #include <iostream>
 #include <stdexcept>
 
-constexpr const char* MERGE_DESCRIPTION = R"(Description:
-  Merge two or more snapshots into one.)";
-
-
 [[noreturn]] void mergeHelp()
 {
-  std::cout << "Syntax:" << std::endl;
-  std::cout << "  cppscanner merge -o <output> input1 input2 ..." << std::endl;
-  std::cout << "" << std::endl;
-  std::cout << MERGE_DESCRIPTION << std::endl;
-
+  cppscanner::MergeCommandInvocation::printHelp();
   std::exit(0);
 }
 

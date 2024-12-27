@@ -223,6 +223,16 @@ void SnapshotMerger::addInputPath(const std::filesystem::path& inputPath)
   m_input_paths.push_back(inputPath);
 }
 
+void SnapshotMerger::setInputs(const std::vector<std::filesystem::path>& inputPaths)
+{
+  m_input_paths.assign(inputPaths.begin(), inputPaths.end());
+}
+
+const std::vector<std::filesystem::path>& SnapshotMerger::inputPaths() const
+{
+  return m_input_paths;
+}
+
 void SnapshotMerger::setProjectHome(const std::filesystem::path& homePath)
 {
   m_project_home_path = homePath;
