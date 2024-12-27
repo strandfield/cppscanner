@@ -11,3 +11,6 @@ target_link_libraries(cppscanner-plugin indexer)
 
 set_target_properties(cppscanner-plugin PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 set_target_properties(cppscanner-plugin PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+install(TARGETS cppscanner-plugin
+  LIBRARY DESTINATION "lib")
