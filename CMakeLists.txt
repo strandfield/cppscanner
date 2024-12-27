@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 project(cppscanner VERSION 0.1.0)
 
+option(CPPSCANNER_BUILD_PLUGIN "Build the clang plugin")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CXX_STANDARD_REQUIRED ON)
 
@@ -16,7 +18,10 @@ find_package(Clang REQUIRED CONFIG HINTS "${LLVM_INSTALL_PREFIX}/lib/cmake/clang
 
 add_subdirectory(modules)
 add_subdirectory(apps)
-add_subdirectory(plugin)
+
+if (CPPSCANNER_BUILD_PLUGIN)
+  add_subdirectory(plugin)
+endif()
 
 if (NOT DEFINED BUILD_TESTS)
   set(BUILD_TESTS ON CACHE BOOL "whether building tests is enabled")

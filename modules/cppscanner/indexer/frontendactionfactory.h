@@ -16,11 +16,11 @@ namespace cppscanner
 class IndexingFrontendActionFactory : public clang::tooling::FrontendActionFactory
 {
 private:
-  std::shared_ptr<Indexer> m_IndexDataConsumer;
+  std::shared_ptr<ForwardingIndexDataConsumer> m_IndexDataConsumer;
   bool m_indexLocalSymbols = false;
 
 public:
-  IndexingFrontendActionFactory(std::shared_ptr<Indexer> dataConsumer)
+  IndexingFrontendActionFactory(std::shared_ptr<ForwardingIndexDataConsumer> dataConsumer)
   {
     m_IndexDataConsumer = dataConsumer;
   }
@@ -40,7 +40,7 @@ public:
     opts.IndexTemplateParameters = m_indexLocalSymbols;
 
     opts.ShouldTraverseDecl = [idc](const clang::Decl* decl) -> bool {
-      return idc->ShouldTraverseDecl(decl);
+      return idc->indexer().ShouldTraverseDecl(decl);
       };
 
     return clang::index::createIndexingAction(idc, opts);

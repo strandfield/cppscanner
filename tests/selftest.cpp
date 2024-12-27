@@ -75,19 +75,23 @@ TEST_CASE("Self parsing test", "[scanner][self]")
 
   // Indexer derives from clang
   {
-    SymbolRecord indexer = s.getSymbolByName({ "cppscanner", "Indexer" });
-    REQUIRE(indexer.kind == SymbolKind::Class);
-    
-    std::vector<BaseOf> bases = s.getBasesOf(indexer.id);
+    {
+      SymbolRecord indexer = s.getSymbolByName({ "cppscanner", "Indexer" });
+      REQUIRE(indexer.kind == SymbolKind::Class);
+    }
+
+    SymbolRecord idc = s.getSymbolByName({ "cppscanner", "ForwardingIndexDataConsumer" });
+    REQUIRE(idc.kind == SymbolKind::Class);
+    std::vector<BaseOf> bases = s.getBasesOf(idc.id);
     REQUIRE(bases.size() == 1);
 
     SymbolRecord idxdtcon = s.getSymbolByName({ "clang", "index", "IndexDataConsumer" });
-    REQUIRE(indexer.kind == SymbolKind::Class);
+    REQUIRE(idxdtcon.kind == SymbolKind::Class);
     REQUIRE(bases.front().baseClassID == idxdtcon.id);
 
-    SymbolRecord handle_decl_occurrence_derived = getRecord(s, SymbolRecordFilter().withNameLike("handleDeclOccurrence(%)").withParent(indexer.id));
+    SymbolRecord handle_decl_occurrence_derived = getRecord(s, SymbolRecordFilter().withNameLike("handleDeclOccurrence(%)").withParent(idc.id));
     REQUIRE(handle_decl_occurrence_derived.kind == SymbolKind::Method);
-    REQUIRE(testFlag(handle_decl_occurrence_derived, FunctionInfo::Final));
+    REQUIRE(testFlag(handle_decl_occurrence_derived, FunctionInfo::Override));
 
     SymbolRecord handle_decl_occurrence_base = getRecord(s, SymbolRecordFilter().withNameLike("handleDeclOccurrence(%)").withParent(idxdtcon.id));
     std::vector<Override> overrides = s.getOverridesOf(handle_decl_occurrence_base.id);

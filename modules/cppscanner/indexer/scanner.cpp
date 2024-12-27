@@ -84,14 +84,14 @@ static std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d
   return createIndexingArbiter(*d.fileIdentificator, opts);
 }
 
-class ScannerIndexer : public Indexer
+class ThreadProcIndexDataConsumer : public ForwardingIndexDataConsumer
 {
 private:
   IndexingResultQueue& m_resultsQueue;
   bool m_produced_output = false;
 
 public:
-  ScannerIndexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) : Indexer(fileIndexingArbiter),
+  ThreadProcIndexDataConsumer(Indexer& indexer, IndexingResultQueue& resultsQueue) : ForwardingIndexDataConsumer(&indexer),
     m_resultsQueue(resultsQueue)
   {
 
@@ -110,17 +110,17 @@ public:
 protected:
   void initialize(clang::ASTContext& ctx) final
   {
-    Indexer::initialize(ctx);
+    ForwardingIndexDataConsumer::initialize(ctx);
 
     resetDidProduceOutput();
   }
 
   void finish() final
   {
-    Indexer::finish();
+    ForwardingIndexDataConsumer::finish();
 
-    m_resultsQueue.write(std::move(*getCurrentIndex()));
-    resetCurrentIndex();
+    m_resultsQueue.write(std::move(*indexer().getCurrentIndex()));
+    indexer().resetCurrentIndex();
     m_produced_output = true;
   }
 
@@ -580,7 +580,8 @@ static bool run_invocation(const WorkQueue::ToolInvocation& invocation, Indexer&
 void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
 {
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
-  auto index_data_consumer = std::make_shared<ScannerIndexer>(*arbiter, *resultQueue);
+  Indexer indexer{ *arbiter };
+  auto index_data_consumer = std::make_shared<ThreadProcIndexDataConsumer>(indexer, *resultQueue);
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(data->indexLocalSymbols);
 
@@ -596,7 +597,7 @@ void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQu
     bool success = false;
 
     try {
-      success = run_invocation(*item, *index_data_consumer, actionfactory, file_manager.get());
+      success = run_invocation(*item, indexer, actionfactory, file_manager.get());
     }
     catch (...)
     {
@@ -782,8 +783,8 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 {
   assert(d->fileIdentificator);
 
-  auto index_data_consumer = std::make_shared<Indexer>(arbiter);
-  IndexingFrontendActionFactory actionfactory{ index_data_consumer };
+  Indexer indexer{ arbiter };
+  IndexingFrontendActionFactory actionfactory{ std::make_shared<ForwardingIndexDataConsumer>(&indexer) };
   actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
 
   for (const ScannerCompileCommand& cc : commands)
@@ -845,15 +846,15 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
     clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), &fileManager };
 
-    invocation.setDiagnosticConsumer(index_data_consumer->getOrCreateDiagnosticConsumer());
+    invocation.setDiagnosticConsumer(indexer.getOrCreateDiagnosticConsumer());
 
     const bool success = invocation.run();
 
     if (success) {
       // can getCurrentIndex() return nullptr if the "invocation" was a success ?
-      if (index_data_consumer->getCurrentIndex()) {
-        m_snapshot_creator->feed(std::move(*index_data_consumer->getCurrentIndex()));
-        index_data_consumer->resetCurrentIndex();
+      if (indexer.getCurrentIndex()) {
+        m_snapshot_creator->feed(std::move(*indexer.getCurrentIndex()));
+        indexer.resetCurrentIndex();
       }
     } else {
       std::cout << "error: tool invocation failed" << std::endl;

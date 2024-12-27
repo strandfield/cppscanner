@@ -18,34 +18,35 @@
 namespace cppscanner
 {
 
-class PluginIndexer : public Indexer
+class IndexDataConsumerBundle : public ForwardingIndexDataConsumer
 {
 private:
   std::string m_homePath;
   std::string m_dbPath;
+  bool m_indexLocalSymbols;
+  std::unique_ptr<cppscanner::FileIdentificator> m_identificator;
+  std::unique_ptr<cppscanner::FileIndexingArbiter> m_arbiter;
+  cppscanner::Indexer m_indexer;
   SnapshotCreator m_snapshot_creator;
 
 public:
-  PluginIndexer(std::string dbPath, std::string homePath, FileIndexingArbiter& arbiter) : Indexer(arbiter),
-    m_snapshot_creator(arbiter.fileIdentificator()),
-    m_homePath(homePath),
-    m_dbPath(dbPath)
+  IndexDataConsumerBundle(std::string dbPath, std::string homePath, bool indexLocalSymbols)
+    : m_homePath(std::move(homePath))
+    , m_dbPath(std::move(dbPath))
+    , m_indexLocalSymbols(indexLocalSymbols)
+    , m_identificator(cppscanner::FileIdentificator::createFileIdentificator())
+    , m_arbiter(createArbiter(m_homePath, *m_identificator))
+    , m_indexer(*m_arbiter)
+    , m_snapshot_creator(*m_identificator)
   {
-    std::cout << "PluginIndexer()" << std::endl;
-
-  }
-
-  ~PluginIndexer()
-  {
-    std::cout << "~PluginIndexer()" << std::endl;
+    setIndexer(m_indexer);
   }
 
   void initialize(clang::ASTContext& Ctx) final
   {
     std::cout << "initialize()" << std::endl;
 
-
-    Indexer::initialize(Ctx);
+    ForwardingIndexDataConsumer::initialize(Ctx);
 
     m_snapshot_creator.setHomeDir(m_homePath);
     m_snapshot_creator.setCaptureFileContent(false);
@@ -54,95 +55,34 @@ public:
       std::filesystem::remove(m_dbPath);
     }
     m_snapshot_creator.init(m_dbPath);
+
+    m_snapshot_creator.writeProperty("scanner.indexLocalSymbols", m_indexLocalSymbols ? "true" : "false");
   }
 
-  void finish()  final
+  void finish() final
   {
     std::cout << "finish()" << std::endl;
 
+    ForwardingIndexDataConsumer::finish();
 
-    Indexer::finish();
-
-    m_snapshot_creator.feed(std::move(*getCurrentIndex()));
+    m_snapshot_creator.feed(std::move(*m_indexer.getCurrentIndex()));
 
     m_snapshot_creator.close();
   }
 
-  SnapshotCreator& snapshotCreator()
-  {
-    return m_snapshot_creator;
-  }
-};
-
-class MyIndexDataConsumer : public clang::index::IndexDataConsumer
-{
 private:
-  std::unique_ptr<cppscanner::FileIdentificator> m_identificator;
-  std::unique_ptr<cppscanner::FileIndexingArbiter> m_arbiter;
-  std::unique_ptr<PluginIndexer> m_indexer;
-  bool m_indexLocalSymbols;
-public:
-
-  MyIndexDataConsumer (std::string dbPath, std::string homePath, bool indexLocalSymbols)
+  static std::unique_ptr<FileIndexingArbiter> createArbiter(const std::string& homePath, cppscanner::FileIdentificator& fileIdentificator)
   {
-    m_identificator = cppscanner::FileIdentificator::createFileIdentificator();
     cppscanner::CreateIndexingArbiterOptions opts;
     opts.homeDirectory = homePath;
     opts.indexExternalFiles = false;
-    m_arbiter = cppscanner::createIndexingArbiter(*m_identificator, opts);
-
-    m_indexer = std::make_unique<PluginIndexer>(dbPath, homePath, *m_arbiter);
-
-    m_indexLocalSymbols = indexLocalSymbols;
+    return cppscanner::createIndexingArbiter(fileIdentificator, opts);
   }
-
-  void initialize(clang::ASTContext& Ctx) override
-  {
-    m_indexer->initialize(Ctx);
-
-    m_indexer->snapshotCreator().writeProperty("scanner.indexLocalSymbols", m_indexLocalSymbols ? "true" : "false");
-
-  }
-
-  void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP) final
-  {
-    m_indexer->setPreprocessor(PP);
-
-  }
-
-  bool handleDeclOccurrence(const clang::Decl* D, clang::index::SymbolRoleSet Roles,
-    llvm::ArrayRef<clang::index::SymbolRelation> relations,
-    clang::SourceLocation Loc, ASTNodeInfo ASTNode) final
-  {
-    return m_indexer->handleDeclOccurrence(D, Roles, relations, Loc, ASTNode);
-  }
-
-  bool handleMacroOccurrence(const clang::IdentifierInfo* Name,
-    const clang::MacroInfo* MI, clang::index::SymbolRoleSet Roles,
-    clang::SourceLocation Loc)  final
-  {
-    return m_indexer->handleMacroOccurrence(Name, MI, Roles, Loc);
-  }
-
-  bool handleModuleOccurrence(const clang::ImportDecl* ImportD,
-    const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
-    clang::SourceLocation Loc)  final
-  {
-    return m_indexer->handleModuleOccurrence(ImportD, Mod, Roles, Loc);
-  }
-
-  void finish() override
-  {
-    m_indexer->finish();
-  }
-
-
-  bool ShouldTraverseDecl(const clang::Decl* decl) const{return m_indexer->ShouldTraverseDecl(decl);}
-
 };
 
 } // namespace cppscanner
 
+// note, the action shouldn't hold state as it is destroyed after the ast consumer is created
 class TakeSnapshotPluginASTAction : public clang::PluginASTAction 
 {
 public:
@@ -151,8 +91,9 @@ public:
 
   clang::PluginASTAction::ActionType getActionType() final;
 
-  std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance& ci, llvm::StringRef inFile) final;
   bool ParseArgs(const clang::CompilerInstance& ci, const std::vector<std::string>& args) final;
+
+  std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance& ci, llvm::StringRef inFile) final;
 
   bool BeginSourceFileAction(clang::CompilerInstance &CI) final;
   void EndSourceFileAction() final;
@@ -160,8 +101,6 @@ public:
 private:
   bool m_indexLocalSymbols = false;
   std::string m_homePath;
-  // std::unique_ptr<cppscanner::FileIdentificator> m_identificator;
-  // std::unique_ptr<cppscanner::FileIndexingArbiter> m_arbiter;
 };
 
 TakeSnapshotPluginASTAction::TakeSnapshotPluginASTAction()
@@ -175,14 +114,15 @@ TakeSnapshotPluginASTAction::~TakeSnapshotPluginASTAction()
   std::cout << "~TakeSnapshotPluginASTAction()" << std::endl;
 }
 
+// As far as I can tell, the action object is destroyed after this function is called,
+// so the returned ASTConsumer outlives the action.
 std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsumer(clang::CompilerInstance &ci, llvm::StringRef inFile) 
 {
   std::cout << "CreateASTConsumer()" << std::endl;
 
   std::cout << "inFile = " << inFile.str() << std::endl;
 
-  //auto indexer = std::make_shared<cppscanner::PluginIndexer>(inFile.str() + ".cppscanner.db", m_homePath, *m_arbiter);
-  auto indexer = std::make_shared<cppscanner::MyIndexDataConsumer>(inFile.str() + ".cppscanner.db", m_homePath, m_indexLocalSymbols);
+  auto data_consumer = std::make_shared<cppscanner::IndexDataConsumerBundle>(inFile.str() + ".cppscanner.db", m_homePath, m_indexLocalSymbols);
 
   // TODO: see how we can handle diagnostics
   //constexpr bool should_own_client = false;
@@ -201,11 +141,11 @@ std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsum
   opts.IndexParametersInDeclarations = false;
   opts.IndexTemplateParameters = m_indexLocalSymbols;
 
-  opts.ShouldTraverseDecl = [indexer](const clang::Decl* decl) -> bool {
-    return indexer->ShouldTraverseDecl(decl);
+  opts.ShouldTraverseDecl = [data_consumer](const clang::Decl* decl) -> bool {
+    return data_consumer->indexer().ShouldTraverseDecl(decl);
     };
 
-  return clang::index::createIndexingASTConsumer(indexer, opts, ci.getPreprocessorPtr());
+  return clang::index::createIndexingASTConsumer(data_consumer, opts, ci.getPreprocessorPtr());
 }
 
 bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, const std::vector<std::string>& args)
@@ -228,11 +168,6 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
 
   std::cout << "m_homePath = " << m_homePath << std::endl;
 
-  // m_identificator = cppscanner::FileIdentificator::createFileIdentificator();
-  // cppscanner::CreateIndexingArbiterOptions opts;
-  // opts.homeDirectory = m_homePath;
-  // opts.indexExternalFiles = false;
-  // m_arbiter = cppscanner::createIndexingArbiter(*m_identificator, opts);
   return true;
 }
 

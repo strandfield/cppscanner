@@ -70,6 +70,8 @@ protected:
   IndexerSymbol* getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl);
 };
 
+// TODO: ajouter une version qui prend en paramètre un weak_ptr vers indexer dans le 
+// cas où le consumer survit à l'indexer
 /**
  * \brief class for receiving diagnostics from clang
  */
@@ -118,7 +120,36 @@ protected:
 };
 
 /**
- * \brief class for receiving indexing data from clang
+ * \brief an index data consumer that forwards data to an indexer 
+ */
+class ForwardingIndexDataConsumer : public clang::index::IndexDataConsumer
+{
+public:
+  explicit ForwardingIndexDataConsumer(Indexer* indexer = nullptr);
+  
+  Indexer& indexer() const;
+  void setIndexer(Indexer& indexer);
+
+protected: // clang::index::IndexDataConsumer overrides
+  void initialize(clang::ASTContext& Ctx) override;
+  void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP) override;
+  bool handleDeclOccurrence(const clang::Decl* D, clang::index::SymbolRoleSet Roles,
+    llvm::ArrayRef<clang::index::SymbolRelation> relations,
+    clang::SourceLocation Loc, ASTNodeInfo ASTNode) override;
+  bool handleMacroOccurrence(const clang::IdentifierInfo* Name,
+    const clang::MacroInfo* MI, clang::index::SymbolRoleSet Roles,
+    clang::SourceLocation Loc)  override;
+  bool handleModuleOccurrence(const clang::ImportDecl* ImportD,
+    const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
+    clang::SourceLocation Loc)  override;
+  void finish() override;
+
+private:
+  Indexer* m_indexer = nullptr;
+};
+
+/**
+ * \brief class for indexing translation units
  * 
  * This class is used to index a translation unit by filling a 
  * corresponding TranslationUnitIndex.
@@ -138,7 +169,7 @@ protected:
  * Compiler diagnostics are not handled by this class but rather
  * by the IdxrDiagnosticConsumer class.
  */
-class Indexer : public clang::index::IndexDataConsumer
+class Indexer
 {
 private:
   FileIndexingArbiter& m_fileIndexingArbiter;
@@ -174,18 +205,20 @@ public:
   clang::Preprocessor* getPreprocessor() const;
   bool initialized() const;
 
-  void initialize(clang::ASTContext& Ctx) override;
-  void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP) final;
+  // clang::index::IndexDataConsumer interface
+  void initialize(clang::ASTContext& Ctx);
+  void setPreprocessor(std::shared_ptr<clang::Preprocessor> PP);
   bool handleDeclOccurrence(const clang::Decl* D, clang::index::SymbolRoleSet Roles,
     llvm::ArrayRef<clang::index::SymbolRelation> relations,
-    clang::SourceLocation Loc, ASTNodeInfo ASTNode) final;
+    clang::SourceLocation Loc, clang::index::IndexDataConsumer::ASTNodeInfo ASTNode);
   bool handleMacroOccurrence(const clang::IdentifierInfo* Name,
     const clang::MacroInfo* MI, clang::index::SymbolRoleSet Roles,
-    clang::SourceLocation Loc)  final;
+    clang::SourceLocation Loc);
   bool handleModuleOccurrence(const clang::ImportDecl* ImportD,
     const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
-    clang::SourceLocation Loc)  final;
-  void finish() override;
+    clang::SourceLocation Loc);
+  void finish();
+  // end clang::index::IndexDataConsumer
 
 protected:
   friend IdxrDiagnosticConsumer;

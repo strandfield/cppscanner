@@ -963,6 +963,60 @@ void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
   (void)macroExpansion;
 }
 
+ForwardingIndexDataConsumer::ForwardingIndexDataConsumer(Indexer* indexer)
+  : m_indexer(indexer)
+{
+
+}
+
+Indexer& ForwardingIndexDataConsumer::indexer() const
+{
+  assert(m_indexer);
+  return *m_indexer;
+}
+
+void ForwardingIndexDataConsumer::setIndexer(Indexer& indexer)
+{
+  m_indexer = &indexer;
+}
+
+void ForwardingIndexDataConsumer::initialize(clang::ASTContext& Ctx)
+{
+  indexer().initialize(Ctx);
+}
+
+void ForwardingIndexDataConsumer::setPreprocessor(std::shared_ptr<clang::Preprocessor> PP)
+{
+  indexer().setPreprocessor(PP);
+}
+
+bool ForwardingIndexDataConsumer::handleDeclOccurrence(const clang::Decl* D, clang::index::SymbolRoleSet Roles,
+  llvm::ArrayRef<clang::index::SymbolRelation> relations,
+  clang::SourceLocation Loc, ASTNodeInfo ASTNode)
+{
+  return indexer().handleDeclOccurrence(D, Roles, relations, Loc, ASTNode);
+}
+
+bool ForwardingIndexDataConsumer::handleMacroOccurrence(const clang::IdentifierInfo* Name,
+  const clang::MacroInfo* MI, clang::index::SymbolRoleSet Roles,
+  clang::SourceLocation Loc)
+{
+  return indexer().handleMacroOccurrence(Name, MI, Roles, Loc);
+}
+
+bool ForwardingIndexDataConsumer::handleModuleOccurrence(const clang::ImportDecl* ImportD,
+  const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
+  clang::SourceLocation Loc)
+{
+  return indexer().handleModuleOccurrence(ImportD, Mod, Roles, Loc);
+}
+
+void ForwardingIndexDataConsumer::finish() 
+{
+  indexer().finish();
+}
+
+
 Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter) :
   m_fileIndexingArbiter(fileIndexingArbiter),
   m_fileIdentificator(fileIndexingArbiter.fileIdentificator()),
@@ -1131,7 +1185,7 @@ void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
 
 bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::SymbolRoleSet roles,
   llvm::ArrayRef<clang::index::SymbolRelation> relations,
-  clang::SourceLocation loc, ASTNodeInfo astNode)
+  clang::SourceLocation loc, clang::index::IndexDataConsumer::ASTNodeInfo astNode)
 {
   if (!shouldIndexFile(getSourceManager().getFileID(loc))) {
     return true;
