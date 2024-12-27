@@ -766,73 +766,71 @@ IndexerSymbol* SymbolCollector::getParentSymbol(const IndexerSymbol& symbol, con
   return parent_symbol;
 }
 
-void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo)
+// a class for receiving diagnostics from clang.
+// the diagnostics are printed to cout and forwarded to the Indexer.
+// an instance of this class is created and managed by the Indexer
+// (in particular, its lifetime is within the lifetime of the Indexer)
+class IdxrDiagnosticConsumer : public clang::DiagnosticConsumer
 {
-  clang::DiagnosticConsumer::HandleDiagnostic(dlvl, dinfo);
+  Indexer& m_indexer;
 
-  Diagnostic d;
-
-  d.level = static_cast<DiagnosticLevel>(dlvl);
-
-  llvm::SmallString<1000> diag;
-  dinfo.FormatDiagnostic(diag);
-  d.message = diag.str().str();
-
-  const clang::SourceRange srcrange = dinfo.getLocation();
-
-  if (!m_indexer.initialized())
+public:
+  explicit IdxrDiagnosticConsumer(Indexer& idxr) : 
+    m_indexer(idxr)
   {
-    if (!dinfo.hasSourceManager())
+  }
+
+  bool IncludeInDiagnosticCounts() const final { return false; }
+
+  void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo) final
+  {
+    clang::DiagnosticConsumer::HandleDiagnostic(dlvl, dinfo);
+
+    if (!m_indexer.initialized())
     {
-      std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+      if (!dinfo.hasSourceManager())
+      {
+        std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+        return;
+      }
+
+      const auto level = static_cast<DiagnosticLevel>(dlvl);
+
+      const clang::SourceRange srcrange = dinfo.getLocation();
+      clang::PresumedLoc ploc = dinfo.getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+      llvm::SmallString<1000> diag;
+      dinfo.FormatDiagnostic(diag);
+      std::string message = diag.str().str();
+
+      if (ploc.isValid())
+      {
+        std::cout << ploc.getLine() << ":" << ploc.getColumn() << ": " 
+          << getDiagnosticLevelString(level) << ": " << message << std::endl;
+      }
+      else
+      {
+        std::cout << getDiagnosticLevelString(level) << ": " << message << std::endl;
+      }
+
       return;
     }
 
-    clang::PresumedLoc ploc = dinfo.getSourceManager().getPresumedLoc(srcrange.getBegin());
-
-    if (ploc.isValid())
-    {
-      std::cout << ploc.getLine() << ":" << ploc.getColumn() << ": " 
-        << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
-    }
-    else
-    {
-      std::cout << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
-    }
-
-    return;
+    m_indexer.HandleDiagnostic(dlvl, dinfo);
   }
 
-  clang::PresumedLoc ploc = m_indexer.getSourceManager().getPresumedLoc(srcrange.getBegin());
-
-  if (!ploc.isValid())
+  void finish() final
   {
-    return;
+    clang::DiagnosticConsumer::finish();
   }
 
-  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
-
-  if (!m_indexer.shouldIndexFile(ploc.getFileID())) {
-    return;
+  void printDiagnostic(const Diagnostic& d, const std::string& filePath)
+  {
+    std::cout << filePath << ":"
+      << d.position.line() << ":" << d.position.column() << ": "
+      << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
   }
-
-  d.fileID = m_indexer.getFileID(ploc.getFileID());
-
-  if (!d.fileID) {
-    return;
-  }
-  
-  std::cout << m_indexer.fileIdentificator().getFile(d.fileID) << ":"
-    << ploc.getLine() << ":" << ploc.getColumn() << ": " 
-    << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
-
-  m_indexer.getCurrentIndex()->add(std::move(d));
-}
-
-void IdxrDiagnosticConsumer::finish()
-{
-  clang::DiagnosticConsumer::finish();
-}
+};
 
 PreprocessingRecordIndexer::PreprocessingRecordIndexer(Indexer& idxr) :
   m_indexer(idxr)
@@ -1549,6 +1547,50 @@ void Indexer::finish()
   recordSymbolDeclarations();
 
   mAstContext = nullptr;
+}
+
+void Indexer::HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo)
+{
+  assert(initialized());
+  if (!initialized())
+  {
+    return;
+  }
+
+  Diagnostic d;
+
+  d.level = static_cast<DiagnosticLevel>(dlvl);
+
+  llvm::SmallString<1000> diag;
+  dinfo.FormatDiagnostic(diag);
+  d.message = diag.str().str();
+
+  const clang::SourceRange srcrange = dinfo.getLocation();
+  clang::PresumedLoc ploc = getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+  if (!ploc.isValid())
+  {
+    return;
+  }
+
+  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
+
+  if (!shouldIndexFile(ploc.getFileID())) {
+    return;
+  }
+
+  d.fileID = getFileID(ploc.getFileID());
+
+  if (!d.fileID) {
+    return;
+  }
+
+  if (m_diagnosticConsumer)
+  {
+    m_diagnosticConsumer->printDiagnostic(d, fileIdentificator().getFile(d.fileID));
+  }
+
+  getCurrentIndex()->add(std::move(d));
 }
 
 namespace

@@ -18,6 +18,11 @@
 namespace cppscanner
 {
 
+// an index data consumer that bundles an Indexer.
+// this allows the Indexer to live as long as the ForwardingIndexDataConsumer
+// lives (and is useful).
+// indeed, the clang::PluginASTAction creates the ASTConsumer (that uses the
+// IndexDataConsumerBundle), but it is destroyed before the ASTConsumer.
 class IndexDataConsumerBundle : public ForwardingIndexDataConsumer
 {
 private:
@@ -80,9 +85,74 @@ private:
   }
 };
 
+// a diagnostic consumer that forwards diagnostic to:
+// a) an existing diagnostic consumer, and 
+// b) the Indexer in a IndexDataConsumerBundle, if it's still alive.
+// indeed, because ownership is transferred to a clang::DiagnosticEngine,
+// an instance of this class may outlive the Indexer for which it was created.
+class ForwardingDiagnosticConsumer : public clang::DiagnosticConsumer
+{
+private:
+  std::weak_ptr<IndexDataConsumerBundle> m_dataConsumer;
+  std::unique_ptr<clang::DiagnosticConsumer> m_target;
+
+public:
+  ForwardingDiagnosticConsumer(std::shared_ptr<IndexDataConsumerBundle> dataConsumer, std::unique_ptr<clang::DiagnosticConsumer> target)
+    : m_dataConsumer(dataConsumer), m_target(std::move(target))
+  {
+
+  }
+
+  void HandleDiagnostic(clang::DiagnosticsEngine::Level DiagLevel,
+    const clang::Diagnostic &Info) final
+  {
+    m_target->HandleDiagnostic(DiagLevel, Info);
+
+    auto data_consumer = m_dataConsumer.lock();
+
+    if (data_consumer)
+    {
+      Indexer& indexer = data_consumer->indexer();
+
+      if (indexer.initialized())
+      {
+        indexer.HandleDiagnostic(DiagLevel, Info);
+      }
+    }
+  }
+
+  void clear() final
+  {
+    return m_target->clear();
+  }
+
+  bool IncludeInDiagnosticCounts() const final
+  {
+    return m_target->IncludeInDiagnosticCounts();
+  }
+
+  void BeginSourceFile(const clang::LangOptions& LangOpts,
+    const clang::Preprocessor* PP) final
+  {
+    m_target->BeginSourceFile(LangOpts, PP);
+  }
+
+  void EndSourceFile() final
+  {
+    m_target->EndSourceFile();
+  }
+
+  void finish() final
+  {
+    m_target->finish();
+  }
+};
+
 } // namespace cppscanner
 
-// note, the action shouldn't hold state as it is destroyed after the ast consumer is created
+// the plugin action.
+// note, the action shouldn't hold state (beyond what is used to create the ASTConsumer) 
+// as it is destroyed just after the ASTConsumer is created and before the ast is fully consumed.
 class TakeSnapshotPluginASTAction : public clang::PluginASTAction 
 {
 public:
@@ -116,6 +186,8 @@ TakeSnapshotPluginASTAction::~TakeSnapshotPluginASTAction()
 
 // As far as I can tell, the action object is destroyed after this function is called,
 // so the returned ASTConsumer outlives the action.
+// The PluginASTAction therefore cannot hold state and the ASTConsumer must be able
+// to live on its own.
 std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsumer(clang::CompilerInstance &ci, llvm::StringRef inFile) 
 {
   std::cout << "CreateASTConsumer()" << std::endl;
@@ -124,16 +196,27 @@ std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsum
 
   auto data_consumer = std::make_shared<cppscanner::IndexDataConsumerBundle>(inFile.str() + ".cppscanner.db", m_homePath, m_indexLocalSymbols);
 
-  // TODO: see how we can handle diagnostics
-  //constexpr bool should_own_client = false;
-  //ci.getDiagnostics().setClient(idc->getDiagnosticConsumer(), should_own_client);
   if (ci.getDiagnostics().getClient())
   {
-    std::cout << "diagnostic engine has a client\n";
+    if (ci.getDiagnostics().ownsClient())
+    {
+      auto client = ci.getDiagnostics().takeClient();
+      auto forwarding_client = std::make_unique<cppscanner::ForwardingDiagnosticConsumer>(data_consumer, std::move(client));
+      constexpr bool should_own_client = true;
+      ci.getDiagnostics().setClient(forwarding_client.release(), should_own_client);
+    }
+    else
+    {
+      // we can't safely forward the diagnostics to the current client as we do not
+      // known when it could be destroyed.
+      // the only safe thing to do is to do nothing. the diagnostics won't be part of
+      // the snapshot.
+    }
   }
   else
   {
-    std::cout << "diagnostic engine doesn't have a client\n";
+    constexpr bool should_own_client = false;
+    ci.getDiagnostics().setClient(data_consumer->indexer().getOrCreateDiagnosticConsumer(), should_own_client);
   }
 
   clang::index::IndexingOptions opts; // TODO: review which options we should enable
@@ -180,15 +263,11 @@ clang::PluginASTAction::ActionType TakeSnapshotPluginASTAction::getActionType()
 // if getActionType() is clang::PluginASTAction::ReplaceAction, so we shouldn't do anything in these.
 bool TakeSnapshotPluginASTAction::BeginSourceFileAction(clang::CompilerInstance &CI)
 {
-  std::cout << "BeginSourceFileAction()" << std::endl;
-
   return clang::PluginASTAction::BeginSourceFileAction(CI);
 }
 
 void TakeSnapshotPluginASTAction::EndSourceFileAction()
 {
-  std::cout << "EndSourceFileAction()" << std::endl;
-
   clang::PluginASTAction::EndSourceFileAction();
 }
 

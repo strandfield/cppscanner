@@ -41,7 +41,7 @@ class Indexer;
  * Indexer class for post-processing purposes: the location of some declarations 
  * that went thought the SymbolCollector are recorded in the output TranslationUnitIndex.
  */
-class SymbolCollector
+class SymbolCollector // TODO: move to private header file?
 {
 private:
   Indexer& m_indexer;
@@ -70,34 +70,13 @@ protected:
   IndexerSymbol* getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl);
 };
 
-// TODO: ajouter une version qui prend en paramètre un weak_ptr vers indexer dans le 
-// cas où le consumer survit à l'indexer
-/**
- * \brief class for receiving diagnostics from clang
- */
-class IdxrDiagnosticConsumer : public clang::DiagnosticConsumer
-{
-  Indexer& m_indexer;
-
-public:
-  explicit IdxrDiagnosticConsumer(Indexer& idxr) : 
-    m_indexer(idxr)
-  {
-  }
-
-  bool IncludeInDiagnosticCounts() const final { return false; }
-
-  void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo) final;
-  void finish() final;
-};
-
 /**
  * \brief class for collecting information from a PreprocessingRecord
  * 
  * This class is used by the Indexer class for listing files that were #included 
  * in the translation unit and for checking if macros were used as header guards.
  */
-class PreprocessingRecordIndexer
+class PreprocessingRecordIndexer // TODO: move to private header file?
 {
 private:
   Indexer& m_indexer;
@@ -148,6 +127,8 @@ private:
   Indexer* m_indexer = nullptr;
 };
 
+class IdxrDiagnosticConsumer;
+
 /**
  * \brief class for indexing translation units
  * 
@@ -166,8 +147,9 @@ private:
  * - visit the ast to list places where arguments are passed by reference,
  * - and collect the precise location of some symbol's declarations.
  *
- * Compiler diagnostics are not handled by this class but rather
- * by the IdxrDiagnosticConsumer class.
+ * Compiler diagnostics can be passed to the HandleDiagnostic() function.
+ * The getOrCreateDiagnosticConsumer() function returns a diagnostic consumer
+ * that forwards diagnostics to the Indexer.
  */
 class Indexer
 {
@@ -189,7 +171,7 @@ public:
 
   FileIdentificator& fileIdentificator();
 
-  SymbolCollector& symbolCollector();
+  SymbolCollector& symbolCollector(); // TODO: make protected?
   clang::DiagnosticConsumer* getOrCreateDiagnosticConsumer();
 
   TranslationUnitIndex* getCurrentIndex() const;
@@ -219,6 +201,10 @@ public:
     clang::SourceLocation Loc);
   void finish();
   // end clang::index::IndexDataConsumer
+
+  // clang::DiagnosticConsumer interface
+  void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo);
+  // end clang::DiagnosticConsumer
 
 protected:
   friend IdxrDiagnosticConsumer;
