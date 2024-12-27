@@ -11,7 +11,7 @@
 #include <clang/Index/IndexingAction.h>
 
 #include <cstdlib> // getenv()
-#include <cstring> // strcmp()
+#include <cstring> // strcmp(), strlen()
 #include <filesystem>
 #include <iostream>
 
@@ -27,7 +27,8 @@ class IndexDataConsumerBundle : public ForwardingIndexDataConsumer
 {
 private:
   std::string m_homePath;
-  std::string m_dbPath;
+  std::filesystem::path m_outDir;
+  std::string m_inFile;
   bool m_indexLocalSymbols;
   std::unique_ptr<cppscanner::FileIdentificator> m_identificator;
   std::unique_ptr<cppscanner::FileIndexingArbiter> m_arbiter;
@@ -35,9 +36,10 @@ private:
   SnapshotCreator m_snapshot_creator;
 
 public:
-  IndexDataConsumerBundle(std::string dbPath, std::string homePath, bool indexLocalSymbols)
+  IndexDataConsumerBundle(const std::filesystem::path& outDir, std::string inFile, std::string homePath, bool indexLocalSymbols)
     : m_homePath(std::move(homePath))
-    , m_dbPath(std::move(dbPath))
+    , m_outDir(outDir)
+    , m_inFile(std::move(inFile))
     , m_indexLocalSymbols(indexLocalSymbols)
     , m_identificator(cppscanner::FileIdentificator::createFileIdentificator())
     , m_arbiter(createArbiter(m_homePath, *m_identificator))
@@ -55,13 +57,24 @@ public:
 
     m_snapshot_creator.setHomeDir(m_homePath);
     m_snapshot_creator.setCaptureFileContent(false);
-    if (std::filesystem::exists(m_dbPath))
+ 
+    if (!std::filesystem::exists(m_outDir))
     {
-      std::filesystem::remove(m_dbPath);
+      std::filesystem::create_directories(m_outDir);
     }
-    m_snapshot_creator.init(m_dbPath);
+
+    const std::string filename = std::filesystem::path(m_inFile).filename().string();
+    int n = 1;
+    std::filesystem::path db_path = m_outDir / (filename + ".1.aba");
+    while (std::filesystem::exists(db_path))
+    {
+      db_path = m_outDir / (filename + "." + std::to_string(++n) + ".aba");
+    }
+
+    m_snapshot_creator.init(db_path);
 
     m_snapshot_creator.writeProperty("scanner.indexLocalSymbols", m_indexLocalSymbols ? "true" : "false");
+    m_snapshot_creator.writeProperty("plugin.inFile", m_inFile);
   }
 
   void finish() final
@@ -171,6 +184,7 @@ public:
 private:
   bool m_indexLocalSymbols = false;
   std::string m_homePath;
+  std::string m_outDir;
 };
 
 TakeSnapshotPluginASTAction::TakeSnapshotPluginASTAction()
@@ -194,7 +208,7 @@ std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsum
 
   std::cout << "inFile = " << inFile.str() << std::endl;
 
-  auto data_consumer = std::make_shared<cppscanner::IndexDataConsumerBundle>(inFile.str() + ".cppscanner.db", m_homePath, m_indexLocalSymbols);
+  auto data_consumer = std::make_shared<cppscanner::IndexDataConsumerBundle>(m_outDir, inFile.str(), m_homePath, m_indexLocalSymbols);
 
   if (ci.getDiagnostics().getClient())
   {
@@ -235,21 +249,72 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
 {
   std::cout << "ParseArgs()" << std::endl;
 
-  if (const char* val = std::getenv("CPPSCANNER_INDEX_LOCAL_SYMBOLS"))
+  bool indexLocalSymbols = false;
+  std::optional<std::string> homePath;
+  std::optional<std::string> outdir;
+
+  for (const std::string& a : args)
   {
-    m_indexLocalSymbols = std::strcmp(val, "0") != 0;
+    if (a == "index-local-symbols")
+    {
+      indexLocalSymbols = true;
+    }
+    else if (a.rfind("home=", 0) == 0)
+    {
+      homePath = a.substr(std::strlen("home="));
+    }
+    else if (a.rfind("outputDir=", 0) == 0)
+    {
+      outdir = a.substr(std::strlen("outputDir="));
+    }
   }
 
-  if (const char* val = std::getenv("CPPSCANNER_HOME_DIR"))
+  if (indexLocalSymbols)
   {
-    m_homePath = val;
+    m_indexLocalSymbols = true;
   }
   else
   {
-    m_homePath = std::filesystem::current_path().generic_u8string();
+    if (const char* val = std::getenv("CPPSCANNER_INDEX_LOCAL_SYMBOLS"))
+    {
+      m_indexLocalSymbols = std::strcmp(val, "0") != 0;
+    }
   }
 
+  if (homePath.has_value())
+  {
+    m_homePath = *homePath;
+  }
+  else
+  {
+    if (const char* val = std::getenv("CPPSCANNER_HOME_DIR"))
+    {
+      m_homePath = val;
+    }
+    else
+    {
+      m_homePath = std::filesystem::current_path().generic_u8string();
+    }
+  }
+
+  if (outdir.has_value())
+  {
+    m_outDir = *outdir;
+  }
+  else
+  {
+    if (const char* val = std::getenv("CPPSCANNER_OUTPUT_DIR"))
+    {
+      m_outDir = val;
+    }
+    else
+    {
+      m_outDir = (std::filesystem::current_path() / ".cppscanner").generic_u8string();
+    }
+  }
+  
   std::cout << "m_homePath = " << m_homePath << std::endl;
+  std::cout << "m_outDir = " << m_outDir << std::endl;
 
   return true;
 }
