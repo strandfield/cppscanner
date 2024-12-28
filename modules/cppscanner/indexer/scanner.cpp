@@ -4,7 +4,6 @@
 
 #include "scanner.h"
 
-
 #include "indexer.h"
 #include "indexingresultqueue.h"
 #include "workqueue.h"
@@ -39,10 +38,6 @@
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendActions.h>
 
-#include <llvm/ADT/ArrayRef.h>
-#include <llvm/ADT/StringExtras.h>
-#include <llvm/Option/Option.h>
-#include <llvm/Support/SHA1.h>
 #include <llvm/TargetParser/Host.h>
 
 #include <algorithm>
@@ -65,9 +60,9 @@ struct ScannerData
   size_t nbThreads = 0;
   std::vector<std::string> filters;
   std::vector<std::string> translationUnitFilters;
-  std::vector<std::string> compilationArguments;
   bool captureFileContent = true;
   bool remapFileIds = false;
+  Snapshot::Properties extraSnapshotProperties;
 
   std::filesystem::path outputPath;
 
@@ -79,40 +74,57 @@ struct ScannerData
   std::map<SymbolID, IndexerSymbol> symbols;
 };
 
-void set_flag(std::vector<bool>& flags, size_t i)
+static std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
 {
-  if (flags.size() <= i) {
-    flags.resize(i + 1, false);
-  }
-
-  flags[i] = true;
+  CreateIndexingArbiterOptions opts;
+  opts.filters = d.filters;
+  opts.homeDirectory = d.homeDirectory;
+  opts.rootDirectory = d.rootDirectory.value_or(std::string());
+  opts.indexExternalFiles = d.indexExternalFiles;
+  return createIndexingArbiter(*d.fileIdentificator, opts);
 }
 
-bool test_flag(const std::vector<bool>& flags, size_t i)
+class ThreadProcIndexDataConsumer : public ForwardingIndexDataConsumer
 {
-  return i < flags.size() && flags.at(i);
-}
+private:
+  IndexingResultQueue& m_resultsQueue;
+  bool m_produced_output = false;
 
-std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(ScannerData& d)
-{
-  std::vector<std::unique_ptr<FileIndexingArbiter>> arbiters;
+public:
+  ThreadProcIndexDataConsumer(Indexer& indexer, IndexingResultQueue& resultsQueue) : ForwardingIndexDataConsumer(&indexer),
+    m_resultsQueue(resultsQueue)
+  {
 
-  arbiters.push_back(std::make_unique<IndexOnceFileIndexingArbiter>(*d.fileIdentificator));
-
-  if (d.indexExternalFiles) {
-    if (d.rootDirectory.has_value()) {
-      arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, *d.rootDirectory));
-    }
-  } else {
-    arbiters.push_back(std::make_unique<IndexDirectoryFileIndexingArbiter>(*d.fileIdentificator, d.homeDirectory));
   }
 
-  if (!d.filters.empty()) {
-    arbiters.push_back(std::make_unique<IndexFilesMatchingPatternIndexingArbiter>(*d.fileIdentificator, d.filters));
+  bool didProduceOutput() const
+  {
+    return m_produced_output;
   }
 
-  return FileIndexingArbiter::createCompositeArbiter(std::move(arbiters));
-}
+  void resetDidProduceOutput()
+  {
+    m_produced_output = false;
+  }
+
+protected:
+  void initialize(clang::ASTContext& ctx) final
+  {
+    ForwardingIndexDataConsumer::initialize(ctx);
+
+    resetDidProduceOutput();
+  }
+
+  void finish() final
+  {
+    ForwardingIndexDataConsumer::finish();
+
+    m_resultsQueue.write(std::move(*indexer().getCurrentIndex()));
+    indexer().resetCurrentIndex();
+    m_produced_output = true;
+  }
+
+};
 
 Scanner::Scanner()
 {
@@ -121,6 +133,11 @@ Scanner::Scanner()
 }
 
 Scanner::~Scanner() = default;
+
+void Scanner::setOutputPath(const std::filesystem::path& p)
+{
+  d->outputPath = p;
+}
 
 void Scanner::setHomeDir(const std::filesystem::path& p)
 {
@@ -167,38 +184,45 @@ void Scanner::setRemapFileIds(bool on)
   d->remapFileIds = on;
 }
 
-void Scanner::setCompilationArguments(const std::vector<std::string>& args)
+void Scanner::initSnapshot()
 {
-  d->compilationArguments = args;
-}
-
-/**
- * \brief creates an empty snapshot
- * \param p  the path of the database
- */
-void Scanner::initSnapshot(const std::filesystem::path& p)
-{
-  d->outputPath = p;
+  assert(!d->outputPath.empty());
+  if (d->outputPath.empty())
+  {
+    throw std::runtime_error("missing output path");
+  }
 
   const std::filesystem::path dbPath = d->remapFileIds ? 
-    std::filesystem::path(p.generic_u8string() + ".tmp") : p;
+    std::filesystem::path(d->outputPath.generic_u8string() + ".tmp") : d->outputPath;
 
-  m_snapshot = std::make_unique<SnapshotWriter>(dbPath);
+  assert(d->fileIdentificator);
+  m_snapshot_creator = std::make_unique<SnapshotCreator>(*d->fileIdentificator);
 
-  m_snapshot->setProperty("cppscanner.version", cppscanner::versioncstr());
-  m_snapshot->setProperty("cppscanner.os", cppscanner::system_name());
+  m_snapshot_creator->setHomeDir(d->homeDirectory);
+  m_snapshot_creator->setCaptureFileContent(d->captureFileContent);
 
-  m_snapshot->setProperty("project.home", Snapshot::Path(d->homeDirectory));
+  m_snapshot_creator->init(dbPath);
 
-  m_snapshot->setProperty("scanner.indexExternalFiles", d->indexExternalFiles);
-  m_snapshot->setProperty("scanner.indexLocalSymbols", d->indexLocalSymbols);
-  m_snapshot->setProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())));
-  m_snapshot->setProperty("scanner.workingDirectory", Snapshot::Path(std::filesystem::current_path().generic_u8string()));
+  // TODO: revoir le passage de la valeur
+  m_snapshot_creator->writeProperty("scanner.indexExternalFiles", d->indexExternalFiles ? "true" : "false");
+  m_snapshot_creator->writeProperty("scanner.indexLocalSymbols", d->indexLocalSymbols ? "true" : "false");
+  m_snapshot_creator->writeProperty("scanner.root", Snapshot::Path(d->rootDirectory.value_or(std::string())).str());
+  m_snapshot_creator->writeProperty("scanner.workingDirectory", Snapshot::Path(std::filesystem::current_path().generic_u8string()).str());
+
+  for (const auto& p : d->extraSnapshotProperties)
+  {
+    m_snapshot_creator->writeProperty(p.first, p.second);
+  }
 }
 
-SnapshotWriter* Scanner::snapshot() const
+void Scanner::setExtraProperty(const std::string& name, const std::string& value)
 {
-  return m_snapshot.get();
+  d->extraSnapshotProperties[name] = value;
+}
+
+SnapshotCreator* Scanner::snapshotCreator() const
+{
+  return m_snapshot_creator.get();
 }
 
 bool Scanner::passTranslationUnitFilters(const std::string& filename) const
@@ -249,10 +273,18 @@ static bool isPcmCompileCommand(const clang::tooling::CompileCommand& cc)
   }
 }
 
+static void removeGmArg(std::vector<std::string>& commandLine)
+{
+  auto it = std::find(commandLine.begin(), commandLine.end(), "/Gm-");
+
+  if (it != commandLine.end())
+  {
+    commandLine.erase(it);
+  }
+}
+
 void Scanner::scanFromCompileCommands(const std::filesystem::path& compileCommandsPath)
 {
-  assert(snapshot());
-
   std::string error_message;
   auto compile_commands = clang::tooling::JSONCompilationDatabase::loadFromFile(
     compileCommandsPath.u8string().c_str(), std::ref(error_message), clang::tooling::JSONCommandLineSyntax::AutoDetect
@@ -277,6 +309,10 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
       scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
     }
 
+#if _WIN32
+    removeGmArg(scanner_command.commandLine);
+#endif
+
     scanner_command.fileName = cc.Filename;
 
     d->compileCommands.push_back(scanner_command);
@@ -287,7 +323,7 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
   runScanSingleOrMultiThreaded();
 }
 
-void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs)
+void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs, const std::vector<std::string>& compileArgs)
 {
   clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
 
@@ -328,7 +364,7 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
     scanner_command.fileName = input.generic_u8string();
 
     scanner_command.commandLine = { getDefaultCompilerExecutableName() };
-    scanner_command.commandLine.insert(scanner_command.commandLine.end(), d->compilationArguments.begin(), d->compilationArguments.end());
+    scanner_command.commandLine.insert(scanner_command.commandLine.end(), compileArgs.begin(), compileArgs.end());
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), scanner_command.fileName);
 
     scanner_command.commandLine = argsAdjuster(scanner_command.commandLine, scanner_command.fileName);
@@ -369,6 +405,7 @@ public:
   explicit ArgsTranslator(clang::FileManager& files) :
     m_files(&files)
   {
+    // TODO: add an ignoring diagnostic consumer to the diagnostic engine?
     m_ci.createDiagnostics();
   }
 
@@ -533,7 +570,7 @@ static std::optional<std::filesystem::path> findPcmOutput(const ScannerCompileCo
 
 void Scanner::scanSingleThreaded()
 {
-  d->fileIdentificator = FileIdentificator::createFileIdentificator();
+  assert(d->fileIdentificator);
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
 
@@ -551,14 +588,15 @@ static bool run_invocation(const WorkQueue::ToolInvocation& invocation, Indexer&
   }
 
   clang::tooling::ToolInvocation tool_invocation{ invocation.command, actionfactory.create(), fileManager };
-  tool_invocation.setDiagnosticConsumer(indexer.getDiagnosticConsumer());
+  tool_invocation.setDiagnosticConsumer(indexer.getOrCreateDiagnosticConsumer());
   return tool_invocation.run();
 }
 
 void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQueue* inputQueue, IndexingResultQueue* resultQueue, std::atomic<int>& running)
 {
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
-  auto index_data_consumer = std::make_shared<Indexer>(*arbiter, *resultQueue);
+  Indexer indexer{ *arbiter };
+  auto index_data_consumer = std::make_shared<ThreadProcIndexDataConsumer>(indexer, *resultQueue);
   IndexingFrontendActionFactory actionfactory{ index_data_consumer };
   actionfactory.setIndexLocalSymbols(data->indexLocalSymbols);
 
@@ -574,7 +612,7 @@ void parsing_thread_proc(ScannerData* data, FileIndexingArbiter* arbiter, WorkQu
     bool success = false;
 
     try {
-      success = run_invocation(*item, *index_data_consumer, actionfactory, file_manager.get());
+      success = run_invocation(*item, indexer, actionfactory, file_manager.get());
     }
     catch (...)
     {
@@ -648,8 +686,7 @@ public:
 void Scanner::scanMultiThreaded()
 {
   assert(d->nbThreads > 0);
-
-  d->fileIdentificator = FileIdentificator::createThreadSafeFileIdentificator();
+  assert(d->fileIdentificator);
 
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
 
@@ -705,7 +742,7 @@ void Scanner::scanMultiThreaded()
     TranslationUnitIndex& result = item.value();
     if (!result.isError)
     {
-      assimilate(std::move(result));
+      m_snapshot_creator->feed(std::move(result));
     }
     else 
     {
@@ -718,6 +755,19 @@ void Scanner::scanMultiThreaded()
 
 void Scanner::runScanSingleOrMultiThreaded()
 {
+  const bool single_threaded = d->nbThreads == 0;
+
+  if (single_threaded)
+  {
+    d->fileIdentificator = FileIdentificator::createFileIdentificator();
+  }
+  else
+  {
+    d->fileIdentificator = FileIdentificator::createThreadSafeFileIdentificator();
+  }
+
+  initSnapshot();
+
   if (d->nbThreads == 0)
   {
     scanSingleThreaded();
@@ -729,14 +779,14 @@ void Scanner::runScanSingleOrMultiThreaded()
 
   if (d->remapFileIds)
   {
-    const std::filesystem::path tmp_path = m_snapshot->filePath();
+    const std::filesystem::path tmp_path = m_snapshot_creator->snapshotWriter()->filePath();
 
     SnapshotMerger merger;
     merger.setOutputPath(d->outputPath);
     merger.setProjectHome(d->homeDirectory);
     merger.addInputPath(tmp_path);
 
-    m_snapshot.reset();
+    m_snapshot_creator.reset();
 
     merger.runMerge();
 
@@ -748,9 +798,8 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 {
   assert(d->fileIdentificator);
 
-  IndexingResultQueue results_queue;
-  auto index_data_consumer = std::make_shared<Indexer>(arbiter, results_queue);
-  IndexingFrontendActionFactory actionfactory{ index_data_consumer };
+  Indexer indexer{ arbiter };
+  IndexingFrontendActionFactory actionfactory{ std::make_shared<ForwardingIndexDataConsumer>(&indexer) };
   actionfactory.setIndexLocalSymbols(d->indexLocalSymbols);
 
   for (const ScannerCompileCommand& cc : commands)
@@ -812,16 +861,15 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
     clang::tooling::ToolInvocation invocation{ cc.commandLine, actionfactory.create(), &fileManager };
 
-    invocation.setDiagnosticConsumer(index_data_consumer->getDiagnosticConsumer());
+    invocation.setDiagnosticConsumer(indexer.getOrCreateDiagnosticConsumer());
 
     const bool success = invocation.run();
 
     if (success) {
-      std::optional<TranslationUnitIndex> result = results_queue.readSync();
-      // "result" may be std::nullopt if a fatal error occured while parsing
-      // the translation unit.
-      if (result.has_value()) {
-        assimilate(std::move(result.value()));
+      // can getCurrentIndex() return nullptr if the "invocation" was a success ?
+      if (indexer.getCurrentIndex()) {
+        m_snapshot_creator->feed(std::move(*indexer.getCurrentIndex()));
+        indexer.resetCurrentIndex();
       }
     } else {
       std::cout << "error: tool invocation failed" << std::endl;
@@ -829,415 +877,9 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
   }
 }
 
-namespace
-{
-
-std::set<FileID> listIncludedFiles(const std::vector<Include>& includes)
-{
-  std::set<FileID> ids;
-  
-  for (const Include& incl : includes) {
-    ids.insert(incl.includedFileID);
-  }
-
-  return ids;
-}
-
-std::vector<Include> merge(
-  std::vector<Include>&& existingIncludes, 
-  std::vector<Include>::const_iterator newIncludesBegin, 
-  std::vector<Include>::const_iterator newIncludesEnd)
-{
-  existingIncludes.insert(existingIncludes.end(), newIncludesBegin, newIncludesEnd);
-
-  auto comp = [](const Include& a, const Include& b) -> bool {
-    return std::forward_as_tuple(a.fileID, a.line) < std::forward_as_tuple(b.fileID, b.line);
-    };
-
-  std::sort(existingIncludes.begin(),  existingIncludes.end(), comp);
-
-  auto eq = [](const Include& a, const Include& b) -> bool {
-    return std::forward_as_tuple(a.fileID, a.line) == std::forward_as_tuple(b.fileID, b.line);
-    };
-
-  auto new_logical_end = std::unique(existingIncludes.begin(), existingIncludes.end(), eq);
-  existingIncludes.erase(new_logical_end, existingIncludes.end());
-
-  return existingIncludes;
-}
-
-std::vector<SymbolReference>& insertOrIgnore(
-  std::vector<SymbolReference>& references, 
-  std::vector<SymbolReference>::const_iterator newReferencesBegin, 
-  std::vector<SymbolReference>::const_iterator newReferencesEnd)
-{
-  references.insert(references.end(), newReferencesBegin, newReferencesEnd);
-
-  auto ref_comp = [](const SymbolReference& a, const SymbolReference& b) -> bool {
-    return std::forward_as_tuple(a.fileID, a.position, a.symbolID) < std::forward_as_tuple(b.fileID, b.position, b.symbolID);
-    };
-
-  std::sort(references.begin(),  references.end(), ref_comp);
-
-  auto ref_eq = [](const SymbolReference& a, const SymbolReference& b) -> bool {
-    return std::forward_as_tuple(a.fileID, a.position, a.symbolID) == std::forward_as_tuple(b.fileID, b.position, b.symbolID);
-    };
-
-  auto new_logical_end = std::unique(references.begin(), references.end(), ref_eq);
-  references.erase(new_logical_end, references.end());
-
-  return references;
-}
-
-inline FileID fileOf(const Diagnostic& d)
-{
-  return d.fileID;
-}
-
-inline FileID fileOf(const SymbolDeclaration& d)
-{
-  return d.fileID;
-}
-
-template<typename T>
-void sortByFile(std::vector<T>& elements)
-{
-  std::sort(
-    elements.begin(), 
-    elements.end(), 
-    [](const T& a, const T& b) -> bool {
-      return fileOf(a) < fileOf(b);
-    }
-  );
-}
-
-template<typename T>
-typename std::vector<T>::iterator fileRangeEnd(std::vector<T>& elements, typename std::vector<T>::iterator begin)
-{
-  FileID cur_file_id = fileOf(*begin);
-  return std::find_if(std::next(begin), elements.end(),
-    [cur_file_id](const T& element) {
-      return fileOf(element) != cur_file_id;
-    }
-  );
-}
-
-bool mergeComp(const Diagnostic& a, const Diagnostic& b)
-{
-  return std::forward_as_tuple(a.level, a.position, a.message) <
-    std::forward_as_tuple(b.level, b.position, b.message);
-}
-
-bool mergeComp(const SymbolDeclaration& a, const SymbolDeclaration& b)
-{
-  // we ignore file id because it is assumed they are the same
-  assert(a.fileID == b.fileID);
-  return std::forward_as_tuple(a.symbolID, a.startPosition, a.endPosition, a.isDefinition) <
-    std::forward_as_tuple(b.symbolID, b.startPosition, b.endPosition, b.isDefinition);
-}
-
-template<typename T>
-bool mergeEq(const T& a, const T& b)
-{
-  return !mergeComp(a, b) && !mergeComp(b, a);
-}
-
-template<typename T>
-std::vector<T> merge(
-  std::vector<T>&& existingElements, 
-  typename std::vector<T>::const_iterator newElementsBegin, 
-  typename std::vector<T>::const_iterator newElementsEnd)
-{
-  existingElements.insert(existingElements.end(), newElementsBegin, newElementsEnd);
-  std::sort(existingElements.begin(), existingElements.end(), [](const T& a, const T& b) { return mergeComp(a, b); });
-  auto new_logical_end = std::unique(existingElements.begin(), existingElements.end(), [](const T& a, const T& b) { return mergeEq(a, b); });
-  existingElements.erase(new_logical_end, existingElements.end());
-  return existingElements;
-}
-
-void removeCarriageReturns(std::string& text)
-{
-#ifndef _WIN32
-  return;
-#endif // !_WIN32
-
-  auto it = std::remove_if(text.begin(), text.end(), [](char c) {
-    return c == '\r';
-    });
-
-  text.erase(it, text.end());
-}
-
-std::string computeSha1(const std::string& text)
-{
-  llvm::SHA1 hasher;
-  hasher.update(text);
-  std::array<uint8_t, 20> result = hasher.final();
-  constexpr bool to_lower_case = true;
-  return llvm::toHex(result, to_lower_case);
-}
-
-} // namespace
-
 void Scanner::fillContent(File& f)
 {
-  {
-    std::ifstream stream{ f.path };
-    if (stream.good()) 
-    {
-      stream.seekg(0, std::ios::end);
-      f.content.reserve(stream.tellg());
-      stream.seekg(0, std::ios::beg);
-      f.content.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-    }
-  }
-
-  if (!f.content.empty())
-  {
-    removeCarriageReturns(f.content);
-    f.sha1 = computeSha1(f.content);
-  }
-}
-
-void Scanner::assimilate(TranslationUnitIndex tuIndex)
-{
-  const std::vector<std::string> known_files = d->fileIdentificator->getFiles();
-
-  std::vector<File> newfiles;
-
-  {
-    for (FileID fid : tuIndex.indexedFiles)
-    {
-      if (fileAlreadyIndexed(fid)) {
-        continue;
-      }
-
-      File f;
-      f.id = fid;
-      f.path = known_files.at(fid);
-
-      if (d->captureFileContent)
-      {
-        fillContent(f);
-      }
-
-      newfiles.push_back(std::move(f));
-    }
-
-    {
-      sql::TransactionScope transaction{ m_snapshot->database() };
-      m_snapshot->insertFiles(newfiles);
-    }
-
-    for (const File& f : newfiles) {
-      set_flag(d->filePathsInserted, f.id);
-    }
-  }
-
-  {
-    // ensure that included files are listed in the database
-    {
-      std::set<FileID> included = listIncludedFiles(tuIndex.ppIncludes);
-      std::vector<File> newincludes;
-
-      for (FileID fid : included)
-      {
-        if (test_flag(d->filePathsInserted, fid)) {
-          continue;
-        }
-
-        File f;
-        f.id = fid;
-        f.path = known_files.at(fid);
-        newincludes.push_back(std::move(f));
-      }
-
-      sql::runTransacted(m_snapshot->database(), [this, &newincludes]() {
-        m_snapshot->insertFilePaths(newincludes);
-        });
-
-      for (const File& f : newincludes) {
-        set_flag(d->filePathsInserted, f.id);
-      }
-    }
-    
-    std::sort(tuIndex.ppIncludes.begin(), tuIndex.ppIncludes.end(), [](const Include& a, const Include& b) {
-      return a.fileID < b.fileID;
-      });
-
-    auto it = tuIndex.ppIncludes.begin();
-
-    while (it != tuIndex.ppIncludes.end()) {
-      FileID cur_file_id = it->fileID;
-      auto end = std::find_if(std::next(it), tuIndex.ppIncludes.end(),
-        [cur_file_id](const Include& element) {
-          return element.fileID != cur_file_id;
-        }
-      );
-
-      if (fileAlreadyIndexed(cur_file_id)) {
-        std::vector<Include> includes = merge(m_snapshot->loadAllIncludesInFile(cur_file_id), it, end);
-
-        sql::runTransacted(m_snapshot->database(), [this, cur_file_id, &includes]() {
-          m_snapshot->removeAllIncludesInFile(cur_file_id);
-          m_snapshot->insertIncludes(includes);
-          });
-      } else {
-        sql::runTransacted(m_snapshot->database(), [this, it, end]() {
-          m_snapshot->insertIncludes(std::vector<Include>(it, end));
-          });
-      }
-
-      it = end;
-    }
-  }
-
-  // insert new symbols, update the others that need it
-  {
-    std::vector<const IndexerSymbol*> symbols_to_insert;
-    std::vector<const IndexerSymbol*> symbols_with_flags_to_update;
-
-    for (auto& p : tuIndex.symbols) {
-      auto it = d->symbols.find(p.first);
-      if (it == d->symbols.end()) {
-        IndexerSymbol& newsymbol = d->symbols[p.first];
-        newsymbol = std::move(p.second);
-        symbols_to_insert.push_back(&newsymbol);
-      } else {
-        IndexerSymbol& existing_symbol = it->second;
-        int what_updated = update(existing_symbol, p.second);
-        if (what_updated & IndexerSymbol::FlagUpdate)
-        {
-          symbols_with_flags_to_update.push_back(&existing_symbol);
-        }
-      }
-    }
-
-    sql::runTransacted(m_snapshot->database(), [this, &symbols_to_insert, &symbols_with_flags_to_update]() {
-      m_snapshot->insertSymbols(symbols_to_insert);
-      m_snapshot->updateSymbolsFlags(symbols_with_flags_to_update);
-      });
-  }
-
-  // Process symbol references
-  {
-    auto it = tuIndex.symReferences.begin();
-
-    while (it != tuIndex.symReferences.end()) {
-      FileID cur_file_id = it->fileID;
-
-      auto end = std::find_if(std::next(it), tuIndex.symReferences.end(),
-        [cur_file_id](const SymbolReference& ref) {
-          return ref.fileID != cur_file_id;
-        }
-      );
-
-      if (fileAlreadyIndexed(cur_file_id)) 
-      {
-        std::vector<SymbolReference> references = m_snapshot->loadSymbolReferencesInFile(cur_file_id);
-        insertOrIgnore(references, it, end);
-
-        {
-          sql::TransactionScope transaction{ m_snapshot->database() };
-          m_snapshot->removeAllSymbolReferencesInFile(cur_file_id);
-          m_snapshot->insert(references);
-        }
-      } 
-      else 
-      {
-        sql::TransactionScope transaction{ m_snapshot->database() };
-        m_snapshot->insert(std::vector<SymbolReference>(it, end));
-      }
-
-      it = end;
-    }
-  }
-
-  // Process relations
-  {
-    m_snapshot->insertBaseOfs(tuIndex.relations.baseOfs);
-    m_snapshot->insertOverrides(tuIndex.relations.overrides);
-  }
-
-  // Process diagnostics
-  {
-    sortByFile(tuIndex.diagnostics);
-
-    for (auto it = tuIndex.diagnostics.begin(); it != tuIndex.diagnostics.end(); ) {
-      FileID cur_file_id = it->fileID;
-      auto end = fileRangeEnd(tuIndex.diagnostics, it);
-
-      if (fileAlreadyIndexed(cur_file_id)) {
-        std::vector<Diagnostic> diagnostics = merge(m_snapshot->loadDiagnosticsInFile(cur_file_id), it, end);
-
-        sql::runTransacted(m_snapshot->database(), [this, cur_file_id, &diagnostics]() {
-          m_snapshot->removeAllDiagnosticsInFile(cur_file_id);
-          m_snapshot->insertDiagnostics(diagnostics);
-          });
-      } else {
-        sql::runTransacted(m_snapshot->database(), [this, it, end]() {
-          m_snapshot->insertDiagnostics(std::vector<Diagnostic>(it, end));
-          });
-      }
-
-      it = end;
-    }
-  }
-
-  // Process refargs
-  {
-    sql::TransactionScope transaction{ m_snapshot->database() };
-    m_snapshot->insert(tuIndex.fileAnnotations.refargs);
-  }
-
-  // Process symbol declarations
-  {
-    // declarations are sorted by file.
-#ifndef  NDEBUG
-    bool sorted = std::is_sorted(tuIndex.declarations.begin(), tuIndex.declarations.end(), 
-      [](const SymbolDeclaration& a, const SymbolDeclaration& b) {
-        return a.fileID < b.fileID; 
-      });
-    assert(sorted);
-#endif // !NDEBUG
-
-    for (auto it = tuIndex.declarations.begin(); it != tuIndex.declarations.end(); ) {
-      FileID cur_file_id = it->fileID;
-      auto end = fileRangeEnd(tuIndex.declarations, it);
-
-      if (fileAlreadyIndexed(cur_file_id)) {
-        std::vector<SymbolDeclaration> declarations = merge(m_snapshot->loadDeclarationsInFile(cur_file_id), it, end);
-
-        sql::TransactionScope transaction{ m_snapshot->database() };
-        m_snapshot->removeAllDeclarationsInFile(cur_file_id);
-        m_snapshot->insert(declarations);
-      } else {
-        sql::TransactionScope transaction{ m_snapshot->database() };
-        m_snapshot->insert(std::vector<SymbolDeclaration>(it, end));
-      }
-
-      it = end;
-    }    
-  }
-
-  // Update list of already indexed files
-  for (const File& f : newfiles) {
-    setFileIndexed(f.id);
-  }
-}
-
-bool Scanner::fileAlreadyIndexed(FileID f) const
-{
-  return d->indexedFiles.size() > f && d->indexedFiles.at(f);
-}
-
-void Scanner::setFileIndexed(FileID f)
-{
-  if (d->indexedFiles.size() <= f) {
-    d->indexedFiles.resize(f + 1, false);
-  }
-
-  d->indexedFiles[f] = true;
+  return SnapshotCreator::fillContent(f);
 }
 
 } // namespace cppscanner

@@ -17,9 +17,13 @@ namespace cppscanner
 struct MergeCommandOptions
 {
   std::vector<std::string> inputs; 
-  std::filesystem::path output;
+  std::optional<std::filesystem::path> output;
   std::optional<std::filesystem::path> home;
   bool captureMissingFileContent = false;
+  bool linkMode = false;
+  bool keepSourceFiles = false;
+  std::optional<std::string> projectName;
+  std::optional<std::string> projectVersion;
 };
 
 /**
@@ -34,6 +38,8 @@ private:
 
 public:
   explicit MergeCommandInvocation(const std::vector<std::string>& command);
+
+  static void printHelp();
 
   const MergeCommandOptions& parsedCommandLine() const;
 

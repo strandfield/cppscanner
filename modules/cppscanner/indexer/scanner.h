@@ -5,7 +5,7 @@
 #ifndef CPPSCANNER_SCANNER_H
 #define CPPSCANNER_SCANNER_H
 
-#include "cppscanner/snapshot/snapshotwriter.h"
+#include "snapshotcreator.h"
 
 #include <filesystem>
 #include <string>
@@ -46,6 +46,7 @@ public:
   Scanner(const Scanner&) = delete;
   ~Scanner();
 
+  void setOutputPath(const std::filesystem::path& p);
   void setHomeDir(const std::filesystem::path& p);
   void setRootDir(const std::filesystem::path& p);
 
@@ -60,29 +61,26 @@ public:
   void setCaptureFileContent(bool on = true);
   void setRemapFileIds(bool on);
 
-  void setCompilationArguments(const std::vector<std::string>& args);
-
-  void initSnapshot(const std::filesystem::path& p);
-  SnapshotWriter* snapshot() const;
+  void setExtraProperty(const std::string& name, const std::string& value);
 
   void scanFromCompileCommands(const std::filesystem::path& compileCommandsPath);
-  void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs);
+  void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs, const std::vector<std::string>& compileArgs);
   void scan(const std::vector<ScannerCompileCommand>& compileCommands);
 
   static void fillContent(File& file);
 
 protected:
+  void initSnapshot();
+  SnapshotCreator* snapshotCreator() const;
+
   bool passTranslationUnitFilters(const std::string& filename) const;
   void scanSingleThreaded();
   void scanMultiThreaded();
   void runScanSingleOrMultiThreaded();
   void processCommands(const std::vector<ScannerCompileCommand>& commands, FileIndexingArbiter& arbiter, clang::FileManager& fileManager);
-  void assimilate(TranslationUnitIndex tuIndex);
-  bool fileAlreadyIndexed(FileID f) const;
-  void setFileIndexed(FileID f);
 
 private:
-  std::unique_ptr<SnapshotWriter> m_snapshot;
+  std::unique_ptr<SnapshotCreator> m_snapshot_creator;
   std::unique_ptr<ScannerData> d;
 };
 

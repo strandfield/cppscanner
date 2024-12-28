@@ -96,6 +96,16 @@ public:
   bool shouldIndex(FileID file, const TranslationUnitIndex* tu) final;
 };
 
+struct CreateIndexingArbiterOptions
+{
+  bool indexExternalFiles = false;
+  std::string homeDirectory;
+  std::string rootDirectory;
+  std::vector<std::string> filters;
+};
+
+std::unique_ptr<FileIndexingArbiter> createIndexingArbiter(FileIdentificator& fileIdentificator, const CreateIndexingArbiterOptions& opts);
+
 } // namespace cppscanner
 
 #endif // CPPSCANNER_FILEINDEXINGARBITER_H

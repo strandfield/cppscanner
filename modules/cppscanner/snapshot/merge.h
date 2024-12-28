@@ -49,8 +49,12 @@ public:
 
   void setOutputPath(const std::filesystem::path& outputPath);
   void addInputPath(const std::filesystem::path& inputPath);
+  void setInputs(const std::vector<std::filesystem::path>& inputPaths);
   void setProjectHome(const std::filesystem::path& homePath);
+  void setExtraProperty(const std::string& name, const std::string& value);
   void setFileContentWriter(std::unique_ptr<FileContentWriter> contentWriter);
+
+  const std::vector<std::filesystem::path>& inputPaths() const;
 
   void runMerge();
 
@@ -72,6 +76,7 @@ private:
   std::vector<std::filesystem::path> m_input_paths;
   std::filesystem::path m_output_path;
   std::optional<std::filesystem::path> m_project_home_path;
+  Snapshot::Properties m_extra_properties;
   std::vector<InputSnapshot> m_snapshots;
   SnapshotWriter m_writer;
   std::unique_ptr<FileContentWriter> m_file_content_writer;

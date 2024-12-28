@@ -11,3 +11,6 @@ set_target_properties(cppscanner PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BI
 if (WIN32)
   set_target_properties(cppscanner PROPERTIES VS_DEBUGGER_ENVIRONMENT "PATH=${SQLite3_INCLUDE_DIR}/../bin;%PATH%")
 endif()
+
+install(TARGETS cppscanner
+  RUNTIME DESTINATION "bin")
