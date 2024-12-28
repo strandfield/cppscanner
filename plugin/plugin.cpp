@@ -12,9 +12,8 @@
 
 #include <clang/Index/IndexingAction.h>
 
-#include <cstring> // strcmp(), strlen()
+#include <cstring> // strlen()
 #include <filesystem>
-#include <iostream>
 
 namespace cppscanner
 {
@@ -52,8 +51,6 @@ public:
 
   void initialize(clang::ASTContext& Ctx) final
   {
-    std::cout << "initialize()" << std::endl;
-
     ForwardingIndexDataConsumer::initialize(Ctx);
 
     m_snapshot_creator.setHomeDir(m_homePath);
@@ -80,8 +77,6 @@ public:
 
   void finish() final
   {
-    std::cout << "finish()" << std::endl;
-
     ForwardingIndexDataConsumer::finish();
 
     m_snapshot_creator.feed(std::move(*m_indexer.getCurrentIndex()));
@@ -190,13 +185,10 @@ private:
 
 TakeSnapshotPluginASTAction::TakeSnapshotPluginASTAction()
 {
-  std::cout << "TakeSnapshotPluginASTAction()" << std::endl;
-
 }
 
 TakeSnapshotPluginASTAction::~TakeSnapshotPluginASTAction()
 {
-  std::cout << "~TakeSnapshotPluginASTAction()" << std::endl;
 }
 
 // As far as I can tell, the action object is destroyed after this function is called,
@@ -205,10 +197,6 @@ TakeSnapshotPluginASTAction::~TakeSnapshotPluginASTAction()
 // to live on its own.
 std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsumer(clang::CompilerInstance &ci, llvm::StringRef inFile) 
 {
-  std::cout << "CreateASTConsumer()" << std::endl;
-
-  std::cout << "inFile = " << inFile.str() << std::endl;
-
   auto data_consumer = std::make_shared<cppscanner::IndexDataConsumerBundle>(m_outDir, inFile.str(), m_homePath, m_indexLocalSymbols);
 
   if (ci.getDiagnostics().getClient())
@@ -248,8 +236,6 @@ std::unique_ptr<clang::ASTConsumer> TakeSnapshotPluginASTAction::CreateASTConsum
 
 bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, const std::vector<std::string>& args)
 {
-  std::cout << "ParseArgs()" << std::endl;
-
   bool indexLocalSymbols = false;
   std::optional<std::string> homePath;
   std::optional<std::string> outdir;
@@ -314,9 +300,6 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
     }
   }
   
-  std::cout << "m_homePath = " << m_homePath << std::endl;
-  std::cout << "m_outDir = " << m_outDir << std::endl;
-
   return true;
 }
 
