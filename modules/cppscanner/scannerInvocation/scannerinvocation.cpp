@@ -3,6 +3,8 @@
 
 #include "compilecommandsgenerator.h"
 
+#include "cppscanner/base/config.h"
+
 #include <array>
 #include <iostream>
 #include <stdexcept>
@@ -278,11 +280,11 @@ void ScannerInvocation::run()
   }
 
   if (options().project_name.has_value()) {
-    scanner.setExtraProperty("project.name", *options().project_name);
+    scanner.setExtraProperty(PROPERTY_PROJECT_NAME, *options().project_name);
   }
 
   if (options().project_version.has_value()) {
-    scanner.setExtraProperty("project.version", *options().project_version);
+    scanner.setExtraProperty(PROPERTY_PROJECT_VERSION, *options().project_version);
   }
 
   if (options().compile_commands.has_value())

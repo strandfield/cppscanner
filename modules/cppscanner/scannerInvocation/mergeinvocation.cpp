@@ -46,6 +46,24 @@ MergeCommandOptions parseCommandLine(const std::vector<std::string>& args)
     {
       result.linkMode = true;
     }
+    else if (arg == "--keep-source-files") 
+    {
+      result.keepSourceFiles = true;
+    }
+    else if (arg == "--project-name")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --project-name");
+
+      result.projectName = args.at(i++);
+    }
+    else if (arg == "--project-version")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --project-version");
+
+      result.projectVersion = args.at(i++);
+    }
     else if (arg.rfind('-', 0) != 0)
     {
       result.inputs.push_back(arg);
@@ -89,22 +107,29 @@ void convertToLocalPath(std::string& path)
 }
 #endif // _WIN32
 
-void addInputFilesFromFolder(std::vector<std::filesystem::path>&output, const std::filesystem::path& scannerFolderPath)
+std::vector<std::filesystem::path> listInputFiles(const std::vector<std::filesystem::path>& scannerDirectories)
 {
-  for (const std::filesystem::directory_entry& e : std::filesystem::directory_iterator(scannerFolderPath))
+  std::vector<std::filesystem::path> result;
+
+  for (const std::filesystem::path& scannerFolderPath : scannerDirectories)
   {
-    if (e.is_regular_file() && e.path().extension() == PLUGIN_SNAPSHOT_EXTENSION)
+    for (const std::filesystem::directory_entry& e : std::filesystem::directory_iterator(scannerFolderPath))
     {
-      output.push_back(e.path());
+      if (e.is_regular_file() && e.path().extension() == PLUGIN_SNAPSHOT_EXTENSION)
+      {
+        result.push_back(e.path());
+      }
     }
   }
+
+  return result;
 }
 
-void searchInputFilesRecursively(std::vector<std::filesystem::path>&output, const std::filesystem::path& folderPath)
+void searchScannerDirectoriesRecursively(std::vector<std::filesystem::path>&output, const std::filesystem::path& folderPath)
 {
   if (folderPath.filename() == PLUGIN_OUTPUT_FOLDER_NAME)
   {
-    addInputFilesFromFolder(output, folderPath);
+    output.push_back(folderPath);
   }
   else
   {
@@ -112,13 +137,13 @@ void searchInputFilesRecursively(std::vector<std::filesystem::path>&output, cons
     {
       if (e.is_directory() && e.path().filename() == PLUGIN_OUTPUT_FOLDER_NAME)
       {
-        addInputFilesFromFolder(output, e.path());
+        output.push_back(e.path());
       }
     }
   }
 }
 
-std::vector<std::filesystem::path> searchInputFilesRecursively(const std::vector<std::string>& paths)
+std::vector<std::filesystem::path> searchScannerDirectoriesRecursively(const std::vector<std::string>& paths)
 {
   std::vector<std::filesystem::path> result;
 
@@ -126,7 +151,7 @@ std::vector<std::filesystem::path> searchInputFilesRecursively(const std::vector
   {
     for (const std::string& path : paths)
     {
-      searchInputFilesRecursively(result, path);
+      searchScannerDirectoriesRecursively(result, path);
     }
   }
   else
@@ -134,12 +159,12 @@ std::vector<std::filesystem::path> searchInputFilesRecursively(const std::vector
     std::optional<std::string> outDir = readEnv(ENV_PLUGIN_OUTPUT_DIR);
     if (outDir)
     {
-      searchInputFilesRecursively(result, *outDir);
+      searchScannerDirectoriesRecursively(result, *outDir);
     }
 
     if(!outDir || result.empty())
     {
-      searchInputFilesRecursively(result, std::filesystem::current_path().string());
+      searchScannerDirectoriesRecursively(result, std::filesystem::current_path().string());
     }
   }
 
@@ -192,6 +217,24 @@ void MergeCommandInvocation::readEnv()
       m_options.home = *dir;
     }
   }
+
+  if (!m_options.projectName.has_value())
+  {
+    std::optional<std::string> value = cppscanner::readEnv(ENV_PROJECT_NAME);
+
+    if (value) {
+      m_options.projectName = *value;
+    }
+  }
+
+  if (!m_options.projectVersion.has_value())
+  {
+    std::optional<std::string> value = cppscanner::readEnv(ENV_PROJECT_VERSION);
+
+    if (value) {
+      m_options.projectVersion = *value;
+    }
+  }
 }
 
 const MergeCommandOptions& MergeCommandInvocation::options() const
@@ -201,22 +244,36 @@ const MergeCommandOptions& MergeCommandInvocation::options() const
 
 bool MergeCommandInvocation::exec()
 {
-  if (std::filesystem::exists(options().output))
+  std::filesystem::path output = "snapshot.db";
+
+  if (options().output.has_value())
   {
-    std::filesystem::remove(options().output);
+    output = *options().output;
+  }
+  else if (options().projectName.has_value())
+  {
+    output = *options().projectName + ".db";
+  }
+
+  if (std::filesystem::exists(output))
+  {
+    std::filesystem::remove(output);
   }
 
   SnapshotMerger merger;
-  merger.setOutputPath(options().output);
+  merger.setOutputPath(output);
 
   if (options().captureMissingFileContent || options().linkMode)
   {
     merger.setFileContentWriter(std::make_unique<FileContentWriterImpl>());
   }
 
+  std::vector<std::filesystem::path> scanner_directories;
+
   if (options().linkMode)
   {
-    std::vector<std::filesystem::path> inputs = searchInputFilesRecursively(options().inputs);
+    scanner_directories = searchScannerDirectoriesRecursively(options().inputs);
+    std::vector<std::filesystem::path> inputs = listInputFiles(scanner_directories);
 
     if (inputs.empty())
     {
@@ -247,12 +304,27 @@ bool MergeCommandInvocation::exec()
   {
     merger.setProjectHome(*options().home);
   }
+
+  if (options().projectName.has_value())
+  {
+    merger.setExtraProperty(PROPERTY_PROJECT_NAME, *options().projectName);
+  }
+
+  if (options().projectVersion.has_value())
+  {
+    merger.setExtraProperty(PROPERTY_PROJECT_VERSION, *options().projectVersion);
+  }
   
   merger.runMerge();
 
-  if (options().linkMode)
+  if (options().linkMode && !options().keepSourceFiles)
   {
-    // TODO: remove all input files
+    for (const std::filesystem::path& dir : scanner_directories)
+    {
+      std::filesystem::remove_all(dir);
+    }
+
+    scanner_directories.clear();
   }
 
   return true;

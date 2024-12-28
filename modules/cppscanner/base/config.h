@@ -7,6 +7,9 @@
 namespace cppscanner
 {
 
+constexpr const char* PROPERTY_PROJECT_NAME = "project.name";
+constexpr const char* PROPERTY_PROJECT_VERSION = "project.version";
+
 // This is the file extension for the snapshots produced by the plugin.
 constexpr const char* PLUGIN_SNAPSHOT_EXTENSION = ".aba";
 
@@ -25,6 +28,9 @@ constexpr const char* ENV_INDEX_LOCAL_SYMBOLS = "CPPSCANNER_INDEX_LOCAL_SYMBOLS"
 // Every snapshot must provide a home directory as it is used to decide whether a file
 // belongs to the project or not.
 constexpr const char* ENV_HOME_DIR = "CPPSCANNER_HOME_DIR";
+
+constexpr const char* ENV_PROJECT_NAME = "CPPSCANNER_PROJECT_NAME";
+constexpr const char* ENV_PROJECT_VERSION = "CPPSCANNER_PROJECT_VERSION";
 
 // This environment variable is used by the plugin to initialize the output
 // directory if none is provided as a plugin argument.

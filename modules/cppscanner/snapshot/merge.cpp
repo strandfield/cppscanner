@@ -238,6 +238,11 @@ void SnapshotMerger::setProjectHome(const std::filesystem::path& homePath)
   m_project_home_path = homePath;
 }
 
+void SnapshotMerger::setExtraProperty(const std::string& name, const std::string& value)
+{
+  m_extra_properties[name] = value;
+}
+
 void SnapshotMerger::setFileContentWriter(std::unique_ptr<FileContentWriter> contentWriter)
 {
   m_file_content_writer = std::move(contentWriter);
@@ -322,6 +327,11 @@ void SnapshotMerger::runMerge()
       {
         properties[key] = *value;
       }
+    }
+
+    for (const auto& p : m_extra_properties)
+    {
+      properties[p.first] = p.second;
     }
 
     writer().beginTransaction();
