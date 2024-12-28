@@ -244,29 +244,7 @@ const MergeCommandOptions& MergeCommandInvocation::options() const
 
 bool MergeCommandInvocation::exec()
 {
-  std::filesystem::path output = "snapshot.db";
-
-  if (options().output.has_value())
-  {
-    output = *options().output;
-  }
-  else if (options().projectName.has_value())
-  {
-    output = *options().projectName + ".db";
-  }
-
-  if (std::filesystem::exists(output))
-  {
-    std::filesystem::remove(output);
-  }
-
   SnapshotMerger merger;
-  merger.setOutputPath(output);
-
-  if (options().captureMissingFileContent || options().linkMode)
-  {
-    merger.setFileContentWriter(std::make_unique<FileContentWriterImpl>());
-  }
 
   std::vector<std::filesystem::path> scanner_directories;
 
@@ -299,26 +277,61 @@ bool MergeCommandInvocation::exec()
       merger.addInputPath(input);
     }
   }
+
+  // configuting output
+  {
+    std::filesystem::path output = "snapshot.db";
+
+    if (options().output.has_value())
+    {
+      output = *options().output;
+    }
+    else if (options().projectName.has_value())
+    {
+      output = *options().projectName + ".db";
+    }
+
+    if (std::filesystem::exists(output))
+    {
+      std::filesystem::remove(output);
+    }  
+
+    merger.setOutputPath(output);
+
+    std::cout << "Output file will be: " << output << std::endl;
+  }
+
+  if (options().captureMissingFileContent || options().linkMode)
+  {
+    merger.setFileContentWriter(std::make_unique<FileContentWriterImpl>());
+  }
   
   if (options().home.has_value())
   {
+    std::cout << "Project home: " << *options().home << std::endl;
     merger.setProjectHome(*options().home);
   }
 
   if (options().projectName.has_value())
   {
+    std::cout << "Project name: " << *options().projectName << std::endl;
     merger.setExtraProperty(PROPERTY_PROJECT_NAME, *options().projectName);
   }
 
   if (options().projectVersion.has_value())
   {
+    std::cout << "Project version: " << *options().projectVersion << std::endl;
     merger.setExtraProperty(PROPERTY_PROJECT_VERSION, *options().projectVersion);
   }
-  
+
+  std::cout << "Merging..." << std::endl;
+
   merger.runMerge();
 
   if (options().linkMode && !options().keepSourceFiles)
   {
+    std::cout << "Deleting source directories..." << std::endl;
+
     for (const std::filesystem::path& dir : scanner_directories)
     {
       std::filesystem::remove_all(dir);
