@@ -57,9 +57,9 @@ TEST_CASE("jobs", "[scannerInvocation]")
     "-o", "output.db"}
   };
 
-  REQUIRE(inv.parsedCommandLine().nb_threads.value_or(-1) == 8);
-  REQUIRE(inv.parsedCommandLine().project_name.value_or("") == "cppscanner");
-  REQUIRE(inv.parsedCommandLine().output == "output.db");
-  REQUIRE(inv.parsedCommandLine().inputs.size() == 1);
-  REQUIRE(inv.parsedCommandLine().inputs.at(0) == "test.cpp");
+  REQUIRE(inv.options().nb_threads.value_or(-1) == 8);
+  REQUIRE(inv.options().project_name.value_or("") == "cppscanner");
+  REQUIRE(inv.options().output == "output.db");
+  REQUIRE(inv.options().inputs.size() == 1);
+  REQUIRE(inv.options().inputs.at(0) == "test.cpp");
 }

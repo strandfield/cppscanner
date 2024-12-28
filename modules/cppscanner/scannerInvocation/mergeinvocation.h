@@ -32,22 +32,21 @@ struct MergeCommandOptions
 class MergeCommandInvocation
 {
 private:
-  MergeCommandOptions m_cli;
   MergeCommandOptions m_options;
   std::vector<std::string> m_errors;
 
 public:
-  explicit MergeCommandInvocation(const std::vector<std::string>& command);
+  MergeCommandInvocation();
+  explicit MergeCommandInvocation(const std::vector<std::string>& commandLine);
 
   static void printHelp();
 
-  const MergeCommandOptions& parsedCommandLine() const;
-
-  void readEnv();
+  void parseCommandLine(const std::vector<std::string>& commandLine);
+  void parseEnv();
 
   const MergeCommandOptions& options() const;
 
-  bool exec();
+  bool run();
 
   const std::vector<std::string>& errors() const;
 };

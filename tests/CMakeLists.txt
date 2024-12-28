@@ -96,6 +96,6 @@ add_test(NAME TEST_cppscanner COMMAND TEST_cppscanner)
 #add_test(NAME TEST_cppscanner_selftest COMMAND TEST_cppscanner_selftest)
 
 if (WIN32)
-  set_tests_properties(TEST_cppscanner TEST_cppscanner_selftest
+  set_tests_properties(TEST_cppscanner
                      PROPERTIES ENVIRONMENT "PATH=${SQLite3_INCLUDE_DIR}/../bin;%PATH%")
 endif()

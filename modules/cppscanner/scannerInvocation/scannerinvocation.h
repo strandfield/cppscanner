@@ -49,12 +49,17 @@ private:
   std::vector<std::string> m_errors;
 
 public:
-  explicit ScannerInvocation(const std::vector<std::string>& command);
+  ScannerInvocation();
+  explicit ScannerInvocation(const std::vector<std::string>& commandLine);
 
-  const ScannerOptions& parsedCommandLine() const;
+  static void printHelp();
+
+  void parseCommandLine(const std::vector<std::string>& commandLine);
+  void parseEnv();
+
   const ScannerOptions& options() const;
 
-  void run();
+  bool run();
 
   const std::vector<std::string>& errors() const;
 };

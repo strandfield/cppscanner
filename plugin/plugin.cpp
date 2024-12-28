@@ -256,17 +256,7 @@ bool TakeSnapshotPluginASTAction::ParseArgs(const clang::CompilerInstance &ci, c
     }
   }
 
-  if (indexLocalSymbols)
-  {
-    m_indexLocalSymbols = true;
-  }
-  else
-  {
-    if (std::optional<std::string> val = cppscanner::readEnv(cppscanner::ENV_INDEX_LOCAL_SYMBOLS))
-    {
-      m_indexLocalSymbols = (*val != "0");
-    }
-  }
+  m_indexLocalSymbols = indexLocalSymbols || cppscanner::isEnvTrue(cppscanner::ENV_INDEX_LOCAL_SYMBOLS);
 
   if (homePath.has_value())
   {

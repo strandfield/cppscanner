@@ -12,6 +12,7 @@ namespace cppscanner
 {
 
 std::optional<std::string> readEnv(const char* varName);
+bool isEnvTrue(const char* varName);
 
 } // namespace cppscanner
 

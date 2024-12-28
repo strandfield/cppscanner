@@ -16,67 +16,6 @@ namespace cppscanner
 namespace
 {
 
-MergeCommandOptions parseCommandLine(const std::vector<std::string>& args)
-{
-  MergeCommandOptions result;
-
-  for (size_t i(0); i < args.size();)
-  {
-    const std::string& arg = args.at(i++);
-
-    if (arg == "-o" || arg == "--output") 
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after " + arg);
-
-      result.output = args.at(i++);
-    }
-    else if (arg == "--home") 
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after " + arg);
-
-      result.home = args.at(i++);
-    }
-    else if (arg == "--capture-missing-file-content") 
-    {
-      result.captureMissingFileContent = true;
-    }
-    else if (arg == "--link") 
-    {
-      result.linkMode = true;
-    }
-    else if (arg == "--keep-source-files") 
-    {
-      result.keepSourceFiles = true;
-    }
-    else if (arg == "--project-name")
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --project-name");
-
-      result.projectName = args.at(i++);
-    }
-    else if (arg == "--project-version")
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --project-version");
-
-      result.projectVersion = args.at(i++);
-    }
-    else if (arg.rfind('-', 0) != 0)
-    {
-      result.inputs.push_back(arg);
-    }
-    else
-    {
-      throw std::runtime_error("unrecognized command line argument: " + arg);
-    }
-  }
-
-  return result;
-}
-
 void checkConsistency(const MergeCommandOptions& opts)
 {
 
@@ -183,11 +122,15 @@ public:
   }
 };
 
-MergeCommandInvocation::MergeCommandInvocation(const std::vector<std::string>& command)
+MergeCommandInvocation::MergeCommandInvocation()
 {
-  m_cli = parseCommandLine(command);
-  checkConsistency(m_cli);
-  m_options = m_cli;
+
+}
+
+MergeCommandInvocation::MergeCommandInvocation(const std::vector<std::string>& commandLine)
+{
+  parseCommandLine(commandLine);
+  checkConsistency(m_options);
 }
 
 void MergeCommandInvocation::printHelp()
@@ -202,16 +145,72 @@ void MergeCommandInvocation::printHelp()
   std::cout << MERGE_DESCRIPTION << std::endl;
 }
 
-const MergeCommandOptions& MergeCommandInvocation::parsedCommandLine() const
+void MergeCommandInvocation::parseCommandLine(const std::vector<std::string>& commandLine)
 {
-  return m_cli;
+  const auto& args = commandLine;
+  auto& result = m_options;
+
+  for (size_t i(0); i < args.size();)
+  {
+    const std::string& arg = args.at(i++);
+
+    if (arg == "-o" || arg == "--output") 
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after " + arg);
+
+      result.output = args.at(i++);
+    }
+    else if (arg == "--home") 
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after " + arg);
+
+      result.home = args.at(i++);
+    }
+    else if (arg == "--capture-missing-file-content") 
+    {
+      result.captureMissingFileContent = true;
+    }
+    else if (arg == "--link") 
+    {
+      result.linkMode = true;
+    }
+    else if (arg == "--keep-source-files") 
+    {
+      result.keepSourceFiles = true;
+    }
+    else if (arg == "--project-name")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --project-name");
+
+      result.projectName = args.at(i++);
+    }
+    else if (arg == "--project-version")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --project-version");
+
+      result.projectVersion = args.at(i++);
+    }
+    else if (arg.rfind('-', 0) != 0)
+    {
+      result.inputs.push_back(arg);
+    }
+    else
+    {
+      throw std::runtime_error("unrecognized command line argument: " + arg);
+    }
+  }
+
 }
 
-void MergeCommandInvocation::readEnv()
+void MergeCommandInvocation::parseEnv()
 {
   if (!m_options.home.has_value())
   {
-    std::optional<std::string> dir = cppscanner::readEnv(ENV_HOME_DIR);
+    std::optional<std::string> dir = readEnv(ENV_HOME_DIR);
 
     if (dir) {
       m_options.home = *dir;
@@ -220,7 +219,7 @@ void MergeCommandInvocation::readEnv()
 
   if (!m_options.projectName.has_value())
   {
-    std::optional<std::string> value = cppscanner::readEnv(ENV_PROJECT_NAME);
+    std::optional<std::string> value = readEnv(ENV_PROJECT_NAME);
 
     if (value) {
       m_options.projectName = *value;
@@ -229,7 +228,7 @@ void MergeCommandInvocation::readEnv()
 
   if (!m_options.projectVersion.has_value())
   {
-    std::optional<std::string> value = cppscanner::readEnv(ENV_PROJECT_VERSION);
+    std::optional<std::string> value = readEnv(ENV_PROJECT_VERSION);
 
     if (value) {
       m_options.projectVersion = *value;
@@ -242,7 +241,7 @@ const MergeCommandOptions& MergeCommandInvocation::options() const
   return m_options;
 }
 
-bool MergeCommandInvocation::exec()
+bool MergeCommandInvocation::run()
 {
   SnapshotMerger merger;
 
