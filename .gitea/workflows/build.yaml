@@ -28,7 +28,7 @@ jobs:
       - run: cmake --build build_snapshot --target all
       - run: cppscanner merge --link
       - name: Upload snapshot
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: snapshot.db
           path: cppscanner.db
