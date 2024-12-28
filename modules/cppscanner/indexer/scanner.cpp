@@ -273,6 +273,16 @@ static bool isPcmCompileCommand(const clang::tooling::CompileCommand& cc)
   }
 }
 
+static void removeGmArg(std::vector<std::string>& commandLine)
+{
+  auto it = std::find(commandLine.begin(), commandLine.end(), "/Gm-");
+
+  if (it != commandLine.end())
+  {
+    commandLine.erase(it);
+  }
+}
+
 void Scanner::scanFromCompileCommands(const std::filesystem::path& compileCommandsPath)
 {
   std::string error_message;
@@ -298,6 +308,10 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
     } else {
       scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
     }
+
+#if _WIN32
+    removeGmArg(scanner_command.commandLine);
+#endif
 
     scanner_command.fileName = cc.Filename;
 
@@ -391,6 +405,7 @@ public:
   explicit ArgsTranslator(clang::FileManager& files) :
     m_files(&files)
   {
+    // TODO: add an ignoring diagnostic consumer to the diagnostic engine?
     m_ci.createDiagnostics();
   }
 
