@@ -4,6 +4,7 @@ on: [push]
 
 env:
   CPPSCANNER_PROJECT_NAME: 'cppscanner'
+  CPPSCANNER_HOME_DIR: ${{ gitea.workspace }}
 
 jobs:
   build-linux:
@@ -25,6 +26,7 @@ jobs:
       - run: cmake --install build
       - run: cppscanner --version
       - run: cmake -B build_snapshot -DCPPSCANNER_BUILD_PLUGIN=ON -DBUILD_TESTS=OFF -DCPPSCANNER_SNAPSHOT_BUILD=ON -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_C_COMPILER=clang-18 
+      - run: echo $CPPSCANNER_HOME_DIR
       - run: cmake --build build_snapshot --target all
       - run: cppscanner merge --link
       - name: Upload snapshot
