@@ -74,6 +74,7 @@ struct ScannerData
   std::filesystem::path outputPath;
 
   std::vector<ScannerCompileCommand> compileCommands;
+  bool forceStripOutput = false;
 
   std::unique_ptr<FileIdentificator> fileIdentificator;
   std::vector<bool> filePathsInserted;
@@ -348,6 +349,8 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
     std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
   }
 
+  d->forceStripOutput = true;
+
   runScanSingleOrMultiThreaded();
 }
 
@@ -380,11 +383,30 @@ static std::optional<std::filesystem::path> findOutput(const CompileCommand& cc)
 
 class CCAdjuster
 {
+private:
+  bool m_forceStripOutput;
+
 public:
+  explicit CCAdjuster(bool forceStripOutput) 
+    : m_forceStripOutput(forceStripOutput)
+  {
+
+  }
 
   void adjustCompileCommands(std::vector<ScannerCompileCommand>& commands)
   {
     clang::tooling::ArgumentsAdjuster soAdjuster = getSyntaxOnlyAdjuster();
+
+    if (m_forceStripOutput)
+    {
+      for (ScannerCompileCommand& cc : commands)
+      {
+        cc.commandLine = soAdjuster(cc.commandLine, cc.fileName);
+      }
+
+      return;
+    }
+
     clang::tooling::ArgumentsAdjuster ppAdjuster = getPreprocessingRecordAdjuster();
 
     for (ScannerCompileCommand& cc : commands)
@@ -582,13 +604,13 @@ private:
   }
 };
 
-static void translateAndAdjust(std::vector<ScannerCompileCommand>& commands, CCTranslator& translator)
+static void translateAndAdjust(std::vector<ScannerCompileCommand>& commands, CCTranslator& translator, bool forceStripOutput)
 {
   translator.translateCommands(commands);
 
   // adjust compile commands
   {
-    CCAdjuster adjuster;
+    CCAdjuster adjuster{ forceStripOutput };
     adjuster.adjustCompileCommands(commands);
   }
 }
@@ -631,7 +653,7 @@ void Scanner::scanSingleThreaded()
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
 
   CCTranslator translator{ *file_manager };
-  translateAndAdjust(d->compileCommands, translator);
+  translateAndAdjust(d->compileCommands, translator, d->forceStripOutput);
 
   processCommands(d->compileCommands, *indexing_arbiter, *file_manager);
 }
@@ -752,7 +774,7 @@ void Scanner::scanMultiThreaded()
   }
 
   CCTranslator translator;
-  translateAndAdjust(d->compileCommands, translator);
+  translateAndAdjust(d->compileCommands, translator, d->forceStripOutput);
 
   std::vector<WorkQueue::ToolInvocation> tasks;
   std::vector<ScannerCompileCommand> pch_ccs;

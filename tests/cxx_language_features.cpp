@@ -269,7 +269,7 @@ TEST_CASE("Enum", "[scanner][cxx_language_features]")
 
   ScannerInvocation inv{
     { "run",
-    "-i", HOME_DIR + std::string("/enum.h"),
+    "-i", HOME_DIR + std::string("/enum.h"),  // TODO: rename file to ".cpp", passing header files is interpreted as pch compilation by clang
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -342,7 +342,7 @@ TEST_CASE("Template", "[scanner][cxx_language_features]")
 
   ScannerInvocation inv{
     { "run",
-    "-i", HOME_DIR + std::string("/template.h"),
+    "-i", HOME_DIR + std::string("/template.h"), // TODO: rename file to ".cpp", passing header files is interpreted as pch compilation by clang
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
