@@ -510,7 +510,7 @@ ScannerInvocation::ScannerInvocation()
 
 }
 
-// TODO: change return type to bool instead of raising an exception
+// DO: TODO: change return type to bool instead of raising an exception
 void ScannerInvocation::parseCommandLine(const std::vector<std::string>& commandLine)
 {
   if (commandLine.at(0) == "run")
@@ -559,12 +559,50 @@ bool ScannerInvocation::setHelpFlag(const std::string& arg)
   }
 }
 
+static bool parseCliCommon(const std::vector<std::string>& commandLine, size_t i, std::optional<std::filesystem::path>& home, std::optional<std::string>& projectName, std::optional<std::string>& projectVersion)
+{
+  const std::string& arg = commandLine.at(i);
+
+  if (arg == "--home")
+  {
+    if (++i >= commandLine.size())
+      throw std::runtime_error("missing argument after --home");
+
+    home = std::filesystem::path(commandLine.at(i++));
+  }
+  else if (arg == "--project-name")
+  {
+    if (++i >= commandLine.size())
+      throw std::runtime_error("missing argument after --project-name");
+
+    projectName = commandLine.at(i++);
+  }
+  else if (arg == "--project-version")
+  {
+    if (++i >= commandLine.size())
+      throw std::runtime_error("missing argument after --project-version");
+
+    projectVersion = commandLine.at(i++);
+  }
+  else
+  {
+    return false;
+  }
+
+  return true;
+}
+
 void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<std::string>& commandLine)
 {
   const auto& args = commandLine;
 
   for (size_t i(1); i < args.size();)
   {
+    if (parseCliCommon(args, i, result.home, result.project_name, result.project_version))
+    {
+      continue;
+    }
+
     const std::string& arg = args.at(i++);
 
     if (setHelpFlag(arg))
@@ -584,21 +622,14 @@ void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<s
       if (i >= args.size())
         throw std::runtime_error("missing argument after " + arg + " command");
 
-      result.inputs.push_back(args.at(i++));
+      result.inputs.push_back(args.at(i++)); // TODO: can this be a glob expression?
     }
-    else if (arg == "--output" || arg == "-o") 
+    else if (arg == "--output" || arg == "-o") // TODO: make common with merge command
     {
       if (i >= args.size())
         throw std::runtime_error("missing argument after --output");
 
       result.output = args.at(i++);
-    }
-    else if (arg == "--home")
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --home");
-
-      result.home = std::filesystem::path(args.at(i++));
     }
     else if (arg == "--root")
     {
@@ -655,20 +686,6 @@ void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<s
         result.nb_threads = std::stoi(arg.substr(2));
       }
     }
-    else if (arg == "--project-name")
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --project-name");
-
-      result.project_name = args.at(i++);
-    }
-    else if (arg == "--project-version")
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --project-version");
-
-      result.project_version = args.at(i++);
-    }
     else if (arg == "--")
     {
       result.compilation_arguments.assign(args.begin() + i, args.end());
@@ -687,6 +704,11 @@ void ScannerInvocation::parseCommandLine(MergeOptions& result, const std::vector
 
   for (size_t i(1); i < args.size();)
   {
+    if (parseCliCommon(args, i, result.home, result.projectName, result.projectVersion))
+    {
+      continue;
+    }
+
     const std::string& arg = args.at(i++);
 
     if (setHelpFlag(arg))
@@ -701,13 +723,6 @@ void ScannerInvocation::parseCommandLine(MergeOptions& result, const std::vector
 
       result.output = args.at(i++);
     }
-    else if (arg == "--home") 
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after " + arg);
-
-      result.home = args.at(i++);
-    }
     else if (arg == "--capture-missing-file-content") 
     {
       result.captureMissingFileContent = true;
@@ -719,20 +734,6 @@ void ScannerInvocation::parseCommandLine(MergeOptions& result, const std::vector
     else if (arg == "--keep-source-files") 
     {
       result.keepSourceFiles = true;
-    }
-    else if (arg == "--project-name")
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --project-name");
-
-      result.projectName = args.at(i++);
-    }
-    else if (arg == "--project-version")
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --project-version");
-
-      result.projectVersion = args.at(i++);
     }
     else if (arg.rfind('-', 0) != 0)
     {
@@ -757,34 +758,39 @@ void ScannerInvocation::parseEnv()
   }
 }
 
-void ScannerInvocation::parseEnv(RunOptions& result)
+static void parseEnvCommon(std::optional<std::filesystem::path>& home, std::optional<std::string>& projectName, std::optional<std::string>& projectVersion)
 {
-  if (!result.home.has_value())
+  if (!home.has_value())
   {
     std::optional<std::string> dir = readEnv(ENV_HOME_DIR);
 
     if (dir) {
-      result.home = *dir;
+      home = *dir;
     }
   }
 
-  if (!result.project_name.has_value())
+  if (!projectName.has_value())
   {
     std::optional<std::string> value = readEnv(ENV_PROJECT_NAME);
 
     if (value) {
-      result.project_name = *value;
+      projectName = *value;
     }
   }
 
-  if (!result.project_version.has_value())
+  if (!projectVersion.has_value())
   {
     std::optional<std::string> value = readEnv(ENV_PROJECT_VERSION);
 
     if (value) {
-      result.project_version = *value;
+      projectVersion = *value;
     }
   }
+}
+
+void ScannerInvocation::parseEnv(RunOptions& result)
+{
+  parseEnvCommon(result.home, result.project_name, result.project_version);
 
   if (!result.index_local_symbols)
   {
@@ -794,32 +800,7 @@ void ScannerInvocation::parseEnv(RunOptions& result)
 
 void ScannerInvocation::parseEnv(MergeOptions& result)
 {
-  if (!result.home.has_value())
-  {
-    std::optional<std::string> dir = readEnv(ENV_HOME_DIR);
-
-    if (dir) {
-      result.home = *dir;
-    }
-  }
-
-  if (!result.projectName.has_value())
-  {
-    std::optional<std::string> value = readEnv(ENV_PROJECT_NAME);
-
-    if (value) {
-      result.projectName = *value;
-    }
-  }
-
-  if (!result.projectVersion.has_value())
-  {
-    std::optional<std::string> value = readEnv(ENV_PROJECT_VERSION);
-
-    if (value) {
-      result.projectVersion = *value;
-    }
-  }
+  parseEnvCommon(result.home, result.projectName, result.projectVersion);
 }
 
 const ScannerInvocation::Options& ScannerInvocation::options() const
