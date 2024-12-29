@@ -24,11 +24,13 @@ class TranslationUnitIndex;
 
 struct ScannerData;
 
-struct ScannerCompileCommand
+struct CompileCommand
 {
   std::string fileName;
   std::vector<std::string> commandLine;
 };
+
+struct ScannerCompileCommand;
 
 /**
  * \brief top level class for indexing a C++ project and creating a snapshot 
@@ -65,7 +67,7 @@ public:
 
   void scanFromCompileCommands(const std::filesystem::path& compileCommandsPath);
   void scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs, const std::vector<std::string>& compileArgs);
-  void scan(const std::vector<ScannerCompileCommand>& compileCommands);
+  void scan(const std::vector<CompileCommand>& compileCommands);
 
   static void fillContent(File& file);
 

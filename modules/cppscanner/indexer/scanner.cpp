@@ -8,7 +8,6 @@
 #include "indexingresultqueue.h"
 #include "workqueue.h"
 
-#include "argumentsadjuster.h"
 #include "frontendactionfactory.h"
 #include "fileidentificator.h"
 #include "fileindexingarbiter.h"
@@ -22,6 +21,7 @@
 #include "cppscanner/base/os.h"
 #include "cppscanner/base/version.h"
 
+#include <clang/Tooling/ArgumentsAdjusters.h>
 #include <clang/Tooling/JSONCompilationDatabase.h>
 
 #include <clang/Basic/Diagnostic.h>
@@ -50,6 +50,13 @@
 
 namespace cppscanner
 {
+
+struct ScannerCompileCommand : CompileCommand
+{
+  bool translated = false;
+  std::optional<std::filesystem::path> pchOutput;
+  std::optional<std::filesystem::path> pcmOutput;
+};
 
 struct ScannerData
 {
@@ -245,40 +252,6 @@ bool Scanner::passTranslationUnitFilters(const std::string& filename) const
   return true;
 }
 
-static bool isPchCompileCommand(const clang::tooling::CompileCommand& cc)
-{
-#ifdef _WIN32
-  constexpr bool is_windows = true;
-#else
-  constexpr bool is_windows = false;
-#endif // _WIN32
-
-  if constexpr(is_windows)
-  {
-    auto it = std::find_if(cc.CommandLine.begin(), cc.CommandLine.end(), [](const std::string& arg) {
-      return arg.rfind("/Yc", 0) == 0;
-      });
-
-    if (it != cc.CommandLine.end()) {
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-static bool isPcmCompileCommand(const clang::tooling::CompileCommand& cc)
-{
-  if (cc.CommandLine.at(1) == "-cc1")
-  {
-    return std::find(cc.CommandLine.begin(), cc.CommandLine.end(), "-emit-module-interface") != cc.CommandLine.end();
-  }
-  else
-  {
-    return std::find(cc.CommandLine.begin(), cc.CommandLine.end(), "--precompile") != cc.CommandLine.end();
-  }
-}
-
 static void removeGmArg(std::vector<std::string>& commandLine)
 {
   auto it = std::find(commandLine.begin(), commandLine.end(), "/Gm-");
@@ -301,27 +274,14 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
     return;
   }
 
-  clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
-  clang::tooling::ArgumentsAdjuster pchArgsAdjuster = getPchArgumentsAdjuster();
-
   std::cout << "Processing compile_commands.json..." << std::endl;
 
   for (const clang::tooling::CompileCommand& cc : compile_commands->getAllCompileCommands())
   {
     ScannerCompileCommand scanner_command;
-    if (isPchCompileCommand(cc) || isPcmCompileCommand(cc)) {
-      scanner_command.commandLine = pchArgsAdjuster(cc.CommandLine, cc.Filename);
-    } else {
-      scanner_command.commandLine = argsAdjuster(cc.CommandLine, cc.Filename);
-    }
-
-#if _WIN32
-    removeGmArg(scanner_command.commandLine);
-#endif
-
     scanner_command.fileName = cc.Filename;
-
-    d->compileCommands.push_back(scanner_command);
+    scanner_command.commandLine = cc.CommandLine;
+    d->compileCommands.push_back(std::move(scanner_command));
   }
 
   std::cout << "Found " << d->compileCommands.size() << " translation units." << std::endl;
@@ -329,10 +289,17 @@ void Scanner::scanFromCompileCommands(const std::filesystem::path& compileComman
   runScanSingleOrMultiThreaded();
 }
 
+inline const char* getDefaultCompilerExecutableName()
+{
+#ifdef _WIN32
+  return "clang++";
+#else
+  return "/usr/bin/c++";
+#endif
+}
+
 void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inputs, const std::vector<std::string>& compileArgs)
 {
-  clang::tooling::ArgumentsAdjuster argsAdjuster = getDefaultArgumentsAdjuster();
-
   // TODO: add support for glob pattern
   auto queue = std::deque<std::filesystem::path>(inputs.begin(), inputs.end());
 
@@ -372,8 +339,6 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
     scanner_command.commandLine = { getDefaultCompilerExecutableName() };
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), compileArgs.begin(), compileArgs.end());
     scanner_command.commandLine.insert(scanner_command.commandLine.end(), scanner_command.fileName);
-
-    scanner_command.commandLine = argsAdjuster(scanner_command.commandLine, scanner_command.fileName);
    
     d->compileCommands.push_back(std::move(scanner_command));
   }
@@ -386,38 +351,158 @@ void Scanner::scanFromListOfInputs(const std::vector<std::filesystem::path>& inp
   runScanSingleOrMultiThreaded();
 }
 
-void Scanner::scan(const std::vector<ScannerCompileCommand>& compileCommands)
+void Scanner::scan(const std::vector<CompileCommand>& compileCommands)
 {
-  d->compileCommands = compileCommands;
+  d->compileCommands.reserve(compileCommands.size());
+
+  for (const CompileCommand& cc : compileCommands)
+  {
+    ScannerCompileCommand scc;
+    scc.fileName = cc.fileName;
+    scc.commandLine = cc.commandLine;
+    d->compileCommands.push_back(std::move(scc));
+  }
+
   runScanSingleOrMultiThreaded();
 }
+
+static std::optional<std::filesystem::path> findOutput(const CompileCommand& cc)
+{
+  auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-o");
+
+  if (it == cc.commandLine.end()) {
+    return std::nullopt;
+  }
+
+  return std::filesystem::path(*std::next(it));
+}
+
+
+class CCAdjuster
+{
+public:
+
+  void adjustCompileCommands(std::vector<ScannerCompileCommand>& commands)
+  {
+    clang::tooling::ArgumentsAdjuster soAdjuster = getSyntaxOnlyAdjuster();
+    clang::tooling::ArgumentsAdjuster ppAdjuster = getPreprocessingRecordAdjuster();
+
+    for (ScannerCompileCommand& cc : commands)
+    {
+      cc.pchOutput = findPchOutput(cc);
+
+      if (!cc.pchOutput.has_value())
+      {
+        cc.pcmOutput = findPcmOutput(cc);
+      }
+
+      if (!cc.pchOutput.has_value() && !cc.pcmOutput.has_value())
+      {
+        cc.commandLine = soAdjuster(cc.commandLine, cc.fileName);
+      }
+      else
+      {
+        cc.commandLine = ppAdjuster(cc.commandLine, cc.fileName);
+      }
+    }
+  }
+
+private:
+
+  static clang::tooling::ArgumentsAdjuster getSyntaxOnlyAdjuster()
+  {
+    clang::tooling::ArgumentsAdjuster syntaxOnly = clang::tooling::getClangSyntaxOnlyAdjuster();
+    clang::tooling::ArgumentsAdjuster stripOutput = clang::tooling::getClangStripOutputAdjuster();
+    clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
+    return clang::tooling::combineAdjusters(clang::tooling::combineAdjusters(syntaxOnly, stripOutput), detailedPreprocRecord);
+  }
+
+  static clang::tooling::ArgumentsAdjuster getPreprocessingRecordAdjuster()
+  {
+    clang::tooling::ArgumentsAdjuster detailedPreprocRecord = clang::tooling::getInsertArgumentAdjuster({ "-detailed-preprocessing-record" }, clang::tooling::ArgumentInsertPosition::END);
+    return detailedPreprocRecord;
+  }
+
+  static std::optional<std::filesystem::path> findPchOutput(const CompileCommand& cc)
+  {
+    auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-emit-pch");
+
+    if (it == cc.commandLine.end()) {
+      return std::nullopt;
+    }
+
+    return findOutput(cc);
+  }
+
+  static std::optional<std::filesystem::path> findPcmOutput(const CompileCommand& cc)
+  {
+    auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-emit-module-interface");
+
+    if (it == cc.commandLine.end()) {
+      return std::nullopt;
+    }
+
+    return findOutput(cc);
+  }
+};
 
 // converts user-toolchain command line args to clang cc1.
 // code largely stolen from clang/Tooling/Tooling.cpp, with 
 // some minor adaptations.
-class ArgsTranslator
+class CCTranslator
 {
 private:
   clang::IntrusiveRefCntPtr<clang::FileManager> m_files;
   clang::CompilerInstance m_ci;
 
 public:
-  ArgsTranslator()
+  CCTranslator()
   {
     m_files = clang::IntrusiveRefCntPtr<clang::FileManager>(new clang::FileManager(clang::FileSystemOptions()));
     m_ci.createDiagnostics();
   }
 
-  explicit ArgsTranslator(clang::FileManager& files) :
+  explicit CCTranslator(clang::FileManager& files) :
     m_files(&files)
   {
     // TODO: add an ignoring diagnostic consumer to the diagnostic engine?
     m_ci.createDiagnostics();
   }
 
-  std::vector<std::string> translateArgs(const std::vector<std::string>& args)
+  void translateCommands(std::vector<ScannerCompileCommand>& commands)
   {
-    const char* BinaryName = args.front().c_str();
+    for (ScannerCompileCommand& cc : commands)
+    {
+#if _WIN32
+      removeGmArg(cc.commandLine);
+#endif
+
+      translate(cc);
+    }
+
+    // remove failed translations
+    {
+      auto it = std::remove_if(commands.begin(), commands.end(), [](const ScannerCompileCommand& cc) {
+        return !cc.translated;
+        });
+
+      if (it != commands.end())
+      {
+        std::cout << "Some commands could not be translated and will be ignored." << std::endl;
+        commands.erase(it, commands.end());
+      }
+    }
+  }
+
+  clang::FileManager* fileManager() const
+  {
+    return m_files.get();
+  }
+
+protected:
+  void translate(ScannerCompileCommand& cc)
+  {
+    const char* BinaryName = cc.commandLine.front().c_str();
 
     const auto Driver = newDriver(m_ci.getDiagnostics(), BinaryName, &m_files->getVirtualFileSystem());
 
@@ -429,8 +514,8 @@ public:
       Driver->setCheckInputsExist(false);
 
     std::vector<const char*> argv;
-    argv.reserve(args.size());
-    for (const std::string& a : args)
+    argv.reserve(cc.commandLine.size());
+    for (const std::string& a : cc.commandLine)
     {
       argv.push_back(a.c_str());
     }
@@ -438,24 +523,12 @@ public:
     const std::unique_ptr<clang::driver::Compilation> Compilation{
       Driver->BuildCompilation(argv)
     };
-    
+
     if (!Compilation)
-      return {};
+      return;
 
-    return getCC1Arguments(*Compilation);
-  }
-
-  void translateCommands(std::vector<ScannerCompileCommand>& commands)
-  {
-    for (ScannerCompileCommand& cc : commands)
-    {
-      cc.commandLine = translateArgs(cc.commandLine);
-    }
-  }
-
-  clang::FileManager* fileManager() const
-  {
-    return m_files.get();
+    cc.commandLine = getCC1Arguments(*Compilation);
+    cc.translated = !cc.commandLine.empty();
   }
 
 private:
@@ -507,10 +580,20 @@ private:
     result.insert(result.end(), args.begin(), args.end());
     return result;
   }
-
 };
 
-static void compilePCH(const ScannerCompileCommand& cc, const std::filesystem::path& pchOutput, clang::FileManager* fileManager)
+static void translateAndAdjust(std::vector<ScannerCompileCommand>& commands, CCTranslator& translator)
+{
+  translator.translateCommands(commands);
+
+  // adjust compile commands
+  {
+    CCAdjuster adjuster;
+    adjuster.adjustCompileCommands(commands);
+  }
+}
+
+static void compilePCH(const CompileCommand& cc, const std::filesystem::path& pchOutput, clang::FileManager* fileManager)
 {
   if (!pchOutput.parent_path().empty())
   {
@@ -525,7 +608,7 @@ static void compilePCH(const ScannerCompileCommand& cc, const std::filesystem::p
   }
 }
 
-static void compilePCM(const ScannerCompileCommand& cc, const std::filesystem::path& pcmOutput, clang::FileManager* fileManager)
+static void compilePCM(const CompileCommand& cc, const std::filesystem::path& pcmOutput, clang::FileManager* fileManager)
 {
   if (!pcmOutput.parent_path().empty())
   {
@@ -541,47 +624,14 @@ static void compilePCM(const ScannerCompileCommand& cc, const std::filesystem::p
   }
 }
 
-static std::optional<std::filesystem::path> findOutput(const ScannerCompileCommand& cc)
-{
-  auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-o");
-
-  if (it == cc.commandLine.end()) {
-    return std::nullopt;
-  }
-
-  return std::filesystem::path(*std::next(it));
-}
-
-static std::optional<std::filesystem::path> findPchOutput(const ScannerCompileCommand& cc)
-{
-  auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-emit-pch");
-
-  if (it == cc.commandLine.end()) {
-    return std::nullopt;
-  }
-
-  return findOutput(cc);
-}
-
-static std::optional<std::filesystem::path> findPcmOutput(const ScannerCompileCommand& cc)
-{
-  auto it = std::find(cc.commandLine.begin(), cc.commandLine.end(), "-emit-module-interface");
-
-  if (it == cc.commandLine.end()) {
-    return std::nullopt;
-  }
-
-  return findOutput(cc);
-}
-
 void Scanner::scanSingleThreaded()
 {
   assert(d->fileIdentificator);
   std::unique_ptr<FileIndexingArbiter> indexing_arbiter = createIndexingArbiter(*d);
   clang::IntrusiveRefCntPtr<clang::FileManager> file_manager{ new clang::FileManager(clang::FileSystemOptions()) };
 
-  ArgsTranslator translator{ *file_manager };
-  translator.translateCommands(d->compileCommands);
+  CCTranslator translator{ *file_manager };
+  translateAndAdjust(d->compileCommands, translator);
 
   processCommands(d->compileCommands, *indexing_arbiter, *file_manager);
 }
@@ -701,17 +751,18 @@ void Scanner::scanMultiThreaded()
     indexing_arbiter = FileIndexingArbiter::createThreadSafeArbiter(std::move(indexing_arbiter));
   }
 
-  ArgsTranslator translator;
-  translator.translateCommands(d->compileCommands);
+  CCTranslator translator;
+  translateAndAdjust(d->compileCommands, translator);
 
   std::vector<WorkQueue::ToolInvocation> tasks;
   std::vector<ScannerCompileCommand> pch_ccs;
 
   for (ScannerCompileCommand& cc : d->compileCommands)
   {
-    std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
+    const std::optional<std::filesystem::path>& pch_output = cc.pchOutput;
+    const std::optional<std::filesystem::path>& pcm_output = cc.pcmOutput;
 
-    if (pch_output.has_value())
+    if (pch_output.has_value() || pcm_output.has_value())
     {
       pch_ccs.push_back(cc);
     }
@@ -810,9 +861,11 @@ void Scanner::processCommands(const std::vector<ScannerCompileCommand>& commands
 
   for (const ScannerCompileCommand& cc : commands)
   {
+    assert(cc.translated);
+
     const bool should_parse = passTranslationUnitFilters(cc.fileName);
-    std::optional<std::filesystem::path> pch_output = findPchOutput(cc);
-    std::optional<std::filesystem::path> pcm_output = findPcmOutput(cc);
+    const std::optional<std::filesystem::path>& pch_output = cc.pchOutput;
+    const std::optional<std::filesystem::path>& pcm_output = cc.pcmOutput;
 
     if (should_parse)
     {
