@@ -195,6 +195,12 @@ void Scanner::initSnapshot()
   const std::filesystem::path dbPath = d->remapFileIds ? 
     std::filesystem::path(d->outputPath.generic_u8string() + ".tmp") : d->outputPath;
 
+  if (d->remapFileIds && std::filesystem::exists(dbPath))
+  {
+    // this shouldn't happen, unless the scanner crashed during a previous execution.
+    std::filesystem::remove(dbPath);
+  }
+
   assert(d->fileIdentificator);
   m_snapshot_creator = std::make_unique<SnapshotCreator>(*d->fileIdentificator);
 
