@@ -22,7 +22,8 @@ TEST_CASE("Self parsing test", "[scanner][self]")
     auto start = std::chrono::high_resolution_clock::now();
 
     ScannerInvocation inv{
-      { "--compile-commands", SELFTEST_BUILD_DIR + std::string("/compile_commands.json"),
+      { "run",
+      "--compile-commands", SELFTEST_BUILD_DIR + std::string("/compile_commands.json"),
       "--home", PROJECT_SOURCE_DIR,
       "--remap-file-ids",
       "--index-local-symbols",

@@ -41,7 +41,7 @@ bool isJobsArg(const std::string& arg)
   return true;
 }
 
-void checkConsistency(const ScannerOptions& opts)
+void checkConsistency(const ScannerInvocation::RunOptions& opts)
 {
   const std::array<bool, 2> inputTypes = { opts.compile_commands.has_value(), !opts.inputs.empty() };
   const size_t nbInputs = std::count(inputTypes.begin(), inputTypes.end(), true);
@@ -58,7 +58,136 @@ void checkConsistency(const ScannerOptions& opts)
   if (opts.root.has_value() && !std::filesystem::is_directory(*opts.root)) {
     throw std::runtime_error("Root path must be a directory");
   }
+}
 
+void checkConsistency(const ScannerInvocation::Options& opts)
+{
+  if (std::holds_alternative<ScannerInvocation::RunOptions>(opts.command))
+  {
+    checkConsistency(std::get<ScannerInvocation::RunOptions>(opts.command));
+  }
+}
+
+class InvocationRunner
+{
+private:
+  const ScannerInvocation::Options& m_options;
+  std::vector<std::string>& m_errors;
+
+public:
+  InvocationRunner(const ScannerInvocation::Options& opts, std::vector<std::string>& errors)
+    : m_options(opts)
+    , m_errors(errors)
+  {
+    
+  }
+
+  bool run()
+  {
+    return std::visit(*this, m_options.command);
+  }
+
+  const ScannerInvocation::Options& globalOptions() const
+  {
+    return m_options;
+  }
+
+  bool operator()(std::monostate);
+  bool operator()(const ScannerInvocation::RunOptions& opts);
+};
+
+bool InvocationRunner::operator()(std::monostate)
+{
+  if (globalOptions().helpFlag)
+  {
+    ScannerInvocation::printHelp();
+    return true;
+  }
+
+  return false;
+}
+
+bool InvocationRunner::operator()(const ScannerInvocation::RunOptions& opts)
+{
+  if (globalOptions().helpFlag)
+  {
+    ScannerInvocation::printHelp(ScannerInvocation::Command::Run);
+    return true;
+  }
+
+  if (std::filesystem::exists(opts.output))
+  {
+    if (opts.overwrite)
+    {
+      std::filesystem::remove(opts.output);
+    }
+    else
+    {
+      m_errors.push_back("output file already exists");
+      return false;
+    }
+  }
+
+  Scanner scanner;
+
+  scanner.setOutputPath(opts.output);
+
+  if (opts.home.has_value()) {
+    scanner.setHomeDir(*opts.home);
+  }
+
+  scanner.setIndexExternalFiles(opts.index_external_files);
+
+  if (opts.root.has_value()) {
+    scanner.setRootDir(*opts.root);
+  } 
+
+  if (opts.index_local_symbols) {
+    scanner.setIndexLocalSymbols();
+  }
+
+  if (opts.ignore_file_content) {
+    scanner.setCaptureFileContent(false);
+  }
+
+  if (opts.remap_file_ids) {
+    scanner.setRemapFileIds(true);
+  }
+
+  if (!opts.filters.empty()) {
+    scanner.setFilters(opts.filters);
+  }
+
+  if (!opts.translation_unit_filters.empty()) {
+    scanner.setTranslationUnitFilters(opts.translation_unit_filters);
+  }
+
+  if (opts.nb_threads.has_value())
+  {
+    int n = *opts.nb_threads;
+    if (n >= 0) {
+      scanner.setNumberOfParsingThread((size_t)n);
+    }
+  }
+
+  if (opts.project_name.has_value()) {
+    scanner.setExtraProperty(PROPERTY_PROJECT_NAME, *opts.project_name);
+  }
+
+  if (opts.project_version.has_value()) {
+    scanner.setExtraProperty(PROPERTY_PROJECT_VERSION, *opts.project_version);
+  }
+
+  if (opts.compile_commands.has_value())
+  {
+    scanner.scanFromCompileCommands(*opts.compile_commands);
+  }
+  else
+  {
+    scanner.scanFromListOfInputs(opts.inputs, opts.compilation_arguments);
+  }
+
+  return true;
 }
 
 } // namespace
@@ -104,15 +233,30 @@ constexpr const char* RUN_EXAMPLES = R"(Example:
 
 void ScannerInvocation::printHelp()
 {
-  std::cout << "Syntax:" << std::endl;
-  std::cout << "  cppscanner run --compile-commands <compile_commands.json> --output <snapshot.db> [options]" << std::endl;
-  std::cout << "  cppscanner run -i <source.cpp> --output <snapshot.db> [options] [--] [compilation arguments]" << std::endl;
-  std::cout << "" << std::endl;
-  std::cout << RUN_OPTIONS << std::endl;
-  std::cout << "" << std::endl;
-  std::cout << RUN_DESCRIPTION << std::endl;
-  std::cout << "" << std::endl;
-  std::cout << RUN_EXAMPLES << std::endl;
+  std::cout << "cppscanner is a clang-based command-line utility to create snapshots of C++ programs." << std::endl;
+  std::cout << std::endl;
+  std::cout << "Commands:" << std::endl;
+  std::cout << "  run: runs the scanner to create a snapshot" << std::endl;
+  std::cout << "  merge: merge two or more snapshots" << std::endl;
+  std::cout << std::endl;
+  std::cout << "Use the '-h' option to get more information about each command." << std::endl;
+  std::cout << "Example: cppscanner run -h" << std::endl;
+}
+
+void ScannerInvocation::printHelp(Command c)
+{
+  if (c == Command::Run)
+  {
+    std::cout << "Syntax:" << std::endl;
+    std::cout << "  cppscanner run --compile-commands <compile_commands.json> --output <snapshot.db> [options]" << std::endl;
+    std::cout << "  cppscanner run -i <source.cpp> --output <snapshot.db> [options] [--] [compilation arguments]" << std::endl;
+    std::cout << "" << std::endl;
+    std::cout << RUN_OPTIONS << std::endl;
+    std::cout << "" << std::endl;
+    std::cout << RUN_DESCRIPTION << std::endl;
+    std::cout << "" << std::endl;
+    std::cout << RUN_EXAMPLES << std::endl;
+  }
 }
 
 ScannerInvocation::ScannerInvocation(const std::vector<std::string>& commandLine)
@@ -128,10 +272,43 @@ ScannerInvocation::ScannerInvocation()
 
 void ScannerInvocation::parseCommandLine(const std::vector<std::string>& commandLine)
 {
-  const auto& args = commandLine;
-  auto& result = m_options;
+  for (const std::string& a : commandLine)
+  {
+    if (a == "-h" || a == "--help")
+    {
+      m_options.helpFlag = true;
+    }
+  }
 
-  for (size_t i(0); i < args.size();)
+  if (commandLine.at(0) == "run")
+  {
+    RunOptions result;
+    parseCommandLine(result, commandLine);
+    m_options.command = std::move(result);
+  }
+  else
+  {
+    std::cerr << "unknown command " << commandLine.at(0) << std::endl;
+  }
+
+  if (!std::holds_alternative<std::monostate>(m_options.command))
+  {
+    if (commandLine.size() == 1)
+    {
+      // a valid command name was passed, but no argument are specified,
+      // print the help.
+      // note: this only works because no command currently takes zero argument,
+      // in the future, we may have to force the presence of the "--help" arg.
+      m_options.helpFlag = true;
+    }
+  }
+}
+
+void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<std::string>& commandLine)
+{
+  const auto& args = commandLine;
+
+  for (size_t i(1); i < args.size();)
   {
     const std::string& arg = args.at(i++);
 
@@ -246,119 +423,56 @@ void ScannerInvocation::parseCommandLine(const std::vector<std::string>& command
 
 void ScannerInvocation::parseEnv()
 {
-  if (!m_options.home.has_value())
+  if (std::holds_alternative<ScannerInvocation::RunOptions>(m_options.command))
+  {
+    parseEnv(std::get<ScannerInvocation::RunOptions>(m_options.command));
+  }
+}
+
+void ScannerInvocation::parseEnv(RunOptions& result)
+{
+  if (!result.home.has_value())
   {
     std::optional<std::string> dir = readEnv(ENV_HOME_DIR);
 
     if (dir) {
-      m_options.home = *dir;
+      result.home = *dir;
     }
   }
 
-  if (!m_options.project_name.has_value())
+  if (!result.project_name.has_value())
   {
     std::optional<std::string> value = readEnv(ENV_PROJECT_NAME);
 
     if (value) {
-      m_options.project_name = *value;
+      result.project_name = *value;
     }
   }
 
-  if (!m_options.project_version.has_value())
+  if (!result.project_version.has_value())
   {
     std::optional<std::string> value = readEnv(ENV_PROJECT_VERSION);
 
     if (value) {
-      m_options.project_version = *value;
+      result.project_version = *value;
     }
   }
 
-  if (!m_options.index_local_symbols)
+  if (!result.index_local_symbols)
   {
-    m_options.index_local_symbols = isEnvTrue(ENV_INDEX_LOCAL_SYMBOLS);
+    result.index_local_symbols = isEnvTrue(ENV_INDEX_LOCAL_SYMBOLS);
   }
 }
 
-const ScannerOptions& ScannerInvocation::options() const
+const ScannerInvocation::Options& ScannerInvocation::options() const
 {
   return m_options;
 }
 
 bool ScannerInvocation::run()
 {
-  if (std::filesystem::exists(options().output))
-  {
-    if (options().overwrite)
-    {
-      std::filesystem::remove(options().output);
-    }
-    else
-    {
-      m_errors.push_back("output file already exists");
-      return false;
-    }
-  }
-
-  Scanner scanner;
-
-  scanner.setOutputPath(options().output);
-
-  if (options().home.has_value()) {
-    scanner.setHomeDir(*options().home);
-  }
-
-  scanner.setIndexExternalFiles(options().index_external_files);
-
-  if (options().root.has_value()) {
-    scanner.setRootDir(*options().root);
-  } 
-
-  if (options().index_local_symbols) {
-    scanner.setIndexLocalSymbols();
-  }
-
-  if (options().ignore_file_content) {
-    scanner.setCaptureFileContent(false);
-  }
-
-  if (options().remap_file_ids) {
-    scanner.setRemapFileIds(true);
-  }
-
-  if (!options().filters.empty()) {
-    scanner.setFilters(options().filters);
-  }
-
-  if (!options().translation_unit_filters.empty()) {
-    scanner.setTranslationUnitFilters(options().translation_unit_filters);
-  }
-
-  if (options().nb_threads.has_value())
-  {
-    int n = *options().nb_threads;
-    if (n >= 0) {
-      scanner.setNumberOfParsingThread((size_t)n);
-    }
-  }
-
-  if (options().project_name.has_value()) {
-    scanner.setExtraProperty(PROPERTY_PROJECT_NAME, *options().project_name);
-  }
-
-  if (options().project_version.has_value()) {
-    scanner.setExtraProperty(PROPERTY_PROJECT_VERSION, *options().project_version);
-  }
-
-  if (options().compile_commands.has_value())
-  {
-    scanner.scanFromCompileCommands(*options().compile_commands);
-  }
-  else
-  {
-    scanner.scanFromListOfInputs(options().inputs, options().compilation_arguments);
-  }
-
-  return true;
+  InvocationRunner runner{ options(), m_errors };
+  return runner.run();
 }
 
 const std::vector<std::string>& ScannerInvocation::errors() const

@@ -16,6 +16,8 @@ extern void runMerge(std::vector<std::string> args);
 
 [[noreturn]] void help()
 {
+  // TODO: replace with   ScannerInvocation::printHelp()
+
   std::cout << "cppscanner is a clang-based command-line utility to create snapshots of C++ programs." << std::endl;
   std::cout << std::endl;
   std::cout << "Commands:" << std::endl;
@@ -39,7 +41,7 @@ int main(int argc, char* argv[])
 
   if (args.at(1) == "run")
   {
-    args.erase(args.begin(), args.begin() + 2);
+    args.erase(args.begin(), args.begin() + 1);
     run(args);
   }
   else if (args.at(1) == "merge")
