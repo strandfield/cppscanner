@@ -48,9 +48,7 @@ macro(setup_test_project folderName)
 endmacro()
 
 setup_test_project(hello_world)
-setup_test_project(includedir)
-setup_test_project(cmake_compile_definitions)
-setup_test_project(cmake_precompile_headers)
+setup_test_project(precompiled_headers)
 setup_test_project(simple_project)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
@@ -67,7 +65,7 @@ add_executable(TEST_cppscanner "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "${CMAKE_
   "cpp20_library_features.cpp"
   "cpp20_modules.cpp"
   "stl.cpp"
-  "cmakeintegration.cpp"
+  "pch.cpp"
 )
 target_link_libraries(TEST_cppscanner scannerInvocation)
 target_include_directories(TEST_cppscanner PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
