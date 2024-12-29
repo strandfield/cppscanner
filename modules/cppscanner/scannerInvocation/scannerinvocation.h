@@ -40,7 +40,7 @@ public:
   {
     std::vector<std::filesystem::path> inputs;
     std::optional<std::filesystem::path> compile_commands;
-    std::filesystem::path output;
+    std::optional<std::filesystem::path> output;
     std::optional<std::filesystem::path> home;
     std::optional<std::filesystem::path> root;
     bool overwrite = false;

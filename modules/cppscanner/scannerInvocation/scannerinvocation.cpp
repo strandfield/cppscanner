@@ -64,10 +64,6 @@ public:
       throw std::runtime_error("too many or too few inputs");
     }
 
-    if (opts.output.empty()) {
-      throw std::runtime_error("missing output file");
-    }
-
     if (opts.root.has_value() && !std::filesystem::is_directory(*opts.root)) {
       throw std::runtime_error("Root path must be a directory");
     }
@@ -125,6 +121,25 @@ bool InvocationRunner::operator()(std::monostate)
   return false;
 }
 
+std::filesystem::path computeOutputPath(const std::optional<std::filesystem::path>& userOutputPath, const std::optional<std::string>& projectName)
+{
+  if (userOutputPath.has_value())
+  {
+    return *userOutputPath;
+  }
+
+  std::filesystem::path output = "snapshot.db";
+
+  if (projectName.has_value())
+  {
+    output = *projectName + ".db";
+  }
+
+  std::cout << "Output file will be: " << output << std::endl;
+
+  return output;
+}
+
 bool InvocationRunner::operator()(const ScannerInvocation::RunOptions& opts)
 {
   if (globalOptions().helpFlag)
@@ -133,11 +148,13 @@ bool InvocationRunner::operator()(const ScannerInvocation::RunOptions& opts)
     return true;
   }
 
-  if (std::filesystem::exists(opts.output))
+  std::filesystem::path output_path = computeOutputPath(opts.output, opts.project_name);
+
+  if (std::filesystem::exists(output_path))
   {
     if (opts.overwrite)
     {
-      std::filesystem::remove(opts.output);
+      std::filesystem::remove(output_path);
     }
     else
     {
@@ -148,7 +165,7 @@ bool InvocationRunner::operator()(const ScannerInvocation::RunOptions& opts)
 
   Scanner scanner;
 
-  scanner.setOutputPath(opts.output);
+  scanner.setOutputPath(output_path);
 
   if (opts.home.has_value()) {
     scanner.setHomeDir(*opts.home);
@@ -352,25 +369,14 @@ bool InvocationRunner::operator()(const ScannerInvocation::MergeOptions& opts)
 
   // configuting output
   {
-    std::filesystem::path output = "snapshot.db";
-
-    if (opts.output.has_value())
-    {
-      output = *opts.output;
-    }
-    else if (opts.projectName.has_value())
-    {
-      output = *opts.projectName + ".db";
-    }
-
+    std::filesystem::path output = computeOutputPath(opts.output, opts.projectName);
+    
     if (std::filesystem::exists(output))
     {
       std::filesystem::remove(output);
     }  
 
     merger.setOutputPath(output);
-
-    std::cout << "Output file will be: " << output << std::endl;
   }
 
   if (opts.captureMissingFileContent || opts.linkMode)
@@ -559,11 +565,22 @@ bool ScannerInvocation::setHelpFlag(const std::string& arg)
   }
 }
 
-static bool parseCliCommon(const std::vector<std::string>& commandLine, size_t i, std::optional<std::filesystem::path>& home, std::optional<std::string>& projectName, std::optional<std::string>& projectVersion)
+static bool parseCliCommon(const std::vector<std::string>& commandLine, size_t i, 
+  std::optional<std::filesystem::path>& output, 
+  std::optional<std::filesystem::path>& home, 
+  std::optional<std::string>& projectName, 
+  std::optional<std::string>& projectVersion)
 {
   const std::string& arg = commandLine.at(i);
 
-  if (arg == "--home")
+  if (arg == "-o" || arg == "--output")
+  {
+    if (++i >= commandLine.size())
+      throw std::runtime_error("missing argument after " + arg);
+
+    output = std::filesystem::path(commandLine.at(i++));
+  }
+  else if (arg == "--home")
   {
     if (++i >= commandLine.size())
       throw std::runtime_error("missing argument after --home");
@@ -598,7 +615,7 @@ void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<s
 
   for (size_t i(1); i < args.size();)
   {
-    if (parseCliCommon(args, i, result.home, result.project_name, result.project_version))
+    if (parseCliCommon(args, i, result.output, result.home, result.project_name, result.project_version))
     {
       continue;
     }
@@ -623,13 +640,6 @@ void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<s
         throw std::runtime_error("missing argument after " + arg + " command");
 
       result.inputs.push_back(args.at(i++)); // TODO: can this be a glob expression?
-    }
-    else if (arg == "--output" || arg == "-o") // TODO: make common with merge command
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after --output");
-
-      result.output = args.at(i++);
     }
     else if (arg == "--root")
     {
@@ -704,7 +714,7 @@ void ScannerInvocation::parseCommandLine(MergeOptions& result, const std::vector
 
   for (size_t i(1); i < args.size();)
   {
-    if (parseCliCommon(args, i, result.home, result.projectName, result.projectVersion))
+    if (parseCliCommon(args, i, result.output, result.home, result.projectName, result.projectVersion))
     {
       continue;
     }
@@ -716,14 +726,7 @@ void ScannerInvocation::parseCommandLine(MergeOptions& result, const std::vector
       continue;
     }
 
-    if (arg == "-o" || arg == "--output") 
-    {
-      if (i >= args.size())
-        throw std::runtime_error("missing argument after " + arg);
-
-      result.output = args.at(i++);
-    }
-    else if (arg == "--capture-missing-file-content") 
+    if (arg == "--capture-missing-file-content") 
     {
       result.captureMissingFileContent = true;
     }
