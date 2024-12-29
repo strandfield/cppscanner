@@ -15,7 +15,7 @@ namespace cppscanner
 {
 
 /**
- * \brief represents a command-line invocation of the scanner
+ * \brief represents a command-line invocation of cppscanner
  */
 class ScannerInvocation
 {
@@ -77,7 +77,7 @@ public:
     std::variant<std::monostate, RunOptions, MergeOptions> command;
   };
 
-  void parseCommandLine(const std::vector<std::string>& commandLine);
+  bool parseCommandLine(const std::vector<std::string>& commandLine);
   void parseEnv();
 
   const Options& options() const;

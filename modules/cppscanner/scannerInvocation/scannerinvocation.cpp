@@ -507,7 +507,11 @@ void ScannerInvocation::printHelp(Command c)
 
 ScannerInvocation::ScannerInvocation(const std::vector<std::string>& commandLine)
 {
-  parseCommandLine(commandLine);
+  if (!parseCommandLine(commandLine))
+  {
+    throw std::runtime_error("bad command line");
+  }
+
   checkConsistency(m_options);
 }
 
@@ -516,28 +520,39 @@ ScannerInvocation::ScannerInvocation()
 
 }
 
-// DO: TODO: change return type to bool instead of raising an exception
-void ScannerInvocation::parseCommandLine(const std::vector<std::string>& commandLine)
+bool ScannerInvocation::parseCommandLine(const std::vector<std::string>& commandLine)
 {
-  if (commandLine.at(0) == "run")
+  // TODO: using exception for control flow is an anti-pattern, 
+  // see what we can do to remove this try-catch block
+  try
   {
-    RunOptions result;
-    parseCommandLine(result, commandLine);
-    m_options.command = std::move(result);
-  }
-  else if (commandLine.at(0) == "merge")
-  {
-    MergeOptions result;
-    parseCommandLine(result, commandLine);
-    m_options.command = std::move(result);
-  }
-  else
-  {
-    if (!setHelpFlag(commandLine.at(0)))
+    if (commandLine.at(0) == "run")
     {
-      std::cerr << "unknown command " << commandLine.at(0) << std::endl;
+      RunOptions result;
+      parseCommandLine(result, commandLine);
+      m_options.command = std::move(result);
+    }
+    else if (commandLine.at(0) == "merge")
+    {
+      MergeOptions result;
+      parseCommandLine(result, commandLine);
+      m_options.command = std::move(result);
+    }
+    else
+    {
+      if (!setHelpFlag(commandLine.at(0)))
+      {
+        std::cerr << "unknown command " << commandLine.at(0) << std::endl;
+        return false;
+      }
     }
   }
+  catch (const std::exception& ex)
+  {
+    m_errors.push_back(ex.what());
+    return false;
+  }
+  
 
   if (!std::holds_alternative<std::monostate>(m_options.command))
   {
@@ -550,6 +565,8 @@ void ScannerInvocation::parseCommandLine(const std::vector<std::string>& command
       m_options.helpFlag = true;
     }
   }
+
+  return true;
 }
 
 bool ScannerInvocation::setHelpFlag(const std::string& arg)

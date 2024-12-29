@@ -19,6 +19,14 @@
   std::exit(0);
 }
 
+void printErrors(const cppscanner::ScannerInvocation& invocation)
+{
+  for (const std::string& message : invocation.errors())
+  {
+    std::cout << message << std::endl;
+  }
+}
+
 int main(int argc, char* argv[])
 {
   auto args = std::vector<std::string>(argv, argv + argc);
@@ -30,24 +38,18 @@ int main(int argc, char* argv[])
 
   args.erase(args.begin(), args.begin() + 1);
   cppscanner::ScannerInvocation invocation;
-  try 
+
+  if (!invocation.parseCommandLine(args))
   {
-    invocation.parseCommandLine(args);
-  }
-  catch (const std::exception& ex)
-  {
-    std::cout << ex.what() << std::endl;
+    printErrors(invocation);
     return 1;
   }
+
   invocation.parseEnv();
 
   if (!invocation.run())
   {
-    for (const std::string& message : invocation.errors())
-    {
-      std::cout << message << std::endl;
-    }
-
+    printErrors(invocation);
     return 1;
   }
 

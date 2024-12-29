@@ -50,13 +50,13 @@ TEST_CASE("Matching files", "[glob]")
 
 TEST_CASE("jobs", "[scannerInvocation]")
 {
-  ScannerInvocation inv{
-    { "run",
+  ScannerInvocation inv;
+  std::vector<std::string> args{ "run",
     "-i", "test.cpp",
     "-j8",
     "--project-name", "cppscanner",
-    "-o", "output.db"}
-  };
+    "-o", "output.db" };
+  REQUIRE(inv.parseCommandLine(args));
 
   REQUIRE(std::holds_alternative<ScannerInvocation::RunOptions>(inv.options().command));
   ScannerInvocation::RunOptions opts = std::get<ScannerInvocation::RunOptions>(inv.options().command);
