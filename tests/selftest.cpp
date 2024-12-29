@@ -1,10 +1,7 @@
 
 #include "helpers.h"
-#include "cppscanner-cmake.h"
 
-#include "cppscanner/cmakeIntegration/cmakeproject.h"
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
-#include "cppscanner/scannerInvocation/cmakeinvocation.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/database/sql.h"
 #include "cppscanner/base/version.h"
@@ -20,32 +17,15 @@ using namespace cppscanner;
 TEST_CASE("Self parsing test", "[scanner][self]")
 {
   const std::string snapshot_name = "cppscanner.db";
-  const std::string build_dirname = "cppscanner_self_parse";
 
   {
     auto start = std::chrono::high_resolution_clock::now();
 
-    const std::string build_dir = (std::filesystem::path(CMAKE_BINARY_DIR) / build_dirname).generic_u8string();
-
-    CMakeCommandInvocation cmake{
-      { 
-        "-B", build_dir,
-        "-S", CMAKE_SOURCE_DIR,
-        "-G", CMAKE_GENERATOR,
-        "-DCMAKE_PREFIX_PATH=" + std::string(CMAKE_PREFIX_PATH),
-        "-DLLVM_DIR=" + std::string(LLVM_DIR), 
-        "-DBUILD_TESTS=OFF",
-        "-DSELF_PARSE=ON",
-      }
-    };
-
-    REQUIRE(cmake.exec());
-
     ScannerInvocation inv{
-      { "--build", build_dir,
-      "--target", CMakeTarget::all(),
-      "--home", CMAKE_SOURCE_DIR,
+      { "--compile-commands", SELFTEST_BUILD_DIR + std::string("/compile_commands.json"),
+      "--home", PROJECT_SOURCE_DIR,
       "--remap-file-ids",
+      "--index-local-symbols",
       "--threads", "2",
       "--project-name", "cppscanner",
       "--project-version", cppscanner::versioncstr(),

@@ -1,8 +1,0 @@
-
-#pragma once
-
-static constexpr const char* CMAKE_SOURCE_DIR = "${CMAKE_SOURCE_DIR}";
-static constexpr const char* CMAKE_BINARY_DIR = "${CMAKE_BINARY_DIR}";
-static constexpr const char* CMAKE_GENERATOR = "${CMAKE_GENERATOR}";
-static constexpr const char* LLVM_DIR = "${CPPSCANNER_LLVM_DIR}";
-static constexpr const char* CMAKE_PREFIX_PATH = "${CPPSCANNER_CMAKE_PREFIX_PATH}";

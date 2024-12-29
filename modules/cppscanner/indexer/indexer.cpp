@@ -490,12 +490,19 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   
   symbol.kind = tr(info.Kind);
 
-  if (symbol.kind == SymbolKind::Unknown) {
+  if (symbol.kind == SymbolKind::Unknown) 
+  {
     if (llvm::dyn_cast<const clang::LabelDecl>(decl)) {
       symbol.kind = SymbolKind::GotoLabel;
+    } else if (llvm::dyn_cast<const clang::CXXDeductionGuideDecl>(decl)) {
+      symbol.kind = SymbolKind::DeductionGuide;
     }
   }
 
+  // This assert is left here so that we are notified when unknown symbols
+  // are encountered when building in debug mode.
+  // In release mode, the assert goes away and this isn't an issue. Unknown
+  // symbols are allowed in a snapshot.
   assert(symbol.kind != SymbolKind::Unknown);
 
   if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 

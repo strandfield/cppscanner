@@ -1,7 +1,0 @@
-cmake_minimum_required(VERSION 3.13)
-project(testproject_cmake_compile_definitions)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-add_executable(testproject_cmake_compile_definitions "main.cpp")
-target_compile_definitions(testproject_cmake_compile_definitions PRIVATE I_AM_THE_ONE=1)
