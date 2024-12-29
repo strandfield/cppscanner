@@ -23,7 +23,8 @@ TEST_CASE("main", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/main.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/main.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols", "-o", snapshot_name}
   };
@@ -83,7 +84,8 @@ TEST_CASE("include", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/include.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/include.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -121,7 +123,8 @@ TEST_CASE("data members", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/datamembers.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/datamembers.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name }
   };
@@ -181,7 +184,8 @@ TEST_CASE("inheritance", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/inheritance.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/inheritance.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -233,7 +237,8 @@ TEST_CASE("function", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/function.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/function.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -263,7 +268,8 @@ TEST_CASE("Enum", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/enum.h"),
+    { "run",
+    "-i", HOME_DIR + std::string("/enum.h"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -296,7 +302,8 @@ TEST_CASE("Lambda", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/lambda.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/lambda.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -334,7 +341,8 @@ TEST_CASE("Template", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/template.h"),
+    { "run",
+    "-i", HOME_DIR + std::string("/template.h"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -455,7 +463,8 @@ TEST_CASE("Preprocessor macros", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/macro.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/macro.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name }
   };
@@ -505,7 +514,8 @@ TEST_CASE("Namespaces", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/namespace.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/namespace.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name }
   };
@@ -536,7 +546,8 @@ TEST_CASE("goto", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/gotolabel.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/gotolabel.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -566,7 +577,8 @@ TEST_CASE("converting constructor", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/converting-constructor.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/converting-constructor.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name }
   };
@@ -613,7 +625,8 @@ TEST_CASE("arguments passed by reference", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/pass-by-reference.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/pass-by-reference.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -642,7 +655,8 @@ TEST_CASE("declarations", "[scanner][cxx_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/declarations.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/declarations.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }

@@ -2,8 +2,8 @@
 #include "helpers.h"
 #include "projects.h"
 
-#include "cppscanner/scannerInvocation/scannerinvocation.h"
 #include "cppscanner/indexer/argumentsadjuster.h"
+#include "cppscanner/indexer/scanner.h"
 
 #include "catch.hpp"
 

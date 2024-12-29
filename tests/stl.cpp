@@ -16,7 +16,8 @@ TEST_CASE("string.cpp", "[scanner][stl]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/string.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/string.cpp"),
       "--home", HOME_DIR,
       "--index-local-symbols",
       "-o", snapshot_name }
@@ -58,7 +59,8 @@ TEST_CASE("vector.cpp", "[scanner][stl]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/vector.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/vector.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name }
@@ -87,7 +89,8 @@ TEST_CASE("tuple.cpp", "[scanner][stl]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/tuple.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/tuple.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name,
@@ -122,7 +125,8 @@ TEST_CASE("optional.cpp", "[scanner][stl]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/optional.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/optional.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name,
@@ -158,7 +162,8 @@ TEST_CASE("variant.cpp", "[scanner][stl]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/variant.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/variant.cpp"),
     "--home", HOME_DIR,
     "--index-local-symbols",
     "-o", snapshot_name,

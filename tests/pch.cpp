@@ -16,7 +16,8 @@ TEST_CASE("precompiled headers", "[scanner][pch]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "--compile-commands", PRECOMPILED_HEADERS_BUILD_DIR + std::string("/compile_commands.json"),
+    { "run",
+    "--compile-commands", PRECOMPILED_HEADERS_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", PRECOMPILED_HEADERS_ROOT_DIR,
     "-o", snapshot_name }
   };

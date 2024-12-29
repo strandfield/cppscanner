@@ -17,7 +17,8 @@ TEST_CASE("Formatting library (C++20)", "[scanner][cpp20_library_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/format.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/format.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name,
     "--", "-std=c++20"}

@@ -15,7 +15,8 @@ TEST_CASE("hello_world test project", "[scanner][hello_world]")
   const std::string snapshot_name = "hello_world.db";
 
   ScannerInvocation inv{
-    { "--compile-commands", HELLO_WORLD_BUILD_DIR + std::string("/compile_commands.json"),
+    { "run",
+    "--compile-commands", HELLO_WORLD_BUILD_DIR + std::string("/compile_commands.json"),
     "--home", HELLO_WORLD_ROOT_DIR,
     "--remap-file-ids",
     "--overwrite",
