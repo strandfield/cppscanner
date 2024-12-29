@@ -5,11 +5,11 @@
 #ifndef CPPSCANNER_SCANNERINVOCATION_H
 #define CPPSCANNER_SCANNERINVOCATION_H
 
-#include "cppscanner/indexer/scanner.h"
-
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <variant>
+#include <vector>
 
 namespace cppscanner
 {
@@ -27,6 +27,7 @@ public:
   {
     None,
     Run,
+    Merge,
   };
 
   static void printHelp();
@@ -55,10 +56,25 @@ public:
     std::vector<std::string> compilation_arguments; // arguments passed after --
   };
 
+  /**
+   * \brief options for the "merge" command
+   */
+  struct MergeOptions
+  {
+    std::vector<std::string> inputs; 
+    std::optional<std::filesystem::path> output;
+    std::optional<std::filesystem::path> home;
+    bool captureMissingFileContent = false;
+    bool linkMode = false;
+    bool keepSourceFiles = false;
+    std::optional<std::string> projectName;
+    std::optional<std::string> projectVersion;
+  };
+
   struct Options
   {
     bool helpFlag = false;
-    std::variant<std::monostate, RunOptions> command;
+    std::variant<std::monostate, RunOptions, MergeOptions> command;
   };
 
   void parseCommandLine(const std::vector<std::string>& commandLine);
@@ -71,8 +87,12 @@ public:
   const std::vector<std::string>& errors() const;
 
 private:
+  bool setHelpFlag(const std::string& arg);
   void parseCommandLine(RunOptions& result, const std::vector<std::string>& commandLine);
+  void parseCommandLine(MergeOptions& result, const std::vector<std::string>& commandLine);
+
   void parseEnv(RunOptions& result);
+  void parseEnv(MergeOptions& result);
 
 private:
   Options m_options;

@@ -1,12 +1,11 @@
 
 #include "cppscanner/base/version.h"
 
+#include "cppscanner/scannerInvocation/scannerinvocation.h"
+
 #include <iostream>
 #include <string>
 #include <vector>
-
-extern void run(std::vector<std::string> args);
-extern void runMerge(std::vector<std::string> args);
 
 [[noreturn]] void version()
 {
@@ -16,17 +15,7 @@ extern void runMerge(std::vector<std::string> args);
 
 [[noreturn]] void help()
 {
-  // TODO: replace with   ScannerInvocation::printHelp()
-
-  std::cout << "cppscanner is a clang-based command-line utility to create snapshots of C++ programs." << std::endl;
-  std::cout << std::endl;
-  std::cout << "Commands:" << std::endl;
-  std::cout << "  run: runs the scanner to create a snapshot" << std::endl;
-  std::cout << "  merge: merge two or more snapshots" << std::endl;
-  std::cout << std::endl;
-  std::cout << "Use the '-h' option to get more information about each command." << std::endl;
-  std::cout << "Example: cppscanner run -h" << std::endl;
-
+  cppscanner::ScannerInvocation::printHelp();
   std::exit(0);
 }
 
@@ -39,19 +28,28 @@ int main(int argc, char* argv[])
   else if (args.at(1) == "--version" || args.at(1) == "-v")
     version();
 
-  if (args.at(1) == "run")
+  args.erase(args.begin(), args.begin() + 1);
+  cppscanner::ScannerInvocation invocation;
+  try 
   {
-    args.erase(args.begin(), args.begin() + 1);
-    run(args);
+    invocation.parseCommandLine(args);
   }
-  else if (args.at(1) == "merge")
+  catch (const std::exception& ex)
   {
-    args.erase(args.begin(), args.begin() + 2);
-    runMerge(args);
-  }
-  else
-  {
-    std::cerr << "unrecognized command " << args.at(1) << std::endl;
+    std::cout << ex.what() << std::endl;
     return 1;
   }
+  invocation.parseEnv();
+
+  if (!invocation.run())
+  {
+    for (const std::string& message : invocation.errors())
+    {
+      std::cout << message << std::endl;
+    }
+
+    return 1;
+  }
+
+  return 0;
 }

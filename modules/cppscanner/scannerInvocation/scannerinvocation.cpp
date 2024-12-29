@@ -4,6 +4,10 @@
 #include "cppscanner/base/config.h"
 #include "cppscanner/base/env.h"
 
+#include "cppscanner/snapshot/merge.h"
+
+#include "cppscanner/indexer/scanner.h"
+
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -41,31 +45,44 @@ bool isJobsArg(const std::string& arg)
   return true;
 }
 
-void checkConsistency(const ScannerInvocation::RunOptions& opts)
+class ConsistencyChecker
 {
-  const std::array<bool, 2> inputTypes = { opts.compile_commands.has_value(), !opts.inputs.empty() };
-  const size_t nbInputs = std::count(inputTypes.begin(), inputTypes.end(), true);
+public:
 
-  if (nbInputs != 1)
+  void operator()(std::monostate)
   {
-    throw std::runtime_error("too many or too few inputs");
+
   }
 
-  if (opts.output.empty()) {
-    throw std::runtime_error("missing output file");
+  void operator()(const ScannerInvocation::RunOptions& opts)
+  {
+    const std::array<bool, 2> inputTypes = { opts.compile_commands.has_value(), !opts.inputs.empty() };
+    const size_t nbInputs = std::count(inputTypes.begin(), inputTypes.end(), true);
+
+    if (nbInputs != 1)
+    {
+      throw std::runtime_error("too many or too few inputs");
+    }
+
+    if (opts.output.empty()) {
+      throw std::runtime_error("missing output file");
+    }
+
+    if (opts.root.has_value() && !std::filesystem::is_directory(*opts.root)) {
+      throw std::runtime_error("Root path must be a directory");
+    }
   }
 
-  if (opts.root.has_value() && !std::filesystem::is_directory(*opts.root)) {
-    throw std::runtime_error("Root path must be a directory");
+  void operator()(const ScannerInvocation::MergeOptions&)
+  {
+
   }
-}
+};
 
 void checkConsistency(const ScannerInvocation::Options& opts)
 {
-  if (std::holds_alternative<ScannerInvocation::RunOptions>(opts.command))
-  {
-    checkConsistency(std::get<ScannerInvocation::RunOptions>(opts.command));
-  }
+  ConsistencyChecker checker;
+  std::visit(checker, opts.command);
 }
 
 class InvocationRunner
@@ -94,6 +111,7 @@ public:
 
   bool operator()(std::monostate);
   bool operator()(const ScannerInvocation::RunOptions& opts);
+  bool operator()(const ScannerInvocation::MergeOptions& opts);
 };
 
 bool InvocationRunner::operator()(std::monostate)
@@ -190,6 +208,213 @@ bool InvocationRunner::operator()(const ScannerInvocation::RunOptions& opts)
   return true;
 }
 
+
+std::vector<std::filesystem::path> listInputFiles(const std::vector<std::filesystem::path>& scannerDirectories)
+{
+  std::vector<std::filesystem::path> result;
+
+  for (const std::filesystem::path& scannerFolderPath : scannerDirectories)
+  {
+    for (const std::filesystem::directory_entry& e : std::filesystem::directory_iterator(scannerFolderPath))
+    {
+      if (e.is_regular_file() && e.path().extension() == PLUGIN_SNAPSHOT_EXTENSION)
+      {
+        result.push_back(e.path());
+      }
+    }
+  }
+
+  return result;
+}
+
+void searchScannerDirectoriesRecursively(std::vector<std::filesystem::path>&output, const std::filesystem::path& folderPath)
+{
+  if (folderPath.filename() == PLUGIN_OUTPUT_FOLDER_NAME)
+  {
+    output.push_back(folderPath);
+  }
+  else
+  {
+    for (const std::filesystem::directory_entry& e : std::filesystem::recursive_directory_iterator(folderPath))
+    {
+      if (e.is_directory() && e.path().filename() == PLUGIN_OUTPUT_FOLDER_NAME)
+      {
+        output.push_back(e.path());
+      }
+    }
+  }
+}
+
+std::vector<std::filesystem::path> searchScannerDirectoriesRecursively(const std::vector<std::string>& paths)
+{
+  std::vector<std::filesystem::path> result;
+
+  if (!paths.empty())
+  {
+    for (const std::string& path : paths)
+    {
+      searchScannerDirectoriesRecursively(result, path);
+    }
+  }
+  else
+  {    
+    std::optional<std::string> outDir = readEnv(ENV_PLUGIN_OUTPUT_DIR);
+    if (outDir)
+    {
+      searchScannerDirectoriesRecursively(result, *outDir);
+    }
+
+    if(!outDir || result.empty())
+    {
+      searchScannerDirectoriesRecursively(result, std::filesystem::current_path().string());
+    }
+  }
+
+  return result;
+}
+
+#ifdef _WIN32
+void convertToLocalPath(std::string& path)
+{
+  if (path.length() < 3 || path.at(0) != '/' || path.at(2) != '/') {
+    return;
+  }
+
+  path[0] = std::toupper(path.at(1));
+  path[1] = ':';
+
+  for (char& c : path)
+  {
+    if (c == '/')
+    {
+      c = '\\';
+    }
+  }
+}
+#else
+void convertToLocalPath(std::string& path)
+{
+  // no-op
+}
+#endif // _WIN32
+
+class FileContentWriterImpl : public FileContentWriter
+{
+public:
+  void fill(File& file) override
+  {
+    convertToLocalPath(file.path);
+    Scanner::fillContent(file);
+  }
+};
+
+bool InvocationRunner::operator()(const ScannerInvocation::MergeOptions& opts)
+{
+  if (globalOptions().helpFlag)
+  {
+    ScannerInvocation::printHelp(ScannerInvocation::Command::Merge);
+    return true;
+  }
+
+  SnapshotMerger merger;
+
+  std::vector<std::filesystem::path> scanner_directories;
+
+  if (opts.linkMode)
+  {
+    scanner_directories = searchScannerDirectoriesRecursively(opts.inputs);
+    std::vector<std::filesystem::path> inputs = listInputFiles(scanner_directories);
+
+    if (inputs.empty())
+    {
+      std::cerr << "could not find any input file" << std::endl;
+      return false;
+    }
+    else
+    {
+      std::cout << "About to merge the following files:\n";
+      for (const std::filesystem::path& p : inputs)
+      {
+        std::cout << p << "\n";
+      }
+      std::cout << std::flush;
+    }
+
+    merger.setInputs(inputs);
+  }
+  else
+  {
+    for (const std::string& input : opts.inputs)
+    {
+      merger.addInputPath(input);
+    }
+  }
+
+  // configuting output
+  {
+    std::filesystem::path output = "snapshot.db";
+
+    if (opts.output.has_value())
+    {
+      output = *opts.output;
+    }
+    else if (opts.projectName.has_value())
+    {
+      output = *opts.projectName + ".db";
+    }
+
+    if (std::filesystem::exists(output))
+    {
+      std::filesystem::remove(output);
+    }  
+
+    merger.setOutputPath(output);
+
+    std::cout << "Output file will be: " << output << std::endl;
+  }
+
+  if (opts.captureMissingFileContent || opts.linkMode)
+  {
+    merger.setFileContentWriter(std::make_unique<FileContentWriterImpl>());
+  }
+
+  if (opts.home.has_value())
+  {
+    std::cout << "Project home: " << *opts.home << std::endl;
+    merger.setProjectHome(*opts.home);
+  }
+
+  if (opts.projectName.has_value())
+  {
+    std::cout << "Project name: " << *opts.projectName << std::endl;
+    merger.setExtraProperty(PROPERTY_PROJECT_NAME, *opts.projectName);
+  }
+
+  if (opts.projectVersion.has_value())
+  {
+    std::cout << "Project version: " << *opts.projectVersion << std::endl;
+    merger.setExtraProperty(PROPERTY_PROJECT_VERSION, *opts.projectVersion);
+  }
+
+  std::cout << "Merging..." << std::endl;
+
+  merger.runMerge();
+
+  if (opts.linkMode && !opts.keepSourceFiles)
+  {
+    std::cout << "Deleting source directories..." << std::endl;
+
+    for (const std::filesystem::path& dir : scanner_directories)
+    {
+      std::filesystem::remove_all(dir);
+    }
+
+    scanner_directories.clear();
+  }
+
+  return true;
+}
+
 } // namespace
 
 constexpr const char* RUN_OPTIONS = R"(Options:
@@ -231,6 +456,9 @@ constexpr const char* RUN_EXAMPLES = R"(Example:
   Compile a single file with C++17 enabled:
     cppscanner -i source.cpp -o snapshot.db -- -std=c++17)";
 
+constexpr const char* MERGE_DESCRIPTION = R"(Description:
+  Merge two or more snapshots into one.)";
+
 void ScannerInvocation::printHelp()
 {
   std::cout << "cppscanner is a clang-based command-line utility to create snapshots of C++ programs." << std::endl;
@@ -257,6 +485,18 @@ void ScannerInvocation::printHelp(Command c)
     std::cout << "" << std::endl;
     std::cout << RUN_EXAMPLES << std::endl;
   }
+  else if (c == Command::Merge)
+  {
+    std::cout << "Syntax:" << std::endl;
+    std::cout << "  cppscanner merge -o <output> input1 input2 ..." << std::endl;
+    std::cout << "  cppscanner merge --link -o <output> [inputDirs]" << std::endl;
+    std::cout << "" << std::endl;
+    std::cout << MERGE_DESCRIPTION << std::endl;
+  }
+  else if (c == Command::None)
+  {
+    printHelp();
+  }
 }
 
 ScannerInvocation::ScannerInvocation(const std::vector<std::string>& commandLine)
@@ -270,25 +510,27 @@ ScannerInvocation::ScannerInvocation()
 
 }
 
+// TODO: change return type to bool instead of raising an exception
 void ScannerInvocation::parseCommandLine(const std::vector<std::string>& commandLine)
 {
-  for (const std::string& a : commandLine)
-  {
-    if (a == "-h" || a == "--help")
-    {
-      m_options.helpFlag = true;
-    }
-  }
-
   if (commandLine.at(0) == "run")
   {
     RunOptions result;
     parseCommandLine(result, commandLine);
     m_options.command = std::move(result);
   }
+  else if (commandLine.at(0) == "merge")
+  {
+    MergeOptions result;
+    parseCommandLine(result, commandLine);
+    m_options.command = std::move(result);
+  }
   else
   {
-    std::cerr << "unknown command " << commandLine.at(0) << std::endl;
+    if (!setHelpFlag(commandLine.at(0)))
+    {
+      std::cerr << "unknown command " << commandLine.at(0) << std::endl;
+    }
   }
 
   if (!std::holds_alternative<std::monostate>(m_options.command))
@@ -304,6 +546,19 @@ void ScannerInvocation::parseCommandLine(const std::vector<std::string>& command
   }
 }
 
+bool ScannerInvocation::setHelpFlag(const std::string& arg)
+{
+  if (arg == "-h" || arg == "--help")
+  {
+    m_options.helpFlag = true;
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
 void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<std::string>& commandLine)
 {
   const auto& args = commandLine;
@@ -311,6 +566,11 @@ void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<s
   for (size_t i(1); i < args.size();)
   {
     const std::string& arg = args.at(i++);
+
+    if (setHelpFlag(arg))
+    {
+      continue;
+    }
 
     if (arg == "--compile-commands") 
     {
@@ -421,11 +681,79 @@ void ScannerInvocation::parseCommandLine(RunOptions& result, const std::vector<s
   }
 }
 
+void ScannerInvocation::parseCommandLine(MergeOptions& result, const std::vector<std::string>& commandLine)
+{
+  const auto& args = commandLine;
+
+  for (size_t i(1); i < args.size();)
+  {
+    const std::string& arg = args.at(i++);
+
+    if (setHelpFlag(arg))
+    {
+      continue;
+    }
+
+    if (arg == "-o" || arg == "--output") 
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after " + arg);
+
+      result.output = args.at(i++);
+    }
+    else if (arg == "--home") 
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after " + arg);
+
+      result.home = args.at(i++);
+    }
+    else if (arg == "--capture-missing-file-content") 
+    {
+      result.captureMissingFileContent = true;
+    }
+    else if (arg == "--link") 
+    {
+      result.linkMode = true;
+    }
+    else if (arg == "--keep-source-files") 
+    {
+      result.keepSourceFiles = true;
+    }
+    else if (arg == "--project-name")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --project-name");
+
+      result.projectName = args.at(i++);
+    }
+    else if (arg == "--project-version")
+    {
+      if (i >= args.size())
+        throw std::runtime_error("missing argument after --project-version");
+
+      result.projectVersion = args.at(i++);
+    }
+    else if (arg.rfind('-', 0) != 0)
+    {
+      result.inputs.push_back(arg);
+    }
+    else
+    {
+      throw std::runtime_error("unrecognized command line argument: " + arg);
+    }
+  }
+}
+
 void ScannerInvocation::parseEnv()
 {
   if (std::holds_alternative<ScannerInvocation::RunOptions>(m_options.command))
   {
     parseEnv(std::get<ScannerInvocation::RunOptions>(m_options.command));
+  }
+  else if (std::holds_alternative<ScannerInvocation::MergeOptions>(m_options.command))
+  {
+    parseEnv(std::get<ScannerInvocation::MergeOptions>(m_options.command));
   }
 }
 
@@ -461,6 +789,36 @@ void ScannerInvocation::parseEnv(RunOptions& result)
   if (!result.index_local_symbols)
   {
     result.index_local_symbols = isEnvTrue(ENV_INDEX_LOCAL_SYMBOLS);
+  }
+}
+
+void ScannerInvocation::parseEnv(MergeOptions& result)
+{
+  if (!result.home.has_value())
+  {
+    std::optional<std::string> dir = readEnv(ENV_HOME_DIR);
+
+    if (dir) {
+      result.home = *dir;
+    }
+  }
+
+  if (!result.projectName.has_value())
+  {
+    std::optional<std::string> value = readEnv(ENV_PROJECT_NAME);
+
+    if (value) {
+      result.projectName = *value;
+    }
+  }
+
+  if (!result.projectVersion.has_value())
+  {
+    std::optional<std::string> value = readEnv(ENV_PROJECT_VERSION);
+
+    if (value) {
+      result.projectVersion = *value;
+    }
   }
 }
 
