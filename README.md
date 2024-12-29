@@ -64,11 +64,6 @@ Syntax for creating a snapshot from a single file:
 cppscanner run -i <source.cpp> --output <snapshot.db> [options] -- [compiler arguments]
 ```
 
-Syntax for creating a snapshot from a CMake target (see below for prerequisites):
-```
-cppscanner run --build <cmake-build-dir> [--config <cmake-config>] --target <cmake-target-name> --output <snapshot.db> [options]
-```
-
 The `merge` command can be used to merge two or more snapshots into a single one.
 
 Example (merging three snapshots):
@@ -95,23 +90,6 @@ On Windows, if you are using a "Visual Studio" generator, you will have to switc
 to the "NMake Makefiles" generator. <br/>
 The `setup_test_project` macro in [tests/CMakeLists.txt](tests/CMakeLists.txt)
 demonstrates how this can be done using the "-G" option of CMake.
-
-### CMake support
-
-The `run` command can be made to work on a CMake project if you generated the project
-through the scanner beforehand.
-This can be done using the `cmake` command.
-
-```
-cppscanner cmake -B <cmake-build-dir> -S <cmake-source-dir> [cmake-options]
-```
-
-This command will make the scanner use the CMake file-based API to get information 
-about the build system and targets.
-Ultimately, the `cmake` executable is invoked with the arguments passed as-is.
-
-Projects using precompiled headers (using the `target_precompile_headers()` command)
-are expected to work if you are using the CMake integration.
 
 ### `run` options
 

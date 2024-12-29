@@ -20,9 +20,6 @@ struct ScannerOptions
 {
   std::vector<std::filesystem::path> inputs;
   std::optional<std::filesystem::path> compile_commands;
-  std::optional<std::filesystem::path> cmakeBuildDirectory;
-  std::optional<std::string> cmakeConfig;
-  std::vector<std::string> cmakeTargets;
   std::filesystem::path output;
   std::optional<std::filesystem::path> home;
   std::optional<std::filesystem::path> root;

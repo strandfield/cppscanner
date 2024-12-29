@@ -2,8 +2,6 @@
 #include "helpers.h"
 #include "projects.h"
 
-#include "cppscanner/cmakeIntegration/cmakeproject.h"
-#include "cppscanner/scannerInvocation/cmakeinvocation.h"
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 
 #include "cppscanner/database/sql.h"

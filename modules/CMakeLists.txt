@@ -55,12 +55,5 @@ if (UNIX AND CPPSCANNER_BUILD_PLUGIN)
   set_property(TARGET database PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif ()
 
-add_module(cmakeIntegration)
-target_link_libraries(cmakeIntegration 
-  LLVMSupport
-)
-target_include_directories(cmakeIntegration SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
-
-
 add_module(scannerInvocation)
-target_link_libraries(scannerInvocation indexer cmakeIntegration)
+target_link_libraries(scannerInvocation indexer)
