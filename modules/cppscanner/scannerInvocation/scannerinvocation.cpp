@@ -565,7 +565,7 @@ bool ScannerInvocation::setHelpFlag(const std::string& arg)
   }
 }
 
-static bool parseCliCommon(const std::vector<std::string>& commandLine, size_t i, 
+static bool parseCliCommon(const std::vector<std::string>& commandLine, size_t& i, 
   std::optional<std::filesystem::path>& output, 
   std::optional<std::filesystem::path>& home, 
   std::optional<std::string>& projectName, 
