@@ -4,7 +4,11 @@
 `cppscanner` is a standalone command-line utility to create snapshots of C++ programs.
 It is based on clang's [LibTooling](https://clang.llvm.org/docs/LibTooling.html).
 
-Snapshots are saved as a SQLite database, making them easily usable in other programs.
+Snapshots are saved as SQLite databases, making them easily usable in other programs.<br/>
+The companion project [cppbrowser](https://github.com/strandfield/cppbrowser) provides navigation
+of snapshots in a Web browser.
+
+[Browse the source code](https://code.strandfield.dev/snapshots/cppscanner/0.5.0)
 
 ## Compiling the project
 
