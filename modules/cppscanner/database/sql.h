@@ -53,7 +53,7 @@ public:
   explicit Statement(Database& db);
   Statement(Database& db, const char* query);
   Statement(const Statement&) = delete;
-  Statement(Statement&& other);
+  Statement(Statement&& other) noexcept;
   ~Statement();
 
   Database& database() const;
@@ -100,7 +100,7 @@ inline Statement::Statement(Database& db, const char* query)
   prepare(query);
 }
 
-inline Statement::Statement(Statement&& other) :
+inline Statement::Statement(Statement&& other) noexcept :
   m_database(other.m_database),
   m_statement(other.m_statement)
 {

@@ -289,75 +289,91 @@ void SnapshotMerger::runMerge()
   {
     Snapshot::Properties properties;
 
-    properties["cppscanner.version"] = cppscanner::versioncstr();
-    properties["cppscanner.os"] = cppscanner::system_name();
-
-    bool a_new_home = false;
-
-    // look at home value for each project
+    // process properties as found in the snapshots
     {
-      std::optional<std::string> common_home;
-      ValueUpdater updater{ common_home };
+      std::set<std::string> property_names;
 
       for (InputSnapshot& snapshot : m_snapshots)
       {
-        updater.update(snapshot.properties.at("project.home"));
+        for (const auto& p : snapshot.properties)
+        {
+          property_names.insert(p.first);
+        }
       }
 
-      if (updater.valid())
+      for (const std::string& key : property_names)
       {
-        home = common_home.value();
+        std::optional<std::string> value;
+        ValueUpdater updater{ value };
+
+        for (InputSnapshot& snapshot : m_snapshots)
+        {
+          updater.update(getProperty(snapshot.properties, key));
+        }
+
+        if (updater.valid())
+        {
+          properties[key] = *value;
+        }
       }
-      else
+    }
+
+    // compute the "home" property
+    {
+      bool a_new_home = false;
+
+      // look at home value for each project
       {
-        a_new_home = true;
-        // TODO: print warning ?
+        std::optional<std::string> common_home;
+        ValueUpdater updater{ common_home };
+
+        for (InputSnapshot& snapshot : m_snapshots)
+        {
+          updater.update(snapshot.properties.at("project.home"));
+        }
+
+        if (updater.valid())
+        {
+          home = common_home.value();
+        }
+        else
+        {
+          a_new_home = true;
+          // TODO: print warning ?
+        }
       }
-    }
 
-    if (m_project_home_path.has_value())
-    {
-      std::string final_home = Snapshot::normalizedPath(m_project_home_path->generic_u8string());
-      a_new_home = a_new_home || final_home != home;
-      home = std::move(final_home);
-    }
-
-    if (home.empty())
-    {
-      // this is bad.
-      // TODO: abort merge ?
-    }
-
-    if (a_new_home)
-    {
-      // TODO: voir si on peut trouver une autre façon de rapporter l'info
-      std::cout << "Input snapshots do not have a common project.home property, or a new one was specified." << "\n";
-      std::cout << "Some data may be erased." << std::endl;
-    }
-
-    properties["project.home"] = home;
-
-    const std::vector<std::string> extraProps{ "scanner.indexLocalSymbols", "scanner.indexExternalFiles", "scanner.root" };
-    for (const std::string& key : extraProps)
-    {
-      std::optional<std::string> value;
-      ValueUpdater updater{ value };
-
-      for (InputSnapshot& snapshot : m_snapshots)
+      if (m_project_home_path.has_value())
       {
-        updater.update(getProperty(snapshot.properties, key));
+        std::string final_home = Snapshot::normalizedPath(m_project_home_path->generic_u8string());
+        a_new_home = a_new_home || final_home != home;
+        home = std::move(final_home);
       }
 
-      if (updater.valid())
+      if (home.empty())
       {
-        properties[key] = *value;
+        // this is bad.
+        // TODO: abort merge ?
       }
-    }
 
+      if (a_new_home)
+      {
+        // TODO: voir si on peut trouver une autre façon de rapporter l'info
+        std::cout << "Input snapshots do not have a common project.home property, or a new one was specified." << "\n";
+        std::cout << "Some data may be erased." << std::endl;
+      }
+
+      properties["project.home"] = home;
+    }
+    
+    // write extra properties
     for (const auto& p : m_extra_properties)
     {
       properties[p.first] = p.second;
     }
+
+    properties["cppscanner.version"] = cppscanner::versioncstr();
+    properties["cppscanner.os"] = cppscanner::system_name();
 
     writer().beginTransaction();
     writer().insert(properties);

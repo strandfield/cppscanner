@@ -19,11 +19,6 @@ namespace cppscanner
 namespace
 {
 
-bool isOption(const std::string& arg)
-{
-  return !arg.empty() && arg.front() == '-';
-}
-
 // test if arg is "-j<number>"
 bool isJobsArg(const std::string& arg)
 {
@@ -460,7 +455,7 @@ constexpr const char* RUN_DESCRIPTION = R"(Description:
 
 constexpr const char* RUN_EXAMPLES = R"(Example:
   Compile a single file with C++17 enabled:
-    cppscanner -i source.cpp -o snapshot.db -- -std=c++17)";
+    cppscanner run -i source.cpp -o snapshot.db -- -std=c++17)";
 
 constexpr const char* MERGE_DESCRIPTION = R"(Description:
   Merge two or more snapshots into one.)";

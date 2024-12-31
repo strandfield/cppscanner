@@ -85,7 +85,7 @@ static const char* SQL_CREATE_STATEMENTS = R"(
 BEGIN TRANSACTION;
 
 CREATE TABLE "info" (
-  "key" TEXT NOT NULL,
+  "key" TEXT NOT NULL UNIQUE,
   "value" TEXT NOT NULL
 );
 

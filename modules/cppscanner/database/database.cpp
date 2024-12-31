@@ -13,7 +13,7 @@
 namespace cppscanner
 {
 
-Database::Database(Database&& other) :
+Database::Database(Database&& other) noexcept :
   m_database(other.m_database)
 {
   other.m_database = nullptr;
@@ -83,7 +83,7 @@ void Database::close()
   m_database = nullptr;
 }
 
-Database& Database::operator=(Database&& other)
+Database& Database::operator=(Database&& other) noexcept
 {
   m_database = other.m_database;
   other.m_database = nullptr;
