@@ -15,6 +15,9 @@ The following dependencies are required to build the project:
 This project uses the CMake build system.
 The following options are available:
 - `BUILD_TESTS`: whether the tests should be built.
+- `CPPSCANNER_BUILD_PLUGIN`: whether the clang plugin should be built.
+
+These options are `OFF` by default.
 
 A C++17 compiler is required to build this project.
 
@@ -61,17 +64,20 @@ Syntax for creating a snapshot from a single file:
 cppscanner run -i <source.cpp> --output <snapshot.db> [options] -- [compiler arguments]
 ```
 
-Syntax for creating a snapshot from a CMake target (see below for prerequisites):
-```
-cppscanner run --build <cmake-build-dir> [--config <cmake-config>] --target <cmake-target-name> --output <snapshot.db> [options]
-```
-
 The `merge` command can be used to merge two or more snapshots into a single one.
 
-Syntax for merging three snapshots:
+Example (merging three snapshots):
 ```
 cppscanner merge --output output.db snapshotA.db snapshotB.db snapshotC.db
 ```
+
+The merge command can also be used to merge together intermediary snapshots produced by
+the clang plugin.
+This is done by using the `--link` option.
+```
+cppscanner merge --link --output output.db
+```
+
 
 ### Getting a `compile_commands.json` with CMake
 
@@ -84,23 +90,6 @@ On Windows, if you are using a "Visual Studio" generator, you will have to switc
 to the "NMake Makefiles" generator. <br/>
 The `setup_test_project` macro in [tests/CMakeLists.txt](tests/CMakeLists.txt)
 demonstrates how this can be done using the "-G" option of CMake.
-
-### CMake support
-
-The `run` command can be made to work on a CMake project if you generated the project
-through the scanner beforehand.
-This can be done using the `cmake` command.
-
-```
-cppscanner cmake -B <cmake-build-dir> -S <cmake-source-dir> [cmake-options]
-```
-
-This command will make the scanner use the CMake file-based API to get information 
-about the build system and targets.
-Ultimately, the `cmake` executable is invoked with the arguments passed as-is.
-
-Projects using precompiled headers (using the `target_precompile_headers()` command)
-are expected to work if you are using the CMake integration.
 
 ### `run` options
 
@@ -132,3 +121,37 @@ A value of 1 means that all the parsing is done in a (single) secondary thread w
 the output database is written in the main thread. The performance benefit should be
 small because parsing takes most of the time.
 The recommended minimum when using this option is therefore 2.
+
+### `merge` options
+
+`--home <home>`: specifies a "home" directory for the output snapshot.
+Alternatively, a project version may be specified using the `CPPSCANNER_HOME_DIR` environment variable.
+
+`--project-name <name>`: specifies a project name for the output snapshot.
+Alternatively, a project name may be specified using the `CPPSCANNER_PROJECT_NAME` environment variable.
+
+`--project-version <version>`: specifies a project version for the output snapshot.
+Alternatively, a project version may be specified using the `CPPSCANNER_PROJECT_VERSION` environment variable.
+
+`--output <snapshot.db>`: specifies a filepath for the output snapshot.
+
+`--link`: switch to the *link* mode.
+In this mode, the tool searches recursively for `.cppscanner` folders in which 
+snapshots produced by the clang plugin are saved and merges them together.
+
+`--keep-source-files`: instruct the tool to keep source files after the merge has 
+been completed.
+This option is only useful when using `--link` to prevent the tool from deleting 
+the source snapshots; in normal mode, the source files are not deleted.
+
+## Using the clang plugin
+
+Note to Windows user: clang plugins do not work on Windows.
+
+On Linux, pass `-DCPPSCANNER_BUILD_PLUGIN=ON` to CMake when configuring the project.
+Build using `cmake --build build_dir --target all`.
+Then install the plugin using `cmake --install build_dir`.
+
+You can then use the plugin when building a project with clang.
+An example is provided in the [simple_project](tests/testprojects/simple_project/CMakeLists.txt) 
+in `tests/testprojects/simple_project`.

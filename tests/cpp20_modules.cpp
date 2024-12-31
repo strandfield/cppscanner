@@ -2,8 +2,7 @@
 #include "helpers.h"
 #include "projects.h"
 
-#include "cppscanner/scannerInvocation/scannerinvocation.h"
-#include "cppscanner/indexer/argumentsadjuster.h"
+#include "cppscanner/indexer/scanner.h"
 
 #include "catch.hpp"
 
@@ -22,26 +21,21 @@ TEST_CASE("modules", "[scanner][cpp20_modules]")
 
   {
     Scanner scanner;
+    scanner.setOutputPath(snapshot_name);
     scanner.setHomeDir(std::filesystem::path(TESTFILES_DIRECTORY) / cpp20_modules_dir);
     scanner.setIndexLocalSymbols(true);
 
-    scanner.initSnapshot(snapshot_name);
-
-    std::vector<ScannerCompileCommand> commands;
+    std::vector<CompileCommand> commands;
     {
-      auto adjuster = getPchArgumentsAdjuster();
-      ScannerCompileCommand cmd;
+      CompileCommand cmd;
       cmd.fileName = hellocppmPath.generic_u8string();
       cmd.commandLine = { "clang++","-std=c++20", hellocppmPath.generic_u8string(), "--precompile", "-o", "Hello.pcm" };
-      cmd.commandLine = adjuster(cmd.commandLine, cmd.fileName);
       commands.push_back(cmd);
     }
     {
-      auto adjuster = getDefaultArgumentsAdjuster();
-      ScannerCompileCommand cmd;
+      CompileCommand cmd;
       cmd.fileName = maincppPath.generic_u8string();
       cmd.commandLine = { "clang++","-std=c++20", maincppPath.generic_u8string(), "-fmodule-file=Hello=Hello.pcm", "Hello.pcm", "-o", "Hello.out" };
-      cmd.commandLine = adjuster(cmd.commandLine, cmd.fileName);
       commands.push_back(cmd);
     }
 

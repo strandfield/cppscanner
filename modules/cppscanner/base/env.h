@@ -2,21 +2,18 @@
 // This file is part of the 'cppscanner' project.
 // For conditions of distribution and use, see copyright notice in LICENSE.
 
-#ifndef CPPSCANNER_OS_H
-#define CPPSCANNER_OS_H
+#ifndef CPPSCANNER_ENV_H
+#define CPPSCANNER_ENV_H
+
+#include <optional>
+#include <string>
 
 namespace cppscanner
 {
 
-inline constexpr const char* system_name()
-{
-#ifdef _WIN32
-  return "windows";
-#else
-  return "linux";
-#endif // _WIN32
-}
+std::optional<std::string> readEnv(const char* varName);
+bool isEnvTrue(const char* varName);
 
 } // namespace cppscanner
 
-#endif // CPPSCANNER_OS_H
+#endif // CPPSCANNER_ENV_H

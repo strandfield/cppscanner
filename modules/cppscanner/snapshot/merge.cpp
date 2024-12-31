@@ -14,6 +14,8 @@
 #include <cassert>
 #include <set>
 
+#include <iostream>
+
 namespace cppscanner
 {
 
@@ -223,9 +225,25 @@ void SnapshotMerger::addInputPath(const std::filesystem::path& inputPath)
   m_input_paths.push_back(inputPath);
 }
 
+void SnapshotMerger::setInputs(const std::vector<std::filesystem::path>& inputPaths)
+{
+  m_input_paths.assign(inputPaths.begin(), inputPaths.end());
+}
+
+const std::vector<std::filesystem::path>& SnapshotMerger::inputPaths() const
+{
+  return m_input_paths;
+}
+
 void SnapshotMerger::setProjectHome(const std::filesystem::path& homePath)
 {
   m_project_home_path = homePath;
+}
+
+void SnapshotMerger::setExtraProperty(const std::string& name, const std::string& value)
+{
+  assert(name != "project.home");
+  m_extra_properties[name] = value;
 }
 
 void SnapshotMerger::setFileContentWriter(std::unique_ptr<FileContentWriter> contentWriter)
@@ -266,21 +284,20 @@ void SnapshotMerger::runMerge()
 
   writer().open(m_output_path);
 
-  // write "info" table
+  std::string home;
+  // write "info" table, compute (possibly new) home directory
   {
     Snapshot::Properties properties;
 
     properties["cppscanner.version"] = cppscanner::versioncstr();
     properties["cppscanner.os"] = cppscanner::system_name();
 
-    if (m_project_home_path.has_value())
+    bool a_new_home = false;
+
+    // look at home value for each project
     {
-      properties["project.home"] = Snapshot::normalizedPath(m_project_home_path->generic_u8string());
-    }
-    else
-    {
-      std::optional<std::string> home;
-      ValueUpdater updater{ home };
+      std::optional<std::string> common_home;
+      ValueUpdater updater{ common_home };
 
       for (InputSnapshot& snapshot : m_snapshots)
       {
@@ -289,13 +306,36 @@ void SnapshotMerger::runMerge()
 
       if (updater.valid())
       {
-        properties["project.home"] = Snapshot::normalizedPath(home.value());
+        home = common_home.value();
       }
       else
       {
+        a_new_home = true;
         // TODO: print warning ?
       }
     }
+
+    if (m_project_home_path.has_value())
+    {
+      std::string final_home = Snapshot::normalizedPath(m_project_home_path->generic_u8string());
+      a_new_home = a_new_home || final_home != home;
+      home = std::move(final_home);
+    }
+
+    if (home.empty())
+    {
+      // this is bad.
+      // TODO: abort merge ?
+    }
+
+    if (a_new_home)
+    {
+      // TODO: voir si on peut trouver une autre façon de rapporter l'info
+      std::cout << "Input snapshots do not have a common project.home property, or a new one was specified." << "\n";
+      std::cout << "Some data may be erased." << std::endl;
+    }
+
+    properties["project.home"] = home;
 
     const std::vector<std::string> extraProps{ "scanner.indexLocalSymbols", "scanner.indexExternalFiles", "scanner.root" };
     for (const std::string& key : extraProps)
@@ -314,12 +354,18 @@ void SnapshotMerger::runMerge()
       }
     }
 
+    for (const auto& p : m_extra_properties)
+    {
+      properties[p.first] = p.second;
+    }
+
     writer().beginTransaction();
     writer().insert(properties);
     writer().endTransaction();
   }
 
   FileIdTable table;
+  size_t nb_files_in_project = 0;
 
   // process files from all snapshots: build 'table' and fill "file" table
   {
@@ -343,7 +389,7 @@ void SnapshotMerger::runMerge()
 
         snapshot.reader.close();
 
-        auto outside_project_it = partitionByProjectStatus(files, snapshot.properties.at("project.home"));
+        auto outside_project_it = partitionByProjectStatus(files, home);
 
         for (auto it = files.begin(); it != outside_project_it; ++it)
         {
@@ -362,6 +408,9 @@ void SnapshotMerger::runMerge()
           external_files.insert(it->path);
         }
       }
+
+      nb_files_in_project = file_content_map.size();
+      assert(nb_files_in_project + 1 == table.size()); // table has an empty element at index 0
 
       for (const std::string& path : external_files)
       {
@@ -416,7 +465,6 @@ void SnapshotMerger::runMerge()
         files.push_back(f);
       }
 
-
       writer().beginTransaction();
       writer().insertFiles(files);
       writer().endTransaction();
@@ -424,6 +472,9 @@ void SnapshotMerger::runMerge()
 
     file_content_map.clear();
   }
+
+  const size_t last_file_id_in_project = nb_files_in_project;
+  constexpr bool index_external_files = false; // TODO
 
   // write "include" table
   {
@@ -445,8 +496,12 @@ void SnapshotMerger::runMerge()
       for (Include& inc : includes)
       {
         inc.fileID = snapshot.idtable[inc.fileID];
-        inc.includedFileID = snapshot.idtable[inc.includedFileID];
-        allincludes.push_back(inc);
+        
+        if (index_external_files || inc.fileID <= last_file_id_in_project)
+        {
+          inc.includedFileID = snapshot.idtable[inc.includedFileID];
+          allincludes.push_back(inc);
+        }
       }
     }
 
@@ -474,7 +529,11 @@ void SnapshotMerger::runMerge()
       for (ArgumentPassedByReference& a : annotations)
       {
         a.fileID = snapshot.idtable[a.fileID];
-        all.push_back(a);
+
+        if (index_external_files || a.fileID <= last_file_id_in_project)
+        {
+          all.push_back(a);
+        }
       }
     }
 
@@ -502,7 +561,11 @@ void SnapshotMerger::runMerge()
       for (Diagnostic& d : diagnostics)
       {
         d.fileID = snapshot.idtable[d.fileID];
-        all.push_back(d);
+
+        if (index_external_files || d.fileID <= last_file_id_in_project)
+        {
+          all.push_back(d);
+        }
       }
     }
 
@@ -573,7 +636,11 @@ void SnapshotMerger::runMerge()
       for (SymbolReference& a : annotations)
       {
         a.fileID = snapshot.idtable[a.fileID];
-        all.push_back(a);
+
+        if (index_external_files || a.fileID <= last_file_id_in_project)
+        {
+          all.push_back(a);
+        }
       }
     }
 
@@ -601,7 +668,11 @@ void SnapshotMerger::runMerge()
       for (SymbolDeclaration& a : annotations)
       {
         a.fileID = snapshot.idtable[a.fileID];
-        all.push_back(a);
+
+        if (index_external_files || a.fileID <= last_file_id_in_project)
+        {
+          all.push_back(a);
+        }
       }
     }
 

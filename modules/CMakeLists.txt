@@ -48,12 +48,12 @@ if (WIN32 AND NOT SELF_PARSE)
   target_compile_options(indexer PRIVATE "/Zc:preprocessor")
 endif()
 
-add_module(cmakeIntegration)
-target_link_libraries(cmakeIntegration 
-  LLVMSupport
-)
-target_include_directories(cmakeIntegration SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
-
+if (UNIX AND CPPSCANNER_BUILD_PLUGIN)
+  set_property(TARGET base PROPERTY POSITION_INDEPENDENT_CODE ON)
+  set_property(TARGET indexer PROPERTY POSITION_INDEPENDENT_CODE ON)
+  set_property(TARGET snapshot PROPERTY POSITION_INDEPENDENT_CODE ON)
+  set_property(TARGET database PROPERTY POSITION_INDEPENDENT_CODE ON)
+endif ()
 
 add_module(scannerInvocation)
-target_link_libraries(scannerInvocation indexer cmakeIntegration)
+target_link_libraries(scannerInvocation indexer)

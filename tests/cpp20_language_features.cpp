@@ -16,7 +16,8 @@ TEST_CASE("spaceship operator", "[scanner][cpp20_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/spaceship.cpp"),
+    { "run", 
+    "-i", HOME_DIR + std::string("/spaceship.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name,
     "--", "-std=c++20"}
@@ -43,7 +44,8 @@ TEST_CASE("designated initializers", "[scanner][cpp20_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/designated-initializers.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/designated-initializers.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name,
     "--", "-std=c++20" }
@@ -100,7 +102,8 @@ TEST_CASE("Constraints and concepts", "[scanner][cpp20_language_features]")
   SnapshotDeleter snapshot_deleter{ snapshot_name };
 
   ScannerInvocation inv{
-    { "-i", HOME_DIR + std::string("/concepts.cpp"),
+    { "run",
+    "-i", HOME_DIR + std::string("/concepts.cpp"),
     "--home", HOME_DIR,
     "-o", snapshot_name,
     "--", "-std=c++20"}

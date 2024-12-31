@@ -8,7 +8,6 @@
 
 #include "cppscanner/indexer/astvisitor.h"
 #include "cppscanner/indexer/fileindexingarbiter.h"
-#include "cppscanner/indexer/indexingresultqueue.h"
 #include "cppscanner/index/symbolid.h"
 
 #include <clang/AST/ASTContext.h>
@@ -28,6 +27,78 @@
 
 #include <cassert>
 #include <iostream>
+
+namespace cppscanner
+{
+
+/**
+* \brief a class for collecting C++ symbols while indexing a translation unit
+* 
+* This class creates an IndexerSymbol for each C++ symbol encountered while 
+* indexing a translation unit. Macros are also handled by this class.
+* 
+* Because all declarations go through this class, it is also used by the 
+* Indexer class for post-processing purposes: the location of some declarations 
+* that went thought the SymbolCollector are recorded in the output TranslationUnitIndex.
+*/
+class SymbolCollector
+{
+private:
+  Indexer& m_indexer;
+  std::map<const clang::Decl*, SymbolID> m_symbolIdCache;
+  std::map<const clang::MacroInfo*, SymbolID> m_macroIdCache;
+  std::map<const clang::Module*, SymbolID> m_moduleIdCache;
+
+public:
+  explicit SymbolCollector(Indexer& idxr);
+
+  void reset();
+
+  IndexerSymbol* process(const clang::Decl* decl);
+  IndexerSymbol* process(const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
+  IndexerSymbol* process(const clang::Module* moduleInfo);
+
+  SymbolID getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const;
+
+  const std::map<const clang::Decl*, SymbolID>& declarations() const;
+
+protected:
+  std::string getDeclSpelling(const clang::Decl* decl);
+  void fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl);
+  void fillSymbol(IndexerSymbol& symbol,const clang::IdentifierInfo* name, const clang::MacroInfo* macroInfo);
+  void fillSymbol(IndexerSymbol& symbol, const clang::Module* moduleInfo);
+  IndexerSymbol* getParentSymbol(const IndexerSymbol& symbol, const clang::Decl* decl);
+};
+
+/**
+* \brief class for collecting information from a PreprocessingRecord
+* 
+* This class is used by the Indexer class for listing files that were #included 
+* in the translation unit and for checking if macros were used as header guards.
+*/
+class PreprocessingRecordIndexer
+{
+private:
+  Indexer& m_indexer;
+public:
+  explicit PreprocessingRecordIndexer(Indexer& idxr);
+
+  void process(clang::PreprocessingRecord* ppRecord);
+
+protected:
+  clang::SourceManager& getSourceManager() const;
+  bool shouldIndexFile(const clang::FileID fileId) const;
+  TranslationUnitIndex& currentIndex() const;
+  cppscanner::FileID idFile(const clang::FileID& fileId) const;
+  cppscanner::FileID idFile(const std::string& filePath) const;
+
+protected:
+  void process(clang::InclusionDirective& inclusionDirective);
+  void process(clang::MacroDefinitionRecord& mdr);
+  void process(clang::MacroExpansion& macroExpansion);
+};
+
+} // namespace cppscanner
 
 namespace cppscanner
 {
@@ -419,12 +490,19 @@ void SymbolCollector::fillSymbol(IndexerSymbol& symbol, const clang::Decl* decl)
   
   symbol.kind = tr(info.Kind);
 
-  if (symbol.kind == SymbolKind::Unknown) {
+  if (symbol.kind == SymbolKind::Unknown) 
+  {
     if (llvm::dyn_cast<const clang::LabelDecl>(decl)) {
       symbol.kind = SymbolKind::GotoLabel;
+    } else if (llvm::dyn_cast<const clang::CXXDeductionGuideDecl>(decl)) {
+      symbol.kind = SymbolKind::DeductionGuide;
     }
   }
 
+  // This assert is left here so that we are notified when unknown symbols
+  // are encountered when building in debug mode.
+  // In release mode, the assert goes away and this isn't an issue. Unknown
+  // symbols are allowed in a snapshot.
   assert(symbol.kind != SymbolKind::Unknown);
 
   if (const auto* fun = llvm::dyn_cast<clang::FunctionDecl>(decl)) 
@@ -767,73 +845,71 @@ IndexerSymbol* SymbolCollector::getParentSymbol(const IndexerSymbol& symbol, con
   return parent_symbol;
 }
 
-void IdxrDiagnosticConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo)
+// a class for receiving diagnostics from clang.
+// the diagnostics are printed to cout and forwarded to the Indexer.
+// an instance of this class is created and managed by the Indexer
+// (in particular, its lifetime is within the lifetime of the Indexer)
+class IdxrDiagnosticConsumer : public clang::DiagnosticConsumer
 {
-  clang::DiagnosticConsumer::HandleDiagnostic(dlvl, dinfo);
+  Indexer& m_indexer;
 
-  Diagnostic d;
-
-  d.level = static_cast<DiagnosticLevel>(dlvl);
-
-  llvm::SmallString<1000> diag;
-  dinfo.FormatDiagnostic(diag);
-  d.message = diag.str().str();
-
-  const clang::SourceRange srcrange = dinfo.getLocation();
-
-  if (!m_indexer.initialized())
+public:
+  explicit IdxrDiagnosticConsumer(Indexer& idxr) : 
+    m_indexer(idxr)
   {
-    if (!dinfo.hasSourceManager())
+  }
+
+  bool IncludeInDiagnosticCounts() const final { return false; }
+
+  void HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo) final
+  {
+    clang::DiagnosticConsumer::HandleDiagnostic(dlvl, dinfo);
+
+    if (!m_indexer.initialized())
     {
-      std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+      if (!dinfo.hasSourceManager())
+      {
+        std::cerr << "no source manager in HandleDiagnostic()" << std::endl;
+        return;
+      }
+
+      const auto level = static_cast<DiagnosticLevel>(dlvl);
+
+      const clang::SourceRange srcrange = dinfo.getLocation();
+      clang::PresumedLoc ploc = dinfo.getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+      llvm::SmallString<1000> diag;
+      dinfo.FormatDiagnostic(diag);
+      std::string message = diag.str().str();
+
+      if (ploc.isValid())
+      {
+        std::cout << ploc.getLine() << ":" << ploc.getColumn() << ": " 
+          << getDiagnosticLevelString(level) << ": " << message << std::endl;
+      }
+      else
+      {
+        std::cout << getDiagnosticLevelString(level) << ": " << message << std::endl;
+      }
+
       return;
     }
 
-    clang::PresumedLoc ploc = dinfo.getSourceManager().getPresumedLoc(srcrange.getBegin());
-
-    if (ploc.isValid())
-    {
-      std::cout << ploc.getLine() << ":" << ploc.getColumn() << ": " 
-        << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
-    }
-    else
-    {
-      std::cout << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
-    }
-
-    return;
+    m_indexer.HandleDiagnostic(dlvl, dinfo);
   }
 
-  clang::PresumedLoc ploc = m_indexer.getSourceManager().getPresumedLoc(srcrange.getBegin());
-
-  if (!ploc.isValid())
+  void finish() final
   {
-    return;
+    clang::DiagnosticConsumer::finish();
   }
 
-  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
-
-  if (!m_indexer.shouldIndexFile(ploc.getFileID())) {
-    return;
+  void printDiagnostic(const Diagnostic& d, const std::string& filePath)
+  {
+    std::cout << filePath << ":"
+      << d.position.line() << ":" << d.position.column() << ": "
+      << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
   }
-
-  d.fileID = m_indexer.getFileID(ploc.getFileID());
-
-  if (!d.fileID) {
-    return;
-  }
-  
-  std::cout << m_indexer.fileIdentificator().getFile(d.fileID) << ":"
-    << ploc.getLine() << ":" << ploc.getColumn() << ": " 
-    << getDiagnosticLevelString(d.level) << ": " << d.message << std::endl;
-
-  m_indexer.getCurrentIndex()->add(std::move(d));
-}
-
-void IdxrDiagnosticConsumer::finish()
-{
-  clang::DiagnosticConsumer::finish();
-}
+};
 
 PreprocessingRecordIndexer::PreprocessingRecordIndexer(Indexer& idxr) :
   m_indexer(idxr)
@@ -936,7 +1012,7 @@ void PreprocessingRecordIndexer::process(clang::MacroDefinitionRecord& mdr)
   // If everything worked fine, the macro definition should already have been 
   // handled by handleMacroOccurrence(), so we should be able to get its id
   // from the cache.
-  SymbolID symid = m_indexer.symbolCollector().getMacroSymbolIdFromCache(macro_info);
+  SymbolID symid = m_indexer.getMacroSymbolIdFromCache(macro_info);
 
   if (!symid) {
     return;
@@ -964,12 +1040,64 @@ void PreprocessingRecordIndexer::process(clang::MacroExpansion& macroExpansion)
   (void)macroExpansion;
 }
 
-Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter, IndexingResultQueue& resultsQueue) :
+ForwardingIndexDataConsumer::ForwardingIndexDataConsumer(Indexer* indexer)
+  : m_indexer(indexer)
+{
+
+}
+
+Indexer& ForwardingIndexDataConsumer::indexer() const
+{
+  assert(m_indexer);
+  return *m_indexer;
+}
+
+void ForwardingIndexDataConsumer::setIndexer(Indexer& indexer)
+{
+  m_indexer = &indexer;
+}
+
+void ForwardingIndexDataConsumer::initialize(clang::ASTContext& Ctx)
+{
+  indexer().initialize(Ctx);
+}
+
+void ForwardingIndexDataConsumer::setPreprocessor(std::shared_ptr<clang::Preprocessor> PP)
+{
+  indexer().setPreprocessor(PP);
+}
+
+bool ForwardingIndexDataConsumer::handleDeclOccurrence(const clang::Decl* D, clang::index::SymbolRoleSet Roles,
+  llvm::ArrayRef<clang::index::SymbolRelation> relations,
+  clang::SourceLocation Loc, ASTNodeInfo ASTNode)
+{
+  return indexer().handleDeclOccurrence(D, Roles, relations, Loc, ASTNode);
+}
+
+bool ForwardingIndexDataConsumer::handleMacroOccurrence(const clang::IdentifierInfo* Name,
+  const clang::MacroInfo* MI, clang::index::SymbolRoleSet Roles,
+  clang::SourceLocation Loc)
+{
+  return indexer().handleMacroOccurrence(Name, MI, Roles, Loc);
+}
+
+bool ForwardingIndexDataConsumer::handleModuleOccurrence(const clang::ImportDecl* ImportD,
+  const clang::Module* Mod, clang::index::SymbolRoleSet Roles,
+  clang::SourceLocation Loc)
+{
+  return indexer().handleModuleOccurrence(ImportD, Mod, Roles, Loc);
+}
+
+void ForwardingIndexDataConsumer::finish() 
+{
+  indexer().finish();
+}
+
+
+Indexer::Indexer(FileIndexingArbiter& fileIndexingArbiter) :
   m_fileIndexingArbiter(fileIndexingArbiter),
-  m_resultsQueue(resultsQueue),
   m_fileIdentificator(fileIndexingArbiter.fileIdentificator()),
-  m_symbolCollector(*this),
-  m_diagnosticConsumer(*this)
+  m_symbolCollector(std::make_unique<SymbolCollector>(*this))
 {
 
 }
@@ -981,19 +1109,29 @@ FileIdentificator& Indexer::fileIdentificator()
   return m_fileIdentificator;
 }
 
-SymbolCollector& Indexer::symbolCollector()
+SymbolCollector& Indexer::symbolCollector() const
 {
-  return m_symbolCollector;
+  return *m_symbolCollector;
 }
 
-clang::DiagnosticConsumer* Indexer::getDiagnosticConsumer()
+clang::DiagnosticConsumer* Indexer::getOrCreateDiagnosticConsumer()
 {
-  return &m_diagnosticConsumer;
+  if (!m_diagnosticConsumer)
+  {
+    m_diagnosticConsumer = std::make_unique<IdxrDiagnosticConsumer>(*this);
+  }
+
+  return m_diagnosticConsumer.get();
 }
 
 TranslationUnitIndex* Indexer::getCurrentIndex() const
 {
   return m_index.get();
+}
+
+void Indexer::resetCurrentIndex()
+{
+  m_index.reset();
 }
 
 clang::SourceManager& Indexer::getSourceManager() const
@@ -1103,9 +1241,8 @@ void Indexer::initialize(clang::ASTContext& Ctx)
   mAstContext = &Ctx;
   m_FileIdCache.clear();
   m_ShouldIndexFileCache.clear();
-  m_symbolCollector.reset();
+  symbolCollector().reset();
 
-  resetDidProduceOutput();
   m_index = std::make_unique<TranslationUnitIndex>();
   m_index->mainFileId = getFileID(Ctx.getSourceManager().getMainFileID());
 }
@@ -1125,13 +1262,13 @@ void Indexer::setPreprocessor(std::shared_ptr<clang::Preprocessor> pp)
 
 bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::SymbolRoleSet roles,
   llvm::ArrayRef<clang::index::SymbolRelation> relations,
-  clang::SourceLocation loc, ASTNodeInfo astNode)
+  clang::SourceLocation loc, clang::index::IndexDataConsumer::ASTNodeInfo astNode)
 {
   if (!shouldIndexFile(getSourceManager().getFileID(loc))) {
     return true;
   }
 
-  IndexerSymbol* symbol = m_symbolCollector.process(decl);
+  IndexerSymbol* symbol = symbolCollector().process(decl);
 
   if (!symbol)
     return true;
@@ -1142,7 +1279,7 @@ bool Indexer::handleDeclOccurrence(const clang::Decl* decl, clang::index::Symbol
 
   if (astNode.Parent) {
     if (auto* fndecl = llvm::dyn_cast<clang::FunctionDecl>(astNode.Parent)) {
-      IndexerSymbol* function_symbol = m_symbolCollector.process(fndecl);
+      IndexerSymbol* function_symbol = symbolCollector().process(fndecl);
       if (function_symbol) {
         symref.referencedBySymbolID = function_symbol->id;
       }
@@ -1218,7 +1355,7 @@ bool Indexer::handleMacroOccurrence(const clang::IdentifierInfo* name,
     return true;
   }
 
-  IndexerSymbol* symbol = m_symbolCollector.process(name, macroInfo);
+  IndexerSymbol* symbol = symbolCollector().process(name, macroInfo);
 
   if (!symbol)
     return true;
@@ -1272,7 +1409,7 @@ bool Indexer::handleModuleOccurrence(const clang::ImportDecl *importD,
     return true;
   }
 
-  IndexerSymbol* symbol = m_symbolCollector.process(moduleInfo);
+  IndexerSymbol* symbol = symbolCollector().process(moduleInfo);
 
   if (!symbol)
     return true;
@@ -1488,21 +1625,56 @@ void Indexer::finish()
 
   recordSymbolDeclarations();
 
-  m_resultsQueue.write(std::move(*m_index));
-  m_index.reset();
-  m_produced_output = true;
-
   mAstContext = nullptr;
 }
 
-bool Indexer::didProduceOutput() const
+void Indexer::HandleDiagnostic(clang::DiagnosticsEngine::Level dlvl, const clang::Diagnostic& dinfo)
 {
-  return m_produced_output;
+  assert(initialized());
+  if (!initialized())
+  {
+    return;
+  }
+
+  Diagnostic d;
+
+  d.level = static_cast<DiagnosticLevel>(dlvl);
+
+  llvm::SmallString<1000> diag;
+  dinfo.FormatDiagnostic(diag);
+  d.message = diag.str().str();
+
+  const clang::SourceRange srcrange = dinfo.getLocation();
+  clang::PresumedLoc ploc = getSourceManager().getPresumedLoc(srcrange.getBegin());
+
+  if (!ploc.isValid())
+  {
+    return;
+  }
+
+  d.position = FilePosition(ploc.getLine(), ploc.getColumn());
+
+  if (!shouldIndexFile(ploc.getFileID())) {
+    return;
+  }
+
+  d.fileID = getFileID(ploc.getFileID());
+
+  if (!d.fileID) {
+    return;
+  }
+
+  if (m_diagnosticConsumer)
+  {
+    m_diagnosticConsumer->printDiagnostic(d, fileIdentificator().getFile(d.fileID));
+  }
+
+  getCurrentIndex()->add(std::move(d));
 }
 
-void Indexer::resetDidProduceOutput()
+SymbolID Indexer::getMacroSymbolIdFromCache(const clang::MacroInfo* macroInfo) const
 {
-  m_produced_output = false;
+  return symbolCollector().getMacroSymbolIdFromCache(macroInfo);
 }
 
 namespace
@@ -1553,7 +1725,7 @@ void Indexer::processRelations(std::pair<const clang::Decl*, IndexerSymbol*> dec
     {
     case RelationKind::BaseOf:
     {
-      IndexerSymbol* derived = m_symbolCollector.process(rel.RelatedSymbol);
+      IndexerSymbol* derived = symbolCollector().process(rel.RelatedSymbol);
 
       if (!derived)
         break;
@@ -1579,7 +1751,7 @@ void Indexer::processRelations(std::pair<const clang::Decl*, IndexerSymbol*> dec
     break;
     case RelationKind::OverriddenBy:
     {
-      IndexerSymbol* base_function = m_symbolCollector.process(rel.RelatedSymbol);
+      IndexerSymbol* base_function = symbolCollector().process(rel.RelatedSymbol);
 
       if (!base_function)
         break;
@@ -1605,7 +1777,7 @@ void Indexer::indexPreprocessingRecord(clang::Preprocessor& pp)
 
 void Indexer::recordSymbolDeclarations()
 {
-  for (const auto& p : m_symbolCollector.declarations())
+  for (const auto& p : symbolCollector().declarations())
   {
     const IndexerSymbol* symbol = getCurrentIndex()->getSymbolById(p.second);
 

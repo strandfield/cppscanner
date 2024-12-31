@@ -2,6 +2,10 @@ name: Build
 run-name: ${{ gitea.actor }} is building ${{ gitea.repository.name }}
 on: [push]
 
+env:
+  CPPSCANNER_PROJECT_NAME: 'cppscanner'
+  CPPSCANNER_HOME_DIR: ${{ gitea.workspace }}
+
 jobs:
   build-linux:
     runs-on: docker-wsl
@@ -15,8 +19,18 @@ jobs:
       - run: clang-18 --version
       - name: Check out repository code
         uses: actions/checkout@v3
-      - run: cmake -B ${{ gitea.workspace }}/build
-      - run: make
-        working-directory: ${{ gitea.workspace }}/build
+      - run: cmake -B build -DCPPSCANNER_BUILD_PLUGIN=ON -DBUILD_TESTS=ON
+      - run: cmake --build build --target all
       - run: ctest .
         working-directory: ${{ gitea.workspace }}/build
+      - run: cmake --install build
+      - run: cppscanner --version
+      - run: cmake -B build_snapshot -DCPPSCANNER_BUILD_PLUGIN=ON -DBUILD_TESTS=OFF -DCPPSCANNER_SNAPSHOT_BUILD=ON -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_C_COMPILER=clang-18 
+      - run: cmake --build build_snapshot --target all
+      - run: cppscanner merge --link
+      - name: Upload snapshot
+        uses: actions/upload-artifact@v3
+        with:
+          name: snapshot.db
+          path: cppscanner.db
+          retention-days: 1

@@ -71,6 +71,8 @@ enum class SymbolKind
   Concept,
 
   GotoLabel,
+
+  DeductionGuide,
 };
 
 inline std::string_view getSymbolKindString(SymbolKind w)
@@ -109,6 +111,7 @@ inline std::string_view getSymbolKindString(SymbolKind w)
   case SymbolKind::NonTypeTemplateParameter:  return "non-type-template-parameter";
   case SymbolKind::Concept:                   return "concept";
   case SymbolKind::GotoLabel:                 return "label";
+  case SymbolKind::DeductionGuide:            return "deduction-guide";
   default:                                    return "<unknown>";
   }
 }
@@ -161,6 +164,8 @@ void enumerateSymbolKind(F&& fn)
   fn(SymbolKind::Concept);
 
   fn(SymbolKind::GotoLabel);
+
+  fn(SymbolKind::DeductionGuide);
 }
 
 } // namespace cppscanner

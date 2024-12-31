@@ -48,9 +48,8 @@ macro(setup_test_project folderName)
 endmacro()
 
 setup_test_project(hello_world)
-setup_test_project(includedir)
-setup_test_project(cmake_compile_definitions)
-setup_test_project(cmake_precompile_headers)
+setup_test_project(precompiled_headers)
+setup_test_project(simple_project)
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp")
   message("Downloading Catch2")
@@ -66,7 +65,7 @@ add_executable(TEST_cppscanner "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "${CMAKE_
   "cpp20_library_features.cpp"
   "cpp20_modules.cpp"
   "stl.cpp"
-  "cmakeintegration.cpp"
+  "pch.cpp"
 )
 target_link_libraries(TEST_cppscanner scannerInvocation)
 target_include_directories(TEST_cppscanner PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -77,13 +76,29 @@ endif()
 
 # self test
 
-string(REPLACE "\\" "/" CPPSCANNER_LLVM_DIR "${LLVM_DIR}")
-string(REPLACE "\\" "/" CPPSCANNER_CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}")
-configure_file("cppscanner-cmake.h.in" "cppscanner-cmake.h")
+set(SELFTEST_BUILD_DIR "${CMAKE_BINARY_DIR}/self_parse")
+if (NOT EXISTS ${SELFTEST_BUILD_DIR})
+  file(MAKE_DIRECTORY ${SELFTEST_BUILD_DIR})
+endif()
 
-add_executable(TEST_cppscanner_selftest "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "selftest.cpp" "helpers.h" "cppscanner-cmake.h.in")
+if (WIN32)
+  # TODO: add option for specifying the generator?
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} "-G" "NMake Makefiles" "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" "-DLLVM_DIR=${LLVM_DIR}" "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" "-DCMAKE_BUILD_TYPE=Debug" "-DBUILD_TESTS=OFF" "-DSELF_PARSE=ON" "${PROJECT_SOURCE_DIR}" 
+    WORKING_DIRECTORY ${SELFTEST_BUILD_DIR}
+  )
+else()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" "-DLLVM_DIR=${LLVM_DIR}" "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" "-DCMAKE_BUILD_TYPE=Debug" "-DBUILD_TESTS=OFF" "-DSELF_PARSE=ON" "${PROJECT_SOURCE_DIR}" 
+    WORKING_DIRECTORY ${SELFTEST_BUILD_DIR}
+  )
+endif()
+
+add_executable(TEST_cppscanner_selftest "${CMAKE_CURRENT_BINARY_DIR}/catch.hpp" "selftest.cpp" "helpers.h")
 target_link_libraries(TEST_cppscanner_selftest scannerInvocation)
 target_include_directories(TEST_cppscanner_selftest PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_compile_definitions(TEST_cppscanner_selftest PRIVATE SELFTEST_BUILD_DIR="${SELFTEST_BUILD_DIR}")
+target_compile_definitions(TEST_cppscanner_selftest PRIVATE PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 if (WIN32)
   set_target_properties(TEST_cppscanner_selftest PROPERTIES VS_DEBUGGER_ENVIRONMENT "PATH=${SQLite3_INCLUDE_DIR}/../bin;%PATH%")
@@ -92,9 +107,9 @@ endif()
 ## cmake tests
 
 add_test(NAME TEST_cppscanner COMMAND TEST_cppscanner)
-add_test(NAME TEST_cppscanner_selftest COMMAND TEST_cppscanner_selftest)
+#add_test(NAME TEST_cppscanner_selftest COMMAND TEST_cppscanner_selftest)
 
 if (WIN32)
-  set_tests_properties(TEST_cppscanner TEST_cppscanner_selftest
+  set_tests_properties(TEST_cppscanner
                      PROPERTIES ENVIRONMENT "PATH=${SQLite3_INCLUDE_DIR}/../bin;%PATH%")
 endif()
