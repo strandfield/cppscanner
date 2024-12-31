@@ -1,6 +1,7 @@
 
 #include "helpers.h"
 
+#include "cppscanner/base/config.h"
 #include "cppscanner/scannerInvocation/scannerinvocation.h"
 #include "cppscanner/index/symbol.h"
 #include "cppscanner/database/sql.h"
@@ -43,6 +44,10 @@ TEST_CASE("Self parsing test", "[scanner][self]")
   }
 
   SnapshotReader s{ snapshot_name };
+
+  Snapshot::Properties props = s.readProperties();
+  REQUIRE(props[PROPERTY_PROJECT_NAME] == "cppscanner");
+  REQUIRE(props[PROPERTY_PROJECT_VERSION] == cppscanner::versioncstr());
 
   // verify the presence of some classes
   {
