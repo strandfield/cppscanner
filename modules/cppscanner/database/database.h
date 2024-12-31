@@ -27,7 +27,7 @@ class Database
 public:
   Database() = default;
   Database(const Database&) = delete;
-  Database(Database&& other);
+  Database(Database&& other) noexcept;
   ~Database();
 
   sqlite3* sqliteHandle() const;
@@ -41,7 +41,7 @@ public:
   void close();
 
   Database& operator=(const Database&) = delete;
-  Database& operator=(Database&& other);
+  Database& operator=(Database&& other) noexcept;
 
 private:
   sqlite3* m_database = nullptr;
